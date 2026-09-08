@@ -100,6 +100,8 @@ jobs:
     needs: [check-version, build-windows, build-macos, build-linux]
     if: always() && needs.build-windows.result == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create needs this explicitly -- the default GITHUB_TOKEN is read-only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
