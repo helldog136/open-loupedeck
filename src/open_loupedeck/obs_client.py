@@ -90,11 +90,39 @@ class ObsSession:
     def is_connected(self) -> bool:
         return self._ws is not None
 
+    async def update_credentials(self, host: str, port: int, password: str) -> bool:
+        """Apply new connection settings (e.g. after the user edits them in the UI).
+
+        A previously-established WebSocket session stays authenticated even after ``host``/
+        ``port``/``password`` change here, so without this the live session would silently keep
+        using the old credentials until the whole app restarts. Closing it when anything actually
+        changed forces the next call/probe to reconnect with the new values.
+        """
+
+        changed = (host, port, password) != (self._host, self._port, self._password)
+        if changed:
+            await self.close()
+        self._host = host
+        self._port = port
+        self._password = password
+        return changed
+
     async def probe(self, timeout: float = 6.0) -> bool:
-        """Try to connect if needed; return True when the WebSocket session is usable."""
+        """Return True when the WebSocket session is actually usable, reconnecting if needed.
+
+        ``self._ws`` being non-``None`` only means a session was established at some point -- it
+        does not mean OBS still considers it valid (OBS restarted, the connection dropped, the
+        password was rotated on the OBS side...). A cheap live request confirms it, and a failure
+        drops the stale reference so the next attempt reconnects instead of reporting "connected"
+        forever based on a dead handle.
+        """
 
         if self._ws is not None:
-            return True
+            try:
+                await asyncio.wait_for(self.call("GetVersion"), timeout=timeout)
+                return True
+            except Exception:
+                await self.close()
         try:
             await asyncio.wait_for(self._ensure(quiet=True), timeout=timeout)
             return self._ws is not None
@@ -106,7 +134,13 @@ class ObsSession:
         payload = request_data or {}
         logger.debug("OBS request %s %s", request_type, payload)
         req = simpleobsws.Request(request_type, payload)
-        ret = await ws.call(req)
+        try:
+            ret = await ws.call(req)
+        except Exception:
+            # The connection itself is dead (closed, dropped, credentials no longer accepted) --
+            # drop it so the next call reconnects instead of repeating the same failure forever.
+            await self.close()
+            raise
         if not ret.ok():
             code = getattr(ret, "requestStatus", None)
             comment = getattr(ret, "comment", "")

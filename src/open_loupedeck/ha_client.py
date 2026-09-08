@@ -38,6 +38,21 @@ class HaClient:
     def base_url(self) -> str:
         return self._base_url
 
+    def update_credentials(self, base_url: str, token: str) -> bool:
+        """Apply new connection settings (e.g. after the user edits them in the UI).
+
+        Without this, editing ``ha.base_url``/``ha.token`` from the UI updates config.yaml but the
+        live client -- built once at agent startup -- keeps using the original values until the
+        whole app restarts.
+        """
+
+        new_base_url = str(base_url or "").strip().rstrip("/")
+        new_token = str(token or "")
+        changed = (new_base_url, new_token) != (self._base_url, self._token)
+        self._base_url = new_base_url
+        self._token = new_token
+        return changed
+
     def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self._token}",

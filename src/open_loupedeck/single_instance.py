@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 CONTROL_PORT = 47212
 _SHOW_COMMAND = b"show"
 
+_server_socket: socket.socket | None = None
+
 
 def notify_running_instance() -> bool:
     """Best-effort: ask an already-running instance to show its window.
@@ -41,6 +43,8 @@ def try_become_primary_instance(on_show_requested: Callable[[], None]) -> bool:
     already taken by another instance -- the caller should not start the agent or tray icon.
     """
 
+    global _server_socket
+
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server.bind(("127.0.0.1", CONTROL_PORT))
@@ -62,6 +66,22 @@ def try_become_primary_instance(on_show_requested: Callable[[], None]) -> bool:
                     with contextlib.suppress(Exception):
                         on_show_requested()
 
+    _server_socket = server
     threading.Thread(target=_serve, name="single-instance-control", daemon=True).start()
     logger.debug("single_instance: listening on control port %s", CONTROL_PORT)
     return True
+
+
+def stop_primary_instance() -> None:
+    """Release the control port so a freshly spawned process can rebind it immediately.
+
+    Used for an explicit in-app restart, where the new process is launched before this one has
+    fully exited -- without releasing the port first, the new process would see it as already
+    taken, assume another instance is running, and immediately quit itself.
+    """
+
+    global _server_socket
+    if _server_socket is not None:
+        with contextlib.suppress(OSError):
+            _server_socket.close()
+        _server_socket = None

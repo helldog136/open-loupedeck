@@ -420,6 +420,16 @@ def create_web_app(
             save_raw_config(config_path, merged)
             state.replace_raw(merged)
             prune_stale_live_message_keys(dict(state.raw), rt)
+            new_settings = state.settings()
+            # The live OBS/HA clients are built once at agent startup from whatever the config
+            # said then; without this, editing host/port/password (or base_url/token) here saves
+            # to disk but the running session keeps using the old values -- and for OBS, an
+            # already-authenticated WebSocket doesn't even notice the password changed, so it
+            # keeps reporting "connected" while every action silently fails.
+            if rt.obs is not None and new_settings.obs is not None:
+                await rt.obs.update_credentials(new_settings.obs.host, new_settings.obs.port, new_settings.obs.password)
+            if rt.ha is not None and new_settings.ha is not None:
+                rt.ha.update_credentials(new_settings.ha.base_url, new_settings.ha.token)
         try:
             reapply_logging_from_config(
                 merged,

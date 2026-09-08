@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -53,6 +54,15 @@ def _create_windows_app_mutex() -> None:
     _windows_app_mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, _WINDOWS_APP_MUTEX_NAME)
 
 
+def _spawn_relaunch() -> None:
+    """Start a brand-new instance of this app, detached from the current process."""
+
+    if getattr(sys, "frozen", False):
+        subprocess.Popen([sys.executable], close_fds=True)
+    else:
+        subprocess.Popen([sys.executable, "-m", "open_loupedeck.tray_app"], close_fds=True)
+
+
 class TrayApp:
     def __init__(self) -> None:
         self._window: webview.Window | None = None
@@ -76,7 +86,27 @@ class TrayApp:
 
     # --- menu actions -------------------------------------------------------------
 
-    def _quit(self, icon: pystray.Icon, _item: pystray.MenuItem) -> None:
+    def _teardown(self) -> None:
+        """Best-effort graceful shutdown of everything this process owns, in order.
+
+        Shared by ``_quit`` and ``_restart`` -- a restart is exactly a quit that spawns a
+        replacement process first.
+        """
+
+        if self._agent is not None:
+            with contextlib.suppress(Exception):
+                self._agent.request_shutdown()
+                self._agent.join(timeout=10)
+        if self._window is not None:
+            with contextlib.suppress(Exception):
+                self._window.destroy()
+        if self._icon is not None:
+            with contextlib.suppress(Exception):
+                self._icon.stop()
+        with contextlib.suppress(Exception):
+            single_instance.stop_primary_instance()
+
+    def _quit(self, _icon: pystray.Icon, _item: pystray.MenuItem) -> None:
         # Idempotent: a double-click (or the menu re-delivering the notify message before the
         # icon visually disappears) must not try to shut an already-stopped agent down again --
         # that raced into "Event loop is closed" and left the process stuck, unkillable except
@@ -86,15 +116,7 @@ class TrayApp:
             return
         self._quitting = True
         logger.info("Tray: quit requested")
-        if self._agent is not None:
-            with contextlib.suppress(Exception):
-                self._agent.request_shutdown()
-                self._agent.join(timeout=10)
-        if self._window is not None:
-            with contextlib.suppress(Exception):
-                self._window.destroy()
-        with contextlib.suppress(Exception):
-            icon.stop()
+        self._teardown()
         # pystray's own Win32 message-loop thread and pywebview's WebView2/CLR (pythonnet)
         # hosting threads are not ours to control, and at least one of them is known to
         # sometimes outlive a "clean" shutdown -- webview.start() then never returns, and the
@@ -102,6 +124,28 @@ class TrayApp:
         # window are gone. Everything that needs a graceful stop (agent join, window destroy,
         # icon stop) already happened synchronously above, so force the exit instead of trusting
         # third-party threads to terminate on their own.
+        os._exit(0)
+
+    def _restart(self, _icon: pystray.Icon, _item: pystray.MenuItem) -> None:
+        """Relaunch a fresh process, then quit this one.
+
+        Needed after config changes that only take effect at startup (e.g. reconnecting with a
+        different device path), and generally a quicker fix than "quit, then reopen manually"
+        for anything that looks stuck.
+        """
+
+        if self._quitting:
+            return
+        self._quitting = True
+        logger.info("Tray: restart requested")
+        # Tear down (including releasing the single-instance control port) *before* spawning the
+        # replacement process -- otherwise the new process sees the port still held, assumes
+        # another instance is already running, and immediately quits itself instead of starting.
+        self._teardown()
+        try:
+            _spawn_relaunch()
+        except Exception:
+            logger.exception("Tray: failed to spawn replacement process for restart")
         os._exit(0)
 
     # --- updates --------------------------------------------------------------------
@@ -168,6 +212,7 @@ class TrayApp:
                 default=True,
             ),
             pystray.MenuItem(self._update_menu_text, self._on_update_menu_click),
+            pystray.MenuItem("Redémarrer", self._restart),
             pystray.MenuItem("Quitter", self._quit),
         )
 

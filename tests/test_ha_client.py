@@ -128,3 +128,26 @@ def test_probe_false_on_error():
     client = HaClient(http, "http://ha.local:8123", "tok")
 
     assert _run(client.probe()) is False
+
+
+def test_update_credentials_applies_new_base_url_and_token():
+    http = _FakeHttpClient()
+    client = HaClient(http, "http://ha.local:8123", "old-tok")
+
+    changed = client.update_credentials("http://ha.local:9999/", "new-tok")
+
+    assert changed is True
+    assert client.base_url == "http://ha.local:9999"
+    _run(client.get_state("sensor.temp"))
+    _method, url, kwargs = http.calls[0]
+    assert url == "http://ha.local:9999/api/states/sensor.temp"
+    assert kwargs["headers"]["Authorization"] == "Bearer new-tok"
+
+
+def test_update_credentials_reports_unchanged_when_identical():
+    http = _FakeHttpClient()
+    client = HaClient(http, "http://ha.local:8123", "tok")
+
+    changed = client.update_credentials("http://ha.local:8123", "tok")
+
+    assert changed is False
