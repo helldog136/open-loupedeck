@@ -1,0 +1,21 @@
+# Loupedeck USB serial — grant access to users in group "dialout"
+#
+# Install:
+#   sudo cp 99-loupedeck.rules /etc/udev/rules.d/99-loupedeck.rules
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#   unplug and replug the device
+#
+# Then add yourself to dialout (one-time) and re-login:
+#   sudo usermod -aG dialout $USER
+#
+# Confirm vendor/product: udevadm info -a -n /dev/ttyACM0 | grep idVendor
+
+# Loupedeck (common vendor 0x2ec2)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2ec2", MODE="0660", GROUP="dialout"
+
+# ttyACM nodes sometimes need an explicit match
+SUBSYSTEM=="tty", KERNEL=="ttyACM[0-9]*", ATTRS{idVendor}=="2ec2", MODE="0660", GROUP="dialout"
+
+# Elgato / other (optional)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0fd9", MODE="0660", GROUP="dialout"

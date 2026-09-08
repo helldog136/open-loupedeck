@@ -1,0 +1,133 @@
+# Copy to ~/.config/open-loupedeck/config.yaml
+#
+# Web UI: open-loupedeck --config thisfile --web 127.0.0.1:8765
+# Optional: extra Python files that call register_action (see examples/custom_action.py)
+# plugin_modules: []
+#
+# Logs (default: ~/.local/state/open-loupedeck/logs/open-loupedeck.log):
+#   open-loupedeck-errors.log — WARNING and above only
+# Override: --log-dir /path/to/logs  or  logging.dir below
+logging:
+  dir: ""
+  level: INFO
+  file: true
+  console: true
+
+obs:
+  host: 127.0.0.1
+  port: 4455
+  # OBS WebSocket password (OBS: Settings → WebSocket server)
+  password: ""
+
+# Home Assistant REST API (ha.* actions, display.ha_sensor, display.ha_weather).
+# Token: your profile (bottom-left in HA) → Security → Long-Lived Access Tokens → Create Token.
+# ha:
+#   base_url: "http://homeassistant.local:8123"
+#   token: ""
+
+# Spotify Web API (PKCE — no client secret). Set redirect URI in the Developer Dashboard to match
+# the web UI (e.g. http://127.0.0.1:8765/api/spotify/callback). Tokens: spotify_tokens.json beside this file.
+# spotify:
+#   client_id: ""
+#   redirect_uri: "http://127.0.0.1:8765/api/spotify/callback"
+
+# Twitch Helix (display.twitch_live): register an app at dev.twitch.tv — use Client ID + Secret for
+# client_credentials, or set access_token to a static Bearer. Required for stream live / viewers / uptime.
+# twitch:
+#   client_id: ""
+#   client_secret: ""
+#   # access_token: ""
+
+# device.model: auto | live_s | live — auto uses USB vendor 0x2ec2 + product id when possible
+# Live S = USB PID 0x0006; original Live = 0x0004
+# With model live_s: you can define any number of touch pages; physical btn_circle + btn_1–btn_3 only switch among page indices 0–3 (LED color only in UI for those keys).
+device:
+  path: ""
+  model: auto
+  # baudrate: 460800
+
+# Knob dials: configure only via knob_pages (not knobTL / knobTL_left in global_buttons).
+# Push cycles pages; rotate runs the current page’s rotate_left / rotate_right. Page `name` flashes
+# on one touch cell (Live S: knobTL→touch_0, knobCL→touch_5) for up to 2s.
+# knob_page_feedback:
+#   duration_sec: 2
+# knob_pages:
+#   knobTL:
+#     pages:
+#       - name: "Volume"
+#         rotate_left: { type: sound.volume_delta, delta: -2 }
+#         rotate_right: { type: sound.volume_delta, delta: 2 }
+#       - name: "Deck page"
+#         rotate_left: { type: agent.prev_page }
+#         rotate_right: { type: agent.next_page }
+#   knobCL:
+#     pages:
+#       - name: "Scroll"
+#         rotate_left: { type: command.run, argv: ["xdotool", "click", "4"] }
+#         rotate_right: { type: command.run, argv: ["xdotool", "click", "5"] }
+
+# Multi-page layout (recommended). When `pages` is non-empty, it is used for input + images;
+# `bindings` below is only used if no page entry matches.
+# Control ids: touch_0..touch_11, btn_1..btn_7, btn_circle, strip_left, strip_right.
+# Knob rotation and push are not bound here — use top-level knob_pages instead.
+pages:
+  - name: Main
+    buttons:
+      touch_0:
+        text: "BRB"
+        # Icon packs (SVG fetched, cached under ~/.cache/open-loupedeck/icons):
+        #   si:slug / simpleicons:slug[/RRGGBB]  — https://simpleicons.org/
+        #   heroicons:24/solid/heart
+        #   lucide:bell
+        #   mdi:heart
+        # Or any https://... URL to an SVG file.
+        # icon: "si:obsstudio"
+        # With both graphic + text: split (top/bottom) or overlay (text on graphic)
+        # graphic_text_layout: split   # or overlay
+        background: "#2a2a40"
+        text_color: "#ffffff"
+        # Gradients (text_gradient_from/_to/_angle, background_gradient_* ) and animations
+        # (idle_animation[_speed], press_animation[_direction], press_flash_color) — see
+        # docs/configuration.md#gradients-and-animations, or use the config window's live preview.
+        action:
+          type: obs.set_scene
+          scene: "Scene A"
+      btn_7:
+        action:
+          type: agent.next_page
+
+# Legacy flat bindings (optional)
+bindings:
+  - match:
+      type: touch
+      key: 0
+      edge: down
+    actions:
+      - type: obs.set_scene
+        scene: "Starting Soon"
+
+  - match:
+      type: button
+      id: "1"
+      edge: down
+    actions:
+      - type: http.request
+        method: GET
+        url: "https://example.com/your-sound-alert-or-webhook"
+
+  - match:
+      type: button
+      id: "2"
+      edge: down
+    actions:
+      - type: sound.play
+        file: "/usr/share/sounds/freedesktop/stereo/message.oga"
+        player: auto
+
+  - match:
+      type: knob
+      id: knobTL
+      edge: left
+    actions:
+      - type: command.run
+        argv: ["notify-send", "Loupedeck", "Knob CCW"]

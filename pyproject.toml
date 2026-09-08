@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "open-loupedeck"
+version = "0.1.0"
+description = "Loupedeck daemon for Windows, macOS, Linux: OBS, HTTP, sounds, web UI, shell commands"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+    "Pillow>=10.2",
+    "httpx>=0.27",
+    "resvg-py>=0.5.0",
+    "simpleobsws>=1.4",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.9",
+    "loupedeck @ git+https://github.com/devleaks/python-loupedeck-live.git",
+    "pycaw>=20240210; sys_platform == 'win32'",
+    "comtypes>=1.4.1; sys_platform == 'win32'",
+    "pystray>=0.19",
+    "pywebview>=6.0",
+    # Windows has no system IANA timezone database; zoneinfo.ZoneInfo needs this to resolve
+    # named zones (used by the display.clock action's optional `timezone` parameter).
+    "tzdata; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest", "pyinstaller"]
+
+[project.scripts]
+open-loupedeck = "open_loupedeck.__main__:main"
+open-loupedeck-tray = "open_loupedeck.tray_app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+# `static/` and `icons/` are plain subdirectories of the package and are included automatically —
+# an earlier `force-include` re-listing them at the same destination made hatchling try to add
+# each file to the wheel twice (only ever surfaced by a real `pip install .` / wheel build, since
+# editable installs and the PyInstaller build both go through different code paths).
+packages = ["src/open_loupedeck"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "UP",           # pyflakes/pycodestyle, import sort, pyupgrade
+    "B", "C4", "SIM", "PIE",       # bugbear, comprehensions, simplify, misc
+    "RUF", "DTZ",                  # ruff-specific, tz-aware datetimes
+    "S110", "S112",                # silent except-pass / except-continue (log instead)
+    "TRY004", "TRY203",            # wrong exception type / dead try-except
+    "PLR1730", "PLW1510",          # pylint: min/max-as-if, subprocess without check
+]
+ignore = [
+    # Broad `except Exception` is deliberate throughout the agent: a single bad action,
+    # plugin, or redraw must never crash the event loop or the whole background service.
+    "BLE001",
+    # This codebase intentionally uses "-" and other Unicode punctuation in comments/strings.
+    "RUF001", "RUF002", "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's Body(...)/File(...)/Query(...) defaults are the framework's dependency-injection
+# idiom, not a real "function call in default argument" bug.
+"src/open_loupedeck/web_app.py" = ["B008"]

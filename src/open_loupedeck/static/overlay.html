@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Open-Loupedeck OBS overlay</title>
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: transparent;
+      }
+      #overlay-root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        background: transparent;
+      }
+      #overlay-root video,
+      #overlay-root img {
+        position: absolute;
+        display: block;
+        height: auto;
+        pointer-events: none;
+      }
+      #conn-hint {
+        position: fixed;
+        left: 8px;
+        bottom: 8px;
+        font: 12px/1.2 system-ui, sans-serif;
+        color: rgba(120, 120, 140, 0.35);
+        margin: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay-root"></div>
+    <p id="conn-hint" aria-live="polite"></p>
+    <script>
+      (function () {
+        const root = document.getElementById("overlay-root");
+        const hint = document.getElementById("conn-hint");
+
+        function fileUrl(relPath) {
+          return (
+            location.origin + "/api/local-file?path=" + encodeURIComponent(relPath.replace(/\\/g, "/"))
+          );
+        }
+
+        function setHint(t) {
+          if (hint) hint.textContent = t || "";
+        }
+
+        function clearMedia() {
+          root.querySelectorAll("video").forEach(function (v) {
+            if (v.__overlayIv) {
+              clearInterval(v.__overlayIv);
+              v.__overlayIv = null;
+            }
+            try {
+              v.pause();
+            } catch (e) {}
+            v.removeAttribute("src");
+            v.load();
+            v.remove();
+          });
+          root.querySelectorAll("img").forEach(function (i) {
+            if (i.__overlayTid) {
+              clearTimeout(i.__overlayTid);
+              i.__overlayTid = null;
+            }
+            i.remove();
+          });
+        }
+
+        var VIEW_W = 1920;
+        var VIEW_H = 1080;
+
+        function hasNum(v) {
+          if (v === null || v === undefined || v === "") return false;
+          return Number.isFinite(Number(v));
+        }
+
+        /** Contain in viewport, optional fixed width, optional top-left (both x and y required for manual position). */
+        function applyMediaBox(el, msg, nw, nh) {
+          nw = nw > 0 ? nw : VIEW_W;
+          nh = nh > 0 ? nh : VIEW_H;
+          var hasW = hasNum(msg.width) && Number(msg.width) >= 1;
+          var hasPos = hasNum(msg.x) && hasNum(msg.y);
+          var wPx;
+          if (hasW) {
+            wPx = Number(msg.width);
+          } else {
+            var scale = Math.min(VIEW_W / nw, VIEW_H / nh);
+            wPx = nw * scale;
+          }
+          var hPx = (nh / nw) * wPx;
+          var left;
+          var top;
+          if (hasPos) {
+            left = Number(msg.x);
+            top = Number(msg.y);
+          } else {
+            left = (VIEW_W - wPx) / 2;
+            top = (VIEW_H - hPx) / 2;
+          }
+          el.style.left = left + "px";
+          el.style.top = top + "px";
+          el.style.width = wPx + "px";
+          el.style.height = "auto";
+          el.style.opacity = "1";
+        }
+
+        function addMedia(msg) {
+          const url = fileUrl(msg.path);
+          /* Match server: only explicit true / "true" mutes; default is sound on. */
+          const muted = msg.muted === true || msg.muted === "true";
+          const rawD = msg.duration_sec;
+          const limitSec =
+            rawD != null && rawD !== "" && Number.isFinite(Number(rawD))
+              ? Math.max(0.001, Number(rawD))
+              : null;
+          const hasW = hasNum(msg.width) && Number(msg.width) >= 1;
+          const hasPos = hasNum(msg.x) && hasNum(msg.y);
+          const layoutImmediate = hasW && hasPos;
+
+          if (msg.kind === "video") {
+            const v = document.createElement("video");
+            v.src = url;
+            v.setAttribute("playsinline", "");
+            v.muted = muted;
+            v.autoplay = true;
+            v.loop = false;
+            if (layoutImmediate) {
+              v.style.left = Number(msg.x) + "px";
+              v.style.top = Number(msg.y) + "px";
+              v.style.width = Number(msg.width) + "px";
+              v.style.height = "auto";
+            } else {
+              v.style.opacity = "0";
+            }
+            root.appendChild(v);
+
+            const removeV = function () {
+              if (v.__overlayIv) {
+                clearInterval(v.__overlayIv);
+                v.__overlayIv = null;
+              }
+              try {
+                v.pause();
+              } catch (e) {}
+              v.removeAttribute("src");
+              try {
+                v.load();
+              } catch (e2) {}
+              v.remove();
+            };
+
+            function wireVideoPlayback() {
+              if (limitSec == null) {
+                v.addEventListener(
+                  "ended",
+                  function () {
+                    removeV();
+                  },
+                  { once: true }
+                );
+                v.play().catch(function () {
+                  setHint("Video autoplay blocked — try muted: true or interact with the OBS source");
+                });
+                return;
+              }
+
+              const t0 = performance.now();
+              const iv = setInterval(function () {
+                const elapsed = (performance.now() - t0) / 1000;
+                if (elapsed >= limitSec) {
+                  removeV();
+                  return;
+                }
+                const dur = v.duration;
+                if (dur && !isNaN(dur) && dur > 0 && limitSec < dur && v.currentTime >= limitSec - 0.08) {
+                  removeV();
+                }
+              }, 70);
+              v.__overlayIv = iv;
+
+              v.addEventListener("ended", function onEnd() {
+                const elapsed = (performance.now() - t0) / 1000;
+                if (elapsed >= limitSec) {
+                  removeV();
+                  return;
+                }
+                v.currentTime = 0;
+                v.play().catch(function () {});
+              });
+
+              v.play().catch(function () {
+                setHint("Video autoplay blocked — try muted: true or interact with the OBS source");
+              });
+            }
+
+            if (layoutImmediate) {
+              wireVideoPlayback();
+            } else {
+              v.addEventListener(
+                "loadedmetadata",
+                function () {
+                  applyMediaBox(v, msg, v.videoWidth || VIEW_W, v.videoHeight || VIEW_H);
+                  wireVideoPlayback();
+                },
+                { once: true }
+              );
+              v.play().catch(function () {
+                setHint("Video autoplay blocked — try muted: true or interact with the OBS source");
+              });
+            }
+            return;
+          }
+
+          if (msg.kind === "image") {
+            const im = document.createElement("img");
+            im.src = url;
+            im.alt = "";
+            if (layoutImmediate) {
+              im.style.left = Number(msg.x) + "px";
+              im.style.top = Number(msg.y) + "px";
+              im.style.width = Number(msg.width) + "px";
+              im.style.height = "auto";
+            } else {
+              im.style.opacity = "0";
+            }
+            root.appendChild(im);
+            if (!layoutImmediate) {
+              im.onload = function () {
+                applyMediaBox(im, msg, im.naturalWidth || VIEW_W, im.naturalHeight || VIEW_H);
+              };
+              im.onerror = function () {
+                applyMediaBox(im, msg, VIEW_W, VIEW_H);
+              };
+            }
+            if (limitSec != null) {
+              im.__overlayTid = setTimeout(function () {
+                im.__overlayTid = null;
+                try {
+                  im.remove();
+                } catch (e) {}
+              }, limitSec * 1000);
+            }
+            return;
+          }
+        }
+
+        function playSound(msg) {
+          const url = fileUrl(msg.path);
+          const a = new Audio(url);
+          const vol = typeof msg.volume === "number" ? msg.volume : 1;
+          a.volume = Math.max(0, Math.min(1, vol));
+          a.play().catch(function () {
+            setHint("Audio play failed (format or autoplay policy)");
+          });
+        }
+
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = proto + "//" + location.host + "/ws/overlay";
+        let ws;
+        let reconnectTimer;
+        let leavePage = false;
+
+        window.addEventListener("beforeunload", function () {
+          leavePage = true;
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+          try {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+          } catch (e) {}
+        });
+
+        function connect() {
+          setHint("Connecting…");
+          ws = new WebSocket(wsUrl);
+          ws.onopen = function () {
+            setHint("");
+          };
+          ws.onclose = function () {
+            if (leavePage) return;
+            setHint("Disconnected — reconnecting…");
+            reconnectTimer = setTimeout(connect, 2000);
+          };
+          ws.onerror = function () {
+            setHint("WebSocket error");
+          };
+          ws.onmessage = function (ev) {
+            try {
+              const msg = JSON.parse(ev.data);
+              if (msg.cmd === "clear") {
+                clearMedia();
+                return;
+              }
+              if (msg.cmd === "media") {
+                addMedia(msg);
+                return;
+              }
+              if (msg.cmd === "sound") {
+                playSound(msg);
+                return;
+              }
+            } catch (e) {
+              console.warn("overlay message", e);
+            }
+          };
+        }
+
+        connect();
+      })();
+    </script>
+  </body>
+</html>

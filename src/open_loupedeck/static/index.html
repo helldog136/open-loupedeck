@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open-Loupedeck</title>
+    <link rel="stylesheet" href="/assets/ui/style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="app-header-brand">
+        <span class="app-logo" aria-hidden="true"></span>
+        <div>
+          <h1>Open-Loupedeck</h1>
+          <p class="app-tagline">Deck layout editor</p>
+        </div>
+      </div>
+      <nav class="tab-bar" id="tabBar" role="tablist">
+        <button type="button" class="tab-btn" id="tabBtnButtons" data-tab="buttons" role="tab" aria-selected="true">
+          Buttons
+        </button>
+        <button type="button" class="tab-btn" id="tabBtnServices" data-tab="services" role="tab" aria-selected="false">
+          Services
+        </button>
+      </nav>
+      <span
+        id="saveStatus"
+        class="save-status"
+        title="Edits are saved to disk automatically; the Loupedeck display updates when you click Apply to key or Clear"
+      ></span>
+      <span class="error" id="saveError"></span>
+      <div class="conn-bar" id="connBar" aria-live="polite">
+        <div class="conn-pill" title="USB serial connection to the Loupedeck">
+          <span class="conn-name">Loupedeck USB</span>
+          <span id="stUsbBadge" class="conn-badge">…</span>
+          <code id="stUsbPath" class="conn-meta"></code>
+        </div>
+        <div class="conn-pill" title="OBS Studio WebSocket">
+          <span class="conn-name">OBS</span>
+          <span id="stObsBadge" class="conn-badge">…</span>
+          <code id="stObsMeta" class="conn-meta"></code>
+        </div>
+        <div class="conn-pill" title="Home Assistant REST API">
+          <span class="conn-name">Home Assistant</span>
+          <span id="stHaBadge" class="conn-badge">…</span>
+          <code id="stHaMeta" class="conn-meta"></code>
+        </div>
+      </div>
+    </header>
+
+    <div id="tabPanelServices" class="tab-panel" hidden>
+      <section class="services-toolbar">
+        <label
+          >Hardware
+          <select id="deviceModel" title="Matches device.model in YAML">
+            <option value="auto">Auto (USB PID if available)</option>
+            <option value="live_s">Loupedeck Live S</option>
+            <option value="live">Loupedeck Live (original)</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          id="btnBackup"
+          title="Copy the current config into rotating backups (newest .bak1; keeps 3 files)"
+        >
+          Backup config
+        </button>
+        <button
+          type="button"
+          id="btnWipeBackups"
+          title="Save current config and delete all rotating backup files (.bak1–.bak3)"
+        >
+          Remove backups
+        </button>
+        <button
+          type="button"
+          id="btnResetDefaults"
+          title="Delete config + backups and recreate a fresh default config"
+        >
+          Reset to defaults
+        </button>
+        <button type="button" id="btnOpenConfigFolder" title="Open the folder containing config.yaml">
+          Open config folder
+        </button>
+        <label class="autostart-toggle" title="Windows: registry Run key · macOS: LaunchAgent · Linux: XDG autostart">
+          <input type="checkbox" id="autostartToggle" />
+          Launch at startup
+        </label>
+      </section>
+
+    <section class="ha-banner" id="backupsBanner">
+      <details class="ha-details">
+        <summary class="ha-summary">
+          <span class="ha-summary-title">Backups</span>
+          <span class="ha-summary-hint">rotating .bak1–.bak3 — one is also taken automatically at each launch</span>
+        </summary>
+        <div class="ha-inner">
+          <div id="backupsListMount"></div>
+        </div>
+      </details>
+    </section>
+
+    <section class="spotify-banner" id="spotifyBanner">
+      <details class="spotify-details">
+        <summary class="spotify-summary">
+          <span class="spotify-summary-title">Spotify</span>
+          <span class="spotify-summary-hint">OAuth &amp; playback — optional</span>
+        </summary>
+        <div class="spotify-inner">
+          <p class="hint small spotify-intro">
+            <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Create an app</a>
+            (Web API). Add the redirect URI below to the app&rsquo;s settings, paste your Client ID, save, then
+            connect. Playback control needs
+            <a href="https://www.spotify.com/premium/" target="_blank" rel="noopener">Spotify Premium</a> for
+            most users, and an active Spotify Connect device (app open on phone, desktop, or web).
+          </p>
+          <label class="row" for="spotifyClientId">Client ID</label>
+          <input
+            type="text"
+            id="spotifyClientId"
+            class="full-width mono"
+            placeholder="From Spotify Developer Dashboard"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <label class="row" for="spotifyRedirectUri">Redirect URI (must match Dashboard exactly)</label>
+          <input type="text" id="spotifyRedirectUri" class="full-width mono" spellcheck="false" />
+          <div class="row gap-row">
+            <button type="button" id="btnSpotifySave">Save Spotify settings</button>
+          </div>
+          <p class="hint small" id="spotifyStatusLine"></p>
+          <div class="row gap-row">
+            <button type="button" id="btnSpotifyConnect">Connect with Spotify</button>
+            <button type="button" id="btnSpotifyDisconnect">Disconnect</button>
+          </div>
+          <p class="error" id="spotifyErrorLine" hidden></p>
+        </div>
+      </details>
+    </section>
+
+    <section class="logging-banner" id="loggingBanner">
+      <details class="logging-details">
+        <summary class="logging-summary">
+          <span class="logging-summary-title">Logging</span>
+          <span class="logging-summary-hint">level &mdash; applies after save (no restart)</span>
+        </summary>
+        <div class="logging-inner">
+          <label class="row" for="logLevel">Log level</label>
+          <select id="logLevel" class="log-level-select" title="Saved to logging.level in config.yaml">
+            <option value="DEBUG">DEBUG</option>
+            <option value="INFO" selected>INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="WARN">WARN</option>
+            <option value="ERROR">ERROR</option>
+            <option value="CRITICAL">CRITICAL</option>
+          </select>
+          <p class="hint small">
+            Written to <code>logging.level</code>. If the agent was started with <code>-v</code>, root handlers stay
+            at DEBUG until restart. Console/file toggles are only in YAML for now.
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <section class="obs-banner" id="obsBanner">
+      <details class="obs-details">
+        <summary class="obs-summary">
+          <span class="obs-summary-title">OBS Studio</span>
+          <span class="obs-summary-hint">WebSocket server — scenes, mute, volume</span>
+        </summary>
+        <div class="obs-inner">
+          <p class="hint small">
+            OBS: Tools &rarr; WebSocket Server Settings (or Settings &rarr; Network on OBS 28+) &rarr; Enable
+            WebSocket server &rarr; Show Connect Info for the password.
+          </p>
+          <div class="row two-col">
+            <label class="stack">Host
+              <input type="text" id="obsHost" class="full-width mono" placeholder="127.0.0.1" autocomplete="off" spellcheck="false" />
+            </label>
+            <label class="stack">Port
+              <input type="number" id="obsPort" class="full-width mono" placeholder="4455" min="1" max="65535" />
+            </label>
+          </div>
+          <label class="row" for="obsPassword">Password</label>
+          <input
+            type="password"
+            id="obsPassword"
+            class="full-width mono"
+            placeholder="Leave empty if authentication is disabled"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </details>
+    </section>
+
+    <section class="ha-banner" id="haBanner">
+      <details class="ha-details">
+        <summary class="ha-summary">
+          <span class="ha-summary-title">Home Assistant</span>
+          <span class="ha-summary-hint">REST API (long-lived token) — lights, scripts, sensors, weather</span>
+        </summary>
+        <div class="ha-inner">
+          <p class="hint small">
+            In Home Assistant: your profile (bottom-left) &rarr; Security &rarr; Long-Lived Access Tokens &rarr;
+            Create Token. Paste it below along with the base URL (e.g. <code>http://homeassistant.local:8123</code>).
+            Then use the <code>ha.*</code> actions and <code>display.ha_sensor</code> /
+            <code>display.ha_weather</code> on your buttons.
+          </p>
+          <label class="row" for="haBaseUrl">Base URL</label>
+          <input
+            type="text"
+            id="haBaseUrl"
+            class="full-width mono"
+            placeholder="http://homeassistant.local:8123"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <label class="row" for="haToken">Long-lived access token</label>
+          <input
+            type="password"
+            id="haToken"
+            class="full-width mono"
+            placeholder="eyJ…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+      </details>
+    </section>
+
+    <section class="twitch-banner" id="twitchBanner">
+      <details class="twitch-details">
+        <summary class="twitch-summary">
+          <span class="twitch-summary-title">Twitch</span>
+          <span class="twitch-summary-hint">Helix (stream status) &amp; multi-account actions</span>
+        </summary>
+        <div class="twitch-inner">
+          <p class="hint small">
+            Configure one or more Twitch app credentials. Display keys (like
+            <code>display.twitch_live</code>) use an app token. Any action whose type starts with
+            <code>twitch.</code> will run once per configured account.
+          </p>
+          <div id="twitchAccountsMount"></div>
+          <div class="row gap-row">
+            <button type="button" id="btnAddTwitchAccount">Add account</button>
+          </div>
+          <p class="error" id="twitchErrorLine" hidden></p>
+        </div>
+      </details>
+    </section>
+    </div>
+
+    <div id="tabPanelButtons" class="tab-panel">
+      <div class="page-manage-bar">
+        <label id="pageSelectLabel" hidden
+          >Page
+          <select id="pageSelect"></select>
+        </label>
+        <label class="row" for="pageNameInput">Rename current page</label>
+        <input type="text" id="pageNameInput" placeholder="Page name" />
+      </div>
+    <main>
+      <aside class="page-rail-wrap">
+        <div class="page-rail-header">
+          <span class="deck-region-label">Pages</span>
+          <span class="page-rail-hint" title="Physical Circle/1/2/3 buttons only reach pages ①–④">
+            ①–④ = hardware
+          </span>
+        </div>
+        <div id="pageRail" class="page-rail"></div>
+        <button type="button" id="btnAddPage" class="page-rail-add-btn">+ Add page</button>
+      </aside>
+      <section class="deck-wrap deck-shell">
+        <div class="deck-page-bar">
+          <span class="deck-page-label">Editing</span>
+          <p class="deck-title" id="pageName">Page</p>
+        </div>
+        <div id="deckRoot"></div>
+      </section>
+
+      <aside class="side-panel">
+        <div id="keyEditorBlock">
+        <h2 id="selLabel">Select a control</h2>
+        <div id="keyEditorApplyRow" class="row gap-row key-editor-sticky-bar">
+          <button type="button" id="btnApply">Apply to key</button>
+          <button type="button" id="btnClear">Clear control</button>
+          <button type="button" id="btnCopyControl" title="Copy this control’s config (action/label/icon/image/colors)">
+            Copy
+          </button>
+          <button
+            type="button"
+            id="btnPasteControl"
+            title="Paste the last copied config onto this control (overwrites)"
+          >
+            Paste
+          </button>
+          <button
+            type="button"
+            id="btnTestPress"
+            title="Run the same action as a physical press on this control (no USB)"
+          >
+            Test press
+          </button>
+          <span id="editorAutosaveStatus" class="editor-autosave-status"></span>
+        </div>
+        <p class="hint">
+          Choose an <strong>action</strong> from the list, then set fields. Optional
+          <strong>label</strong>, <strong>icon URI</strong> (Simple Icons, Lucide, …), or
+          <strong>image file</strong> — text draws on top. If both icon and image are set, the image
+          wins on the device. Colors: <code>#rrggbb</code> or CSS names.
+          <strong>Touch keys</strong> are per page; <strong>strips and side buttons</strong> use
+          <code>global_buttons</code>. <strong>Encoders</strong> are not edited here — click a dial in
+          the deck to set its <strong>dial pages</strong> (push cycles page; turn runs left/right
+          actions).
+        </p>
+
+        <label class="row">Action type</label>
+        <select id="actionType" class="full-width"></select>
+        <div id="actionFields" class="action-fields"></div>
+
+        <details id="advJsonDetails" class="adv-json">
+          <summary>Advanced: full action JSON</summary>
+          <p class="hint">
+            With this section <strong>open</strong>, editing the JSON overrides the form on
+            <strong>Apply to key</strong> (must include <code>"type"</code>). If you only open it to
+            read, Apply still uses the form. Media <strong>Browse…</strong> updates both the form and
+            this JSON so paths are not dropped.
+          </p>
+          <textarea id="actionJsonAdv" spellcheck="false" rows="8" class="full-width"></textarea>
+        </details>
+
+        <div id="keyEditorTouchGraphicFields">
+        <label class="row">Label on key (optional)</label>
+        <input
+          type="text"
+          id="buttonText"
+          class="full-width"
+          placeholder="Text shown on the tactile key"
+        />
+        <div class="row two-col">
+          <label class="stack">Text color
+            <span class="row led-color-row">
+              <input type="color" id="textColorPicker" class="color-swatch-input" aria-label="Text color" />
+              <input type="text" id="textColor" placeholder="#ffffff" class="full-width" />
+            </span>
+          </label>
+          <label class="stack">Background
+            <span class="row led-color-row">
+              <input type="color" id="backgroundColorPicker" class="color-swatch-input" aria-label="Background color" />
+              <input type="text" id="backgroundColor" placeholder="#1a1a2e" class="full-width" />
+            </span>
+          </label>
+        </div>
+
+        <details id="designSection" class="adv-json">
+          <summary>Gradients &amp; animations (idle / press)</summary>
+          <p class="hint small">
+            Design rule: any text on a key must be previewable here and fully customizable. A gradient
+            replaces the plain color above once both of its stops are set.
+          </p>
+
+          <label class="row">Text gradient (optional)</label>
+          <div class="row gradient-row">
+            <input type="color" id="textGradientFromPicker" class="color-swatch-input" aria-label="Text gradient start color" />
+            <input type="text" id="textGradientFrom" placeholder="from" />
+            <input type="color" id="textGradientToPicker" class="color-swatch-input" aria-label="Text gradient end color" />
+            <input type="text" id="textGradientTo" placeholder="to" />
+            <label class="stack">Angle°
+              <input type="number" id="textGradientAngle" min="0" max="360" placeholder="0" style="width: 4.5rem" />
+            </label>
+          </div>
+
+          <label class="row">Background gradient (optional)</label>
+          <div class="row gradient-row">
+            <input
+              type="color"
+              id="backgroundGradientFromPicker"
+              class="color-swatch-input"
+              aria-label="Background gradient start color"
+            />
+            <input type="text" id="backgroundGradientFrom" placeholder="from" />
+            <input
+              type="color"
+              id="backgroundGradientToPicker"
+              class="color-swatch-input"
+              aria-label="Background gradient end color"
+            />
+            <input type="text" id="backgroundGradientTo" placeholder="to" />
+            <label class="stack">Angle°
+              <input type="number" id="backgroundGradientAngle" min="0" max="360" placeholder="0" style="width: 4.5rem" />
+            </label>
+          </div>
+
+          <div class="row two-col">
+            <label class="stack">Idle animation (continuous)
+              <select id="idleAnimation">
+                <option value="none">None</option>
+                <option value="shake">Shake</option>
+                <option value="pulse">Pulse</option>
+                <option value="gradient_rotate">Rotate gradient</option>
+                <option value="color_cycle">Color cycle</option>
+              </select>
+            </label>
+            <label class="stack" id="idleAnimationSpeedRow" hidden>Speed (0.1–10)
+              <input
+                type="number"
+                id="idleAnimationSpeed"
+                min="0.1"
+                max="10"
+                step="0.1"
+                placeholder="1"
+                style="width: 5rem"
+              />
+            </label>
+          </div>
+
+          <div class="row two-col">
+            <label class="stack">Press animation (one-shot)
+              <select id="pressAnimation">
+                <option value="none">None</option>
+                <option value="flash">Flash</option>
+                <option value="invert">Invert</option>
+                <option value="zoom_text">Zoom text</option>
+                <option value="slide_reappear">Slide out &amp; back</option>
+              </select>
+            </label>
+            <label class="stack" id="pressAnimationDirectionRow" hidden>Slide direction
+              <select id="pressAnimationDirection">
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+              </select>
+            </label>
+            <label class="stack" id="pressFlashColorRow" hidden>Flash color
+              <span class="row led-color-row">
+                <input type="color" id="pressFlashColorPicker" class="color-swatch-input" aria-label="Flash color" />
+                <input type="text" id="pressFlashColor" placeholder="#ffffff" />
+              </span>
+            </label>
+          </div>
+
+          <div class="row gap-row">
+            <button
+              type="button"
+              id="btnPreviewPress"
+              title="Play the press animation once in the preview above"
+            >
+              Preview press
+            </button>
+          </div>
+        </details>
+
+        <label class="row">Max font size (optional)</label>
+        <input type="number" id="fontSize" min="8" max="36" placeholder="auto" style="width: 6rem" />
+
+        <label class="row" for="fontFilePath">Label font file (optional)</label>
+        <div class="path-with-browse">
+          <input
+            type="text"
+            id="fontFilePath"
+            class="mono path-input"
+            placeholder="library/fonts/… or path relative to config"
+            title="TrueType / OpenType font for key label text"
+          />
+          <button type="button" id="btnBrowseFont" class="btn-browse">Browse…</button>
+          <input type="file" id="fileUpFont" accept=".ttf,.otf,.ttc,font/ttf,font/otf,application/font-sfnt" hidden />
+        </div>
+        <p class="hint small">
+          <code>.ttf</code>, <code>.otf</code>, or <code>.ttc</code>. Leave empty for the default bundled fonts.
+          Browse copies the file into <code>library/fonts/</code>.
+        </p>
+
+        <label class="row">Icon URI (optional)</label>
+        <input
+          type="text"
+          id="iconUri"
+          class="full-width mono"
+          placeholder="si:obsstudio · lucide:bell · heroicons:24/solid/heart · https://…svg"
+        />
+        <p class="hint small">
+          <a href="https://simpleicons.org/" target="_blank" rel="noopener">Simple Icons</a> slugs
+          with <code>si:</code> or <code>simpleicons:</code>; also <code>lucide:</code>,
+          <code>heroicons:</code>, <code>mdi:</code>.
+        </p>
+
+        <label class="row" for="imagePath">Image file (optional)</label>
+        <div class="path-with-browse">
+          <input
+            type="text"
+            id="imagePath"
+            class="mono path-input"
+            placeholder="library/images/… or path relative to config"
+            title="Target bitmap size on device: 90×90 px (touch keys); strips 60×270 px"
+          />
+          <button type="button" id="btnBrowseImage" class="btn-browse">Browse…</button>
+          <input type="file" id="fileUp" accept="image/*" hidden />
+        </div>
+        <p class="hint small">
+          Size on device: tactile keys use a 90×90 px bitmap (the renderer scales your image to fit with a
+          small inset). Left/right strips use 60×270 px. Larger sources are fine; very small images may look
+          soft when scaled up. Browse copies the file into <code>library/images/</code> under your app config
+          directory and sets the path.
+        </p>
+
+        <div id="graphicLayoutBlock" class="graphic-layout-block" hidden>
+          <label class="row">Graphic + label layout</label>
+          <select id="graphicTextLayout" class="full-width">
+            <option value="split">Split — graphic on top, text below</option>
+            <option value="overlay">Overlay — text centered on full graphic</option>
+          </select>
+          <p class="hint small">
+            Applies when both label text and an icon URI or image file are set (icons and images use
+            the same modes).
+          </p>
+        </div>
+        </div>
+
+        <div id="liveSButtonColorBlock" class="live-s-led-block" hidden>
+          <label class="row" id="liveSButtonColorLabel">Physical button LED (Live S)</label>
+          <div class="row led-color-row">
+            <input type="color" id="buttonColorPicker" title="LED color" aria-label="LED color" />
+            <label class="stack flex-1"
+              >Hex <input type="text" id="buttonColorHex" class="full-width mono" placeholder="#404050"
+            /></label>
+          </div>
+          <p class="hint small" id="liveSButtonColorHint">
+            RGB color for this hardware button’s LED. Saved with the key; applied when you click
+            <strong>Apply to key</strong>.
+          </p>
+        </div>
+
+        <p id="keyEditorPreviewHint" class="hint small">Preview uses the same renderer as the Loupedeck (PNG from server).</p>
+        <div id="preview"></div>
+        <p class="error" id="editError"></p>
+        </div>
+
+        <div id="knobEncoderEditorBlock" class="knob-encoder-panel" hidden>
+          <h2 id="knobEncoderTitle">Encoder</h2>
+          <p class="hint small">
+            <strong>Push</strong> the dial cycles to the next page (no separate push action).
+            <strong>Turn</strong> runs <code>rotate_left</code> / <code>rotate_right</code> for the
+            active page. Page <strong>name</strong> flashes on one touch key (Live&nbsp;S:
+            <code>knobTL</code> → <code>touch_0</code>, <code>knobCL</code> → <code>touch_5</code>).
+          </p>
+          <label class="row">Name overlay duration (seconds, max 2)</label>
+          <input
+            type="number"
+            id="knobFeedbackDurationSec"
+            min="0.3"
+            max="2"
+            step="0.1"
+            style="width: 6rem"
+          />
+          <p class="hint small">Stored as <code>knob_page_feedback.duration_sec</code> in config.</p>
+          <div id="knobEncoderPagesMount"></div>
+          <button type="button" id="btnAddKnobEncoderPage" class="row">Add page</button>
+          <div class="row gap-row knob-simulate-row">
+            <button type="button" id="btnTestKnobPush" title="Same as pushing the encoder (cycle dial page)">
+              Test push
+            </button>
+            <button type="button" id="btnTestKnobLeft" title="Same as turning the encoder left">
+              Test turn ←
+            </button>
+            <button type="button" id="btnTestKnobRight" title="Same as turning the encoder right">
+              Test turn →
+            </button>
+          </div>
+          <div class="row gap-row">
+            <button type="button" id="btnSaveKnobEncoderPages">Save encoder &amp; refresh deck</button>
+            <button type="button" id="btnCloseKnobEncoderEditor">Back to key editor</button>
+          </div>
+          <p class="error" id="knobEncoderError"></p>
+
+          <details class="adv-json" id="knobPagesJsonDetails">
+            <summary>Advanced: all encoders as JSON</summary>
+            <p class="hint small">Full <code>knob_pages</code> object. Saving here updates the form above when you reopen an encoder.</p>
+            <textarea id="knobPagesJson" spellcheck="false" rows="12" class="full-width"></textarea>
+            <div class="row gap-row">
+              <button type="button" id="btnApplyKnobPages">Apply JSON</button>
+            </div>
+            <p class="error" id="knobPagesError"></p>
+          </details>
+        </div>
+      </aside>
+    </main>
+    </div>
+    <script src="/assets/ui/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+[Unit]
+Description=Open-Loupedeck agent (OBS, HTTP, sounds)
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/open-loupedeck --config %h/.config/open-loupedeck/config.yaml
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
