@@ -1,4 +1,6 @@
-# Open-Loupedeck
+<p align="center">
+  <img src="press-kit/logo/wordmark-transparent.png" alt="Open-Loupedeck" width="480">
+</p>
 
 **Open-Loupedeck** is a background app that connects to **Loupedeck Live** or **Loupedeck Live S** hardware over USB and turns button presses, touches, and knob rotations into actions: switching **OBS** scenes, controlling **Home Assistant** devices, firing webhooks, playing sounds, controlling **Spotify**, showing live stats, and drawing fully custom text/graphics (with gradients and animations) on the keys.
 
@@ -12,7 +14,7 @@ It's an alternative to the official Loupedeck application — install it, and it
 
 1. Grab the latest installer from [Releases](../../releases).
 2. Run it. It installs to Program Files, adds a Start Menu shortcut, and launches Open-Loupedeck.
-3. A tray icon appears; the configuration window opens automatically. Close the window any time — the app keeps running in the tray. Right-click the tray icon for **Quit**.
+3. A tray icon appears; the configuration window opens automatically. Close the window any time — the app keeps running in the tray. Right-click the tray icon for **Restart** (applies changes that need a fresh start) or **Quit**.
 4. Plug in your Loupedeck. The web-based config UI (opened in a native window, not a browser) will pick it up automatically.
 
 macOS and Linux packages ([`.dmg`](packaging/macos/build_dmg.sh) / [AppImage](packaging/linux/build_appimage.sh)) are built but not yet tested on real hardware — see [Building from source](#building-from-source) to run it there today.
