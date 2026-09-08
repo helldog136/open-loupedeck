@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import sys
 import threading
 import time
@@ -94,6 +95,14 @@ class TrayApp:
                 self._window.destroy()
         with contextlib.suppress(Exception):
             icon.stop()
+        # pystray's own Win32 message-loop thread and pywebview's WebView2/CLR (pythonnet)
+        # hosting threads are not ours to control, and at least one of them is known to
+        # sometimes outlive a "clean" shutdown -- webview.start() then never returns, and the
+        # process lingers as an unkillable zombie in Task Manager even though the tray icon and
+        # window are gone. Everything that needs a graceful stop (agent join, window destroy,
+        # icon stop) already happened synchronously above, so force the exit instead of trusting
+        # third-party threads to terminate on their own.
+        os._exit(0)
 
     # --- updates --------------------------------------------------------------------
 
