@@ -33,6 +33,7 @@ macOS and Linux packages ([`.dmg`](packaging/macos/build_dmg.sh) / [AppImage](pa
 | **Twitch** | Show live/offline status, viewer count, uptime for one or more channels. |
 | **OBS browser overlay** | A transparent 1920×1080 browser source that plays videos/GIFs/images/sounds on command, driven by the same actions. |
 | **HTTP / shell / system audio** | Webhooks, local sound playback, shell commands, system output volume. |
+| **Keyboard macros** | Record a sequence of real keystrokes in the UI and replay them in order on a key press — sent to whatever app has focus. |
 | **Custom key graphics** | Text or images on every key, fully previewable before you press anything: solid colors *or* gradients (text and background, any angle), continuous "idle" animations (shake, pulse, rotating gradient, color cycle), one-shot "press" animations (flash, invert, zoom, slide-out-and-back), custom fonts, icon packs (Simple Icons, Lucide, Heroicons, MDI) or your own images. |
 | **Pages** | As many pages as you want, reordered by drag-and-drop, with the 4 hardware page-switch buttons (Live S) clearly marked. |
 

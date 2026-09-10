@@ -54,6 +54,11 @@ hiddenimports = [
     "uvicorn.protocols.http.auto",
     "uvicorn.protocols.websockets.auto",
     "uvicorn.lifespan.on",
+    # pynput (keyboard.play_sequence action) resolves its backend the same dynamic way.
+    "pynput.keyboard._win32",
+    "pynput.keyboard._darwin",
+    "pynput.keyboard._xorg",
+    "pynput.keyboard._uinput",
 ]
 
 a = Analysis(

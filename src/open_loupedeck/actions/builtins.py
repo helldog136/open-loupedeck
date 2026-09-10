@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from ..keyboard_replay import play_sequence_blocking
 from ..platform_volume import (
     SYSTEM_VOLUME_MAX_PERCENT,
     delta_output_volume,
@@ -401,6 +402,22 @@ class AgentGotoPage:
             name=str(name) if name is not None else None,
             page_id=str(page_id) if page_id is not None else None,
         )
+
+
+@register_action("keyboard.play_sequence")
+class KeyboardPlaySequence:
+    """Replays a recorded sequence of key presses/chords, one at a time, in order.
+
+    ``steps`` is a list of ``{"keys": [...]}`` entries (recorded in the UI); each entry's keys are
+    pressed together then released together before moving to the next step.
+    """
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        steps = params.get("steps")
+        if not isinstance(steps, list) or not steps:
+            raise ValueError("keyboard.play_sequence requires a non-empty 'steps' list")
+        delay_ms = float(params.get("delay_ms", 30) or 30)
+        await asyncio.to_thread(play_sequence_blocking, steps, delay_ms)
 
 
 @register_action("command.run")
