@@ -1522,6 +1522,7 @@ function appendKnobRotateUI(fs, side, rotateVal) {
   const curType =
     parsed.mode === "form" && parsed.action && parsed.action.type ? String(parsed.action.type) : "";
   populateKnobActionSelect(sel, curType);
+  enhanceActionTypeSelect(sel, knobCompatibleActionList());
 
   const fields = document.createElement("div");
   fields.className = `knob-rot-fields-${side} knob-rot-fields`;
@@ -1543,6 +1544,7 @@ function appendKnobRotateUI(fs, side, rotateVal) {
   } else if (parsed.mode === "form" && parsed.action) {
     const act = parsed.action;
     sel.value = act.type || "";
+    if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
     const prefix = `kr${++knobRotateFieldSeq}`;
     renderActionFieldsInto(fields, sel.value, prefix);
     fillActionFieldsInContainer(fields, act, sel.value);
@@ -1764,6 +1766,221 @@ function populateActionTypeSelect() {
     o.textContent = a.label || a.type;
     sel.appendChild(o);
   }
+  enhanceActionTypeSelect(sel, actionCatalog);
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Categorized action-type picker: click the trigger for a list of categories (OBS, Spotify, ...);
+ * hovering (or clicking, for touch) a category flies out a submenu of that category's actions.
+ * The underlying <select> stays the single source of truth — picking an item just sets its value
+ * and dispatches "change", so every existing consumer (form rendering, autosave, knob rotate
+ * wiring, ...) keeps working unchanged. Reused for both the main action-type select and each
+ * knob's rotate-left/rotate-right selects.
+ * ------------------------------------------------------------------------------------------- */
+
+let openActionSelectPanel = null; // { wrap, panel, trigger }
+let actionSelectGlobalListenersInstalled = false;
+
+function closeOpenActionSelectPanel() {
+  if (!openActionSelectPanel) return;
+  const cur = openActionSelectPanel;
+  openActionSelectPanel = null;
+  cur.panel.remove(); // body-appended (see openPanel) — must detach, not just hide
+  cur.trigger.setAttribute("aria-expanded", "false");
+}
+
+function ensureActionSelectGlobalListeners() {
+  if (actionSelectGlobalListenersInstalled) return;
+  actionSelectGlobalListenersInstalled = true;
+  document.addEventListener("click", (e) => {
+    if (
+      openActionSelectPanel &&
+      !openActionSelectPanel.wrap.contains(e.target) &&
+      !openActionSelectPanel.panel.contains(e.target)
+    ) {
+      closeOpenActionSelectPanel();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && openActionSelectPanel) closeOpenActionSelectPanel();
+  });
+  // The editor panel this lives in scrolls internally (overflow: auto); "scroll" does not bubble,
+  // so this must be capture-phase on window to see it and keep the (fixed-positioned) dropdown
+  // from visually drifting away from its trigger.
+  window.addEventListener("scroll", () => closeOpenActionSelectPanel(), true);
+  window.addEventListener("resize", () => closeOpenActionSelectPanel());
+}
+
+/** Split a catalog label like "OBS — set program scene" into ["OBS", "set program scene"]. */
+function splitCategoryFromLabel(label) {
+  const s = String(label || "");
+  const i = s.indexOf(" — ");
+  return i === -1 ? null : [s.slice(0, i), s.slice(i + 3)];
+}
+
+/**
+ * Attach the categorized dropdown UI to an already-populated <select> (main action-type select or
+ * a per-knob rotate select). Safe to call more than once on the same element — later calls just
+ * refresh the trigger label and item list rather than re-wrapping it.
+ * @param {HTMLSelectElement} selectEl
+ * @param {{type: string, label: string, category?: string}[]} items
+ */
+function enhanceActionTypeSelect(selectEl, items) {
+  if (!selectEl) return;
+  selectEl._actionSelectItems = items;
+  if (selectEl._refreshActionSelectTrigger) {
+    selectEl._refreshActionSelectTrigger();
+    return;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "action-select";
+  selectEl.parentNode.insertBefore(wrap, selectEl);
+  wrap.appendChild(selectEl);
+  selectEl.classList.add("action-select-native");
+  selectEl.tabIndex = -1;
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "action-select-trigger";
+  trigger.setAttribute("aria-haspopup", "true");
+  trigger.setAttribute("aria-expanded", "false");
+  wrap.appendChild(trigger);
+
+  function currentLabel() {
+    const t = selectEl.value;
+    if (!t) return "— No action —";
+    const found = (selectEl._actionSelectItems || []).find((i) => i.type === t);
+    return (found && found.label) || t;
+  }
+
+  function refreshTrigger() {
+    trigger.textContent = currentLabel();
+  }
+  selectEl._refreshActionSelectTrigger = refreshTrigger;
+  refreshTrigger();
+
+  function pick(type) {
+    selectEl.value = type;
+    refreshTrigger();
+    closeOpenActionSelectPanel();
+    selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function groupByCategory() {
+    const groups = new Map();
+    for (const it of selectEl._actionSelectItems || []) {
+      const cat = it.category || splitCategoryFromLabel(it.label)?.[0] || "Other";
+      if (!groups.has(cat)) groups.set(cat, []);
+      groups.get(cat).push(it);
+    }
+    return groups;
+  }
+
+  function itemLabel(it) {
+    const split = splitCategoryFromLabel(it.label);
+    return (split && split[1]) || it.label || it.type;
+  }
+
+  function positionSubmenu(row, submenu) {
+    submenu.style.left = "";
+    submenu.style.right = "";
+    const rowRect = row.getBoundingClientRect();
+    const submenuWidth = submenu.offsetWidth || 220;
+    const wouldOverflowRight = rowRect.right + submenuWidth > window.innerWidth - 8;
+    if (wouldOverflowRight && rowRect.left - submenuWidth > 0) {
+      submenu.style.right = "100%";
+    } else {
+      submenu.style.left = "100%";
+    }
+    // Clamp vertically so a submenu near the bottom of the screen doesn't run off it.
+    const submenuHeight = submenu.offsetHeight || 0;
+    const maxTop = window.innerHeight - submenuHeight - 8;
+    submenu.style.top = `${Math.max(8, Math.min(rowRect.top, maxTop)) - rowRect.top}px`;
+  }
+
+  // Appended to <body> (not `wrap`) and position: fixed, so it visually escapes the editor
+  // panel's `overflow: auto` instead of being clipped at that panel's edge.
+  function openPanel() {
+    closeOpenActionSelectPanel();
+    ensureActionSelectGlobalListeners();
+
+    const panel = document.createElement("div");
+    panel.className = "action-select-panel";
+
+    const noneRow = document.createElement("div");
+    noneRow.className = "action-select-item";
+    noneRow.textContent = "— No action —";
+    if (!selectEl.value) noneRow.classList.add("selected");
+    noneRow.addEventListener("click", () => pick(""));
+    panel.appendChild(noneRow);
+
+    for (const [cat, groupItems] of groupByCategory()) {
+      const row = document.createElement("div");
+      row.className = "action-select-category";
+      const catLabel = document.createElement("span");
+      catLabel.textContent = cat;
+      row.appendChild(catLabel);
+      const caret = document.createElement("span");
+      caret.className = "action-select-caret";
+      caret.textContent = "›";
+      row.appendChild(caret);
+
+      const submenu = document.createElement("div");
+      submenu.className = "action-select-submenu";
+      submenu.hidden = true;
+      for (const it of groupItems) {
+        const subRow = document.createElement("div");
+        subRow.className = "action-select-item";
+        subRow.textContent = itemLabel(it);
+        if (it.type === selectEl.value) subRow.classList.add("selected");
+        subRow.addEventListener("click", (e) => {
+          e.stopPropagation();
+          pick(it.type);
+        });
+        submenu.appendChild(subRow);
+      }
+      row.appendChild(submenu);
+
+      const openThisSubmenu = () => {
+        for (const other of panel.querySelectorAll(".action-select-submenu")) {
+          if (other !== submenu) other.hidden = true;
+        }
+        for (const other of panel.querySelectorAll(".action-select-category")) {
+          other.classList.toggle("open", other === row);
+        }
+        submenu.hidden = false;
+        positionSubmenu(row, submenu);
+      };
+      row.addEventListener("mouseenter", openThisSubmenu);
+      row.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (submenu.hidden) openThisSubmenu();
+        else {
+          submenu.hidden = true;
+          row.classList.remove("open");
+        }
+      });
+
+      panel.appendChild(row);
+    }
+
+    document.body.appendChild(panel);
+    const triggerRect = trigger.getBoundingClientRect();
+    panel.style.left = `${Math.round(triggerRect.left)}px`;
+    panel.style.top = `${Math.round(triggerRect.bottom + 4)}px`;
+    panel.style.minWidth = `${Math.round(triggerRect.width)}px`;
+    panel.style.maxHeight = `${Math.max(120, window.innerHeight - triggerRect.bottom - 16)}px`;
+
+    trigger.setAttribute("aria-expanded", "true");
+    openActionSelectPanel = { wrap, panel, trigger };
+  }
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (openActionSelectPanel && openActionSelectPanel.wrap === wrap) closeOpenActionSelectPanel();
+    else openPanel();
+  });
 }
 
 /** Action types that do not apply to encoder rotation (e.g. display-only overlays). */
@@ -2197,7 +2414,10 @@ function fillActionFieldsInContainer(container, action, type) {
 function fillFieldsFromAction(action) {
   const type = action && action.type;
   const sel = $("#actionType");
-  if (sel) sel.value = type || "";
+  if (sel) {
+    sel.value = type || "";
+    if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
+  }
   renderActionFields(type || "");
   if (!type) return;
   fillActionFieldsInContainer($("#actionFields"), action, type);
@@ -2658,7 +2878,10 @@ function openEditor(cid) {
 
   if (isLiveSPageSwitchButton(cid)) {
     const sel = $("#actionType");
-    if (sel) sel.value = "";
+    if (sel) {
+      sel.value = "";
+      if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
+    }
     renderActionFields("");
     const adv = $("#actionJsonAdv");
     if (adv) {
@@ -2694,7 +2917,10 @@ function openEditor(cid) {
     populateDesignFieldsFromEntry(e);
   } else {
     const sel = $("#actionType");
-    if (sel) sel.value = "";
+    if (sel) {
+      sel.value = "";
+      if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
+    }
     renderActionFields("");
     const adv = $("#actionJsonAdv");
     if (adv) {
