@@ -1806,8 +1806,17 @@ function ensureActionSelectGlobalListeners() {
   });
   // The editor panel this lives in scrolls internally (overflow: auto); "scroll" does not bubble,
   // so this must be capture-phase on window to see it and keep the (fixed-positioned) dropdown
-  // from visually drifting away from its trigger.
-  window.addEventListener("scroll", () => closeOpenActionSelectPanel(), true);
+  // from visually drifting away from its trigger. Scrolling *inside* the dropdown's own panel
+  // (long category lists) must not close it -- only scrolling some other ancestor should.
+  window.addEventListener(
+    "scroll",
+    (e) => {
+      if (openActionSelectPanel && !openActionSelectPanel.panel.contains(e.target)) {
+        closeOpenActionSelectPanel();
+      }
+    },
+    true,
+  );
   window.addEventListener("resize", () => closeOpenActionSelectPanel());
 }
 
@@ -1882,25 +1891,13 @@ function enhanceActionTypeSelect(selectEl, items) {
     return (split && split[1]) || it.label || it.type;
   }
 
-  function positionSubmenu(row, submenu) {
-    submenu.style.left = "";
-    submenu.style.right = "";
-    const rowRect = row.getBoundingClientRect();
-    const submenuWidth = submenu.offsetWidth || 220;
-    const wouldOverflowRight = rowRect.right + submenuWidth > window.innerWidth - 8;
-    if (wouldOverflowRight && rowRect.left - submenuWidth > 0) {
-      submenu.style.right = "100%";
-    } else {
-      submenu.style.left = "100%";
-    }
-    // Clamp vertically so a submenu near the bottom of the screen doesn't run off it.
-    const submenuHeight = submenu.offsetHeight || 0;
-    const maxTop = window.innerHeight - submenuHeight - 8;
-    submenu.style.top = `${Math.max(8, Math.min(rowRect.top, maxTop)) - rowRect.top}px`;
-  }
-
   // Appended to <body> (not `wrap`) and position: fixed, so it visually escapes the editor
-  // panel's `overflow: auto` instead of being clipped at that panel's edge.
+  // panel's `overflow: auto` instead of being clipped at that panel's edge. Categories expand
+  // inline (accordion-style) rather than flying out sideways: a sideways flyout needs the
+  // submenu positioned relative to the viewport's right edge, which turned out unreliable in the
+  // packaged app's webview (reported: the submenu rendered off-screen, needing horizontal
+  // scrolling to reach) -- an inline list only ever needs vertical space, which the panel already
+  // scrolls for.
   function openPanel() {
     closeOpenActionSelectPanel();
     ensureActionSelectGlobalListeners();
@@ -1916,53 +1913,43 @@ function enhanceActionTypeSelect(selectEl, items) {
     panel.appendChild(noneRow);
 
     for (const [cat, groupItems] of groupByCategory()) {
+      const isOpenCategory = groupItems.some((it) => it.type === selectEl.value);
+
       const row = document.createElement("div");
       row.className = "action-select-category";
+      if (isOpenCategory) row.classList.add("open");
+      const caret = document.createElement("span");
+      caret.className = "action-select-caret";
+      caret.textContent = isOpenCategory ? "▾" : "▸";
+      row.appendChild(caret);
       const catLabel = document.createElement("span");
       catLabel.textContent = cat;
       row.appendChild(catLabel);
-      const caret = document.createElement("span");
-      caret.className = "action-select-caret";
-      caret.textContent = "›";
-      row.appendChild(caret);
 
-      const submenu = document.createElement("div");
-      submenu.className = "action-select-submenu";
-      submenu.hidden = true;
+      const sublist = document.createElement("div");
+      sublist.className = "action-select-sublist";
+      sublist.hidden = !isOpenCategory;
       for (const it of groupItems) {
         const subRow = document.createElement("div");
-        subRow.className = "action-select-item";
+        subRow.className = "action-select-item action-select-subitem";
         subRow.textContent = itemLabel(it);
         if (it.type === selectEl.value) subRow.classList.add("selected");
         subRow.addEventListener("click", (e) => {
           e.stopPropagation();
           pick(it.type);
         });
-        submenu.appendChild(subRow);
+        sublist.appendChild(subRow);
       }
-      row.appendChild(submenu);
 
-      const openThisSubmenu = () => {
-        for (const other of panel.querySelectorAll(".action-select-submenu")) {
-          if (other !== submenu) other.hidden = true;
-        }
-        for (const other of panel.querySelectorAll(".action-select-category")) {
-          other.classList.toggle("open", other === row);
-        }
-        submenu.hidden = false;
-        positionSubmenu(row, submenu);
-      };
-      row.addEventListener("mouseenter", openThisSubmenu);
-      row.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (submenu.hidden) openThisSubmenu();
-        else {
-          submenu.hidden = true;
-          row.classList.remove("open");
-        }
+      row.addEventListener("click", () => {
+        const willOpen = sublist.hidden;
+        sublist.hidden = !willOpen;
+        row.classList.toggle("open", willOpen);
+        caret.textContent = willOpen ? "▾" : "▸";
       });
 
       panel.appendChild(row);
+      panel.appendChild(sublist);
     }
 
     document.body.appendChild(panel);
@@ -1970,10 +1957,13 @@ function enhanceActionTypeSelect(selectEl, items) {
     panel.style.left = `${Math.round(triggerRect.left)}px`;
     panel.style.top = `${Math.round(triggerRect.bottom + 4)}px`;
     panel.style.minWidth = `${Math.round(triggerRect.width)}px`;
-    panel.style.maxHeight = `${Math.max(120, window.innerHeight - triggerRect.bottom - 16)}px`;
+    panel.style.maxHeight = `${Math.max(160, window.innerHeight - triggerRect.bottom - 16)}px`;
 
     trigger.setAttribute("aria-expanded", "true");
     openActionSelectPanel = { wrap, panel, trigger };
+
+    const selectedEl = panel.querySelector(".action-select-item.selected");
+    if (selectedEl) selectedEl.scrollIntoView({ block: "nearest" });
   }
 
   trigger.addEventListener("click", (e) => {
