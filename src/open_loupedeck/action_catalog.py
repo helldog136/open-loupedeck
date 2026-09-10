@@ -9,6 +9,7 @@ from typing import Any
 ACTION_CATALOG: list[dict[str, Any]] = [
     {
         "type": "obs.set_scene",
+        "category": "OBS",
         "label": "OBS — set program scene",
         "fields": [
             {
@@ -21,6 +22,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "obs.toggle_mute",
+        "category": "OBS",
         "label": "OBS — toggle input mute",
         "fields": [
             {
@@ -33,6 +35,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "obs.input_volume_set",
+        "category": "OBS",
         "label": "OBS — set source volume",
         "fields": [
             {
@@ -51,6 +54,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "obs.input_volume_delta",
+        "category": "OBS",
         "label": "OBS — source volume up / down",
         "fields": [
             {
@@ -69,6 +73,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "ha.turn_on",
+        "category": "Home Assistant",
         "label": "Home Assistant — turn on",
         "fields": [
             {
@@ -88,6 +93,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "ha.turn_off",
+        "category": "Home Assistant",
         "label": "Home Assistant — turn off",
         "fields": [
             {
@@ -106,6 +112,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "ha.toggle",
+        "category": "Home Assistant",
         "label": "Home Assistant — toggle",
         "fields": [
             {
@@ -124,6 +131,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "ha.run_script",
+        "category": "Home Assistant",
         "label": "Home Assistant — run script",
         "fields": [
             {
@@ -136,6 +144,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "ha.call_service",
+        "category": "Home Assistant",
         "label": "Home Assistant — call service (advanced)",
         "fields": [
             {
@@ -168,6 +177,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "http.request",
+        "category": "HTTP",
         "label": "HTTP request",
         "fields": [
             {
@@ -209,6 +219,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "overlay.show_media",
+        "category": "OBS Overlay",
         "label": "OBS overlay — video or image (GIF)",
         "fields": [
             {
@@ -260,6 +271,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "overlay.play_sound",
+        "category": "OBS Overlay",
         "label": "OBS overlay — play sound in browser",
         "fields": [
             {
@@ -280,11 +292,13 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "overlay.clear",
+        "category": "OBS Overlay",
         "label": "OBS overlay — clear all media",
         "fields": [],
     },
     {
         "type": "sound.play",
+        "category": "Sound",
         "label": "Play sound file",
         "fields": [
             {
@@ -305,6 +319,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "sound.volume_set",
+        "category": "Sound",
         "label": "System — set output volume",
         "fields": [
             {
@@ -324,6 +339,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "sound.volume_delta",
+        "category": "Sound",
         "label": "System — volume up / down",
         "fields": [
             {
@@ -343,6 +359,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "sound.mute_toggle",
+        "category": "Sound",
         "label": "System — mute output",
         "fields": [
             {
@@ -363,16 +380,19 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "agent.next_page",
+        "category": "Deck / Pages",
         "label": "Deck — next page",
         "fields": [],
     },
     {
         "type": "agent.prev_page",
+        "category": "Deck / Pages",
         "label": "Deck — previous page",
         "fields": [],
     },
     {
         "type": "agent.goto_page",
+        "category": "Deck / Pages",
         "label": "Deck — go to page",
         "fields": [
             {
@@ -400,6 +420,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.clock",
+        "category": "Display",
         "label": "Display — clock (time + date, two lines; press does nothing)",
         "fields": [
             {
@@ -427,6 +448,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.twitch_live",
+        "category": "Display",
         "label": "Display — Twitch stream status (Helix; press does nothing)",
         "fields": [
             {
@@ -453,6 +475,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.obs_stream",
+        "category": "Display",
         "label": "Display — OBS stream status (WebSocket; press does nothing)",
         "fields": [
             {
@@ -473,6 +496,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.obs_scene",
+        "category": "Display",
         "label": "Display — OBS current scene (WebSocket; press does nothing)",
         "fields": [
             {
@@ -493,6 +517,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.battery",
+        "category": "Display",
         "label": "Display — computer battery (press does nothing)",
         "fields": [
             {
@@ -513,6 +538,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.ha_sensor",
+        "category": "Display",
         "label": "Display — Home Assistant entity state (press does nothing)",
         "fields": [
             {
@@ -539,6 +565,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.ha_weather",
+        "category": "Display",
         "label": "Display — Home Assistant weather (press does nothing)",
         "fields": [
             {
@@ -565,6 +592,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "display.live_message",
+        "category": "Display",
         "label": "Display — live text (HTTP / page info; press does nothing)",
         "fields": [
             {
@@ -625,6 +653,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "spotify.play_pause",
+        "category": "Spotify",
         "label": "Spotify — play / pause",
         "fields": [
             {
@@ -638,6 +667,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "spotify.next",
+        "category": "Spotify",
         "label": "Spotify — next track",
         "fields": [
             {
@@ -651,6 +681,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "spotify.previous",
+        "category": "Spotify",
         "label": "Spotify — previous track",
         "fields": [
             {
@@ -664,6 +695,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "spotify.volume_set",
+        "category": "Spotify",
         "label": "Spotify — set playback volume (%)",
         "fields": [
             {
@@ -683,6 +715,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "spotify.volume_delta",
+        "category": "Spotify",
         "label": "Spotify — volume up / down",
         "fields": [
             {
@@ -702,6 +735,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "spotify.play_playlist",
+        "category": "Spotify",
         "label": "Spotify — play playlist",
         "fields": [
             {
@@ -721,6 +755,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "keyboard.play_sequence",
+        "category": "Keyboard",
         "label": "Keyboard — play recorded key sequence",
         "fields": [
             {
@@ -740,6 +775,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "command.run",
+        "category": "Shell",
         "label": "Run shell command",
         "fields": [
             {
@@ -776,17 +812,22 @@ def merged_catalog() -> list[dict[str, Any]]:
             base = known[t]
             entry = {
                 "type": base["type"],
+                "category": base.get("category") or "Other",
                 "label": base["label"],
                 "fields": list(base.get("fields") or []),
                 "params_json": bool(base.get("params_json", False)),
             }
         else:
+            # Plugin-registered kind with no catalog entry: bucket it by its type prefix (e.g.
+            # "myplugin.foo" -> "Myplugin") so it still gets a sensible category in the UI.
+            prefix = t.split(".", 1)[0].replace("_", " ")
             entry = {
                 "type": t,
+                "category": prefix[:1].upper() + prefix[1:] if prefix else "Other",
                 "label": t,
                 "fields": [],
                 "params_json": True,
             }
         out.append(entry)
-    out.sort(key=lambda e: str(e.get("label") or e["type"]).lower())
+    out.sort(key=lambda e: (str(e.get("category") or "").lower(), str(e.get("label") or e["type"]).lower()))
     return out
