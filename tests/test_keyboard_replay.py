@@ -1,23 +1,33 @@
-"""``keyboard_replay``: key-name resolution and chord press/release ordering."""
+"""``keyboard_replay``: key-name resolution and chord press/release ordering.
+
+Deliberately never imports real ``pynput`` -- its backend resolves eagerly at import time and
+raises on a headless CI runner (no DISPLAY on Linux, no windowing session on macOS). Both
+``Controller`` and ``Key`` are faked via monkeypatch instead, matching how keyboard_replay.py is
+designed to be used (lazy, mockable module attributes) -- see its module docstring.
+"""
 
 from __future__ import annotations
 
-from pynput.keyboard import Key
+from types import SimpleNamespace
 
 from open_loupedeck import keyboard_replay
-from open_loupedeck.keyboard_replay import play_sequence_blocking, resolve_key
+from open_loupedeck.keyboard_replay import NamedKey, play_sequence_blocking, resolve_key
+
+_FAKE_KEY = SimpleNamespace(
+    ctrl="<ctrl>", shift="<shift>", alt="<alt>", cmd="<cmd>", tab="<tab>", esc="<esc>", f5="<f5>"
+)
 
 
-def test_resolve_key_maps_named_modifiers_and_specials():
-    assert resolve_key("ctrl") == Key.ctrl
-    assert resolve_key("Ctrl") == Key.ctrl
-    assert resolve_key("alt") == Key.alt
-    assert resolve_key("shift") == Key.shift
-    assert resolve_key("meta") == Key.cmd
-    assert resolve_key("win") == Key.cmd
-    assert resolve_key("tab") == Key.tab
-    assert resolve_key("escape") == Key.esc
-    assert resolve_key("f5") == Key.f5
+def test_resolve_key_maps_named_modifiers_and_specials_to_sentinels():
+    assert resolve_key("ctrl") == NamedKey("ctrl")
+    assert resolve_key("Ctrl") == NamedKey("ctrl")
+    assert resolve_key("alt") == NamedKey("alt")
+    assert resolve_key("shift") == NamedKey("shift")
+    assert resolve_key("meta") == NamedKey("cmd")
+    assert resolve_key("win") == NamedKey("cmd")
+    assert resolve_key("tab") == NamedKey("tab")
+    assert resolve_key("escape") == NamedKey("esc")
+    assert resolve_key("f5") == NamedKey("f5")
 
 
 def test_resolve_key_passes_through_plain_characters():
@@ -38,43 +48,48 @@ class _FakeController:
         self.events.append(("release", key))
 
 
+def _patch_pynput(monkeypatch, fake_controller: _FakeController) -> None:
+    monkeypatch.setattr(keyboard_replay, "Controller", lambda: fake_controller)
+    monkeypatch.setattr(keyboard_replay, "Key", _FAKE_KEY)
+
+
 def test_play_sequence_presses_chord_then_releases_in_reverse_order(monkeypatch):
     fake = _FakeController()
-    monkeypatch.setattr(keyboard_replay, "Controller", lambda: fake)
+    _patch_pynput(monkeypatch, fake)
 
     play_sequence_blocking([{"keys": ["ctrl", "shift", "s"]}], delay_ms=0)
 
     assert fake.events == [
-        ("press", Key.ctrl),
-        ("press", Key.shift),
+        ("press", "<ctrl>"),
+        ("press", "<shift>"),
         ("press", "s"),
         ("release", "s"),
-        ("release", Key.shift),
-        ("release", Key.ctrl),
+        ("release", "<shift>"),
+        ("release", "<ctrl>"),
     ]
 
 
 def test_play_sequence_runs_multiple_steps_in_order(monkeypatch):
     fake = _FakeController()
-    monkeypatch.setattr(keyboard_replay, "Controller", lambda: fake)
+    _patch_pynput(monkeypatch, fake)
 
     play_sequence_blocking([{"keys": ["ctrl", "c"]}, {"keys": ["ctrl", "v"]}], delay_ms=0)
 
     assert fake.events == [
-        ("press", Key.ctrl),
+        ("press", "<ctrl>"),
         ("press", "c"),
         ("release", "c"),
-        ("release", Key.ctrl),
-        ("press", Key.ctrl),
+        ("release", "<ctrl>"),
+        ("press", "<ctrl>"),
         ("press", "v"),
         ("release", "v"),
-        ("release", Key.ctrl),
+        ("release", "<ctrl>"),
     ]
 
 
 def test_play_sequence_skips_steps_without_keys(monkeypatch):
     fake = _FakeController()
-    monkeypatch.setattr(keyboard_replay, "Controller", lambda: fake)
+    _patch_pynput(monkeypatch, fake)
 
     play_sequence_blocking([{"keys": []}, {}, {"keys": ["a"]}], delay_ms=0)
 
