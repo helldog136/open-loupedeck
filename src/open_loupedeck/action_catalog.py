@@ -84,7 +84,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "data",
-                "label": "Extra service data (JSON object, optional)",
+                "label": "Extra service data (JSON object)",
                 "input": "json",
                 "optional": True,
                 "placeholder": '{"brightness_pct": 60, "rgb_color": [255, 120, 0]}',
@@ -104,7 +104,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "data",
-                "label": "Extra service data (JSON object, optional)",
+                "label": "Extra service data (JSON object)",
                 "input": "json",
                 "optional": True,
             },
@@ -123,7 +123,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "data",
-                "label": "Extra service data (JSON object, optional)",
+                "label": "Extra service data (JSON object)",
                 "input": "json",
                 "optional": True,
             },
@@ -161,14 +161,14 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "entity_id",
-                "label": "Entity ID (optional)",
+                "label": "Entity ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "e.g. climate.bedroom",
             },
             {
                 "name": "data",
-                "label": "Extra service data (JSON object, optional)",
+                "label": "Extra service data (JSON object)",
                 "input": "json",
                 "optional": True,
                 "placeholder": '{"temperature": 21}',
@@ -190,21 +190,21 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             {"name": "url", "label": "URL", "input": "text", "placeholder": "https://…"},
             {
                 "name": "headers",
-                "label": "Headers (JSON object, optional)",
+                "label": "Headers (JSON object)",
                 "input": "json",
                 "optional": True,
                 "placeholder": '{"Authorization": "Bearer …"}',
             },
             {
                 "name": "json",
-                "label": "JSON body (optional)",
+                "label": "JSON body",
                 "input": "json",
                 "optional": True,
                 "placeholder": '{"key": "value"}',
             },
             {
                 "name": "body",
-                "label": "Raw body (optional)",
+                "label": "Raw body",
                 "input": "text",
                 "optional": True,
             },
@@ -233,28 +233,28 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "x",
-                "label": "Left (px, optional)",
+                "label": "Left (px)",
                 "input": "number",
                 "optional": True,
                 "placeholder": "empty = centered horizontally",
             },
             {
                 "name": "y",
-                "label": "Top (px, optional)",
+                "label": "Top (px)",
                 "input": "number",
                 "optional": True,
                 "placeholder": "empty = centered vertically",
             },
             {
                 "name": "width",
-                "label": "Width (px, height keeps aspect ratio, optional)",
+                "label": "Width (px, height keeps aspect ratio)",
                 "input": "number",
                 "optional": True,
                 "placeholder": "empty = maximize in overlay (contain)",
             },
             {
                 "name": "duration_sec",
-                "label": "Display time (seconds, optional)",
+                "label": "Display time (seconds)",
                 "input": "number",
                 "optional": True,
                 "placeholder": "empty = one video play or one GIF loop",
@@ -330,7 +330,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "sink",
-                "label": "Sink (optional)",
+                "label": "Sink",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Linux only (pactl/wpctl); default sink if empty",
@@ -350,7 +350,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "sink",
-                "label": "Sink (optional)",
+                "label": "Sink",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Leave empty for default output",
@@ -371,7 +371,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "sink",
-                "label": "Sink (optional)",
+                "label": "Sink",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Leave empty for default output",
@@ -439,7 +439,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "timezone",
-                "label": "Timezone (optional, e.g. UTC or Europe/London)",
+                "label": "Timezone (e.g. UTC or Europe/London)",
                 "input": "text",
                 "optional": True,
                 "placeholder": "empty = system local",
@@ -459,7 +459,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "template",
-                "label": "Template (optional)",
+                "label": "Template",
                 "input": "text",
                 "optional": True,
                 "placeholder": "{twitch_status}\n{twitch_uptime} · {twitch_viewers} viewers",
@@ -480,7 +480,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "fields": [
             {
                 "name": "template",
-                "label": "Template (optional)",
+                "label": "Template",
                 "input": "text",
                 "optional": True,
                 "placeholder": "{obs_status}\n{obs_duration} · {obs_timecode}",
@@ -501,7 +501,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "fields": [
             {
                 "name": "template",
-                "label": "Template (optional)",
+                "label": "Template",
                 "input": "text",
                 "optional": True,
                 "placeholder": "{obs_scene}",
@@ -522,7 +522,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "fields": [
             {
                 "name": "template",
-                "label": "Template (optional)",
+                "label": "Template",
                 "input": "text",
                 "optional": True,
                 "placeholder": "{battery_percent}\n{battery_status} · {battery_ac}",
@@ -549,7 +549,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "template",
-                "label": "Template (optional)",
+                "label": "Template",
                 "input": "text",
                 "optional": True,
                 "placeholder": "{state}{unit}",
@@ -576,7 +576,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "template",
-                "label": "Template (optional)",
+                "label": "Template",
                 "input": "text",
                 "optional": True,
                 "placeholder": "{condition}\n{temperature}{temperature_unit}",
@@ -603,7 +603,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "url",
-                "label": "HTTP URL (optional)",
+                "label": "HTTP URL",
                 "input": "text",
                 "optional": True,
                 "placeholder": "https://… (GET; value goes into {http} and {value})",
@@ -638,7 +638,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "headers",
-                "label": "HTTP headers (JSON object, optional)",
+                "label": "HTTP headers (JSON object)",
                 "input": "json",
                 "optional": True,
             },
@@ -658,7 +658,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "fields": [
             {
                 "name": "device_id",
-                "label": "Device ID (optional)",
+                "label": "Device ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
@@ -672,7 +672,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "fields": [
             {
                 "name": "device_id",
-                "label": "Device ID (optional)",
+                "label": "Device ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
@@ -686,7 +686,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "fields": [
             {
                 "name": "device_id",
-                "label": "Device ID (optional)",
+                "label": "Device ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
@@ -706,7 +706,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "device_id",
-                "label": "Device ID (optional)",
+                "label": "Device ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
@@ -726,7 +726,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "device_id",
-                "label": "Device ID (optional)",
+                "label": "Device ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
@@ -746,7 +746,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
             {
                 "name": "device_id",
-                "label": "Device ID (optional)",
+                "label": "Device ID",
                 "input": "text",
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
