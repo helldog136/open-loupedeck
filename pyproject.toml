@@ -22,6 +22,7 @@ dependencies = [
     "comtypes>=1.4.1; sys_platform == 'win32'",
     "pystray>=0.19",
     "pywebview>=6.0",
+    "pynput>=1.7",
     # Windows has no system IANA timezone database; zoneinfo.ZoneInfo needs this to resolve
     # named zones (used by the display.clock action's optional `timezone` parameter).
     "tzdata; sys_platform == 'win32'",

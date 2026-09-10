@@ -281,6 +281,24 @@ Everything above is previewable in the config window before you touch the real h
 | `http.request` | `url`, `method`, optional `headers`, `json`, `body`, `timeout` |
 | `command.run` | `argv` (list of strings) **or** `shell` (string) — not both |
 
+### Keyboard
+
+| `type` | Parameters |
+|---|---|
+| `keyboard.play_sequence` | `steps` (list of `{keys: [...]}` chords, pressed together then released together, in order); optional `delay_ms` (default 30) between steps |
+
+Recorded in the UI ("Record", then press the real keys in order, then "Stop") rather than typed by
+hand. Sends synthetic key presses to whatever application currently has focus when the button is
+pressed — same as a physical keyboard, so switch focus to the target app first. `steps` example:
+
+```yaml
+type: keyboard.play_sequence
+steps:
+  - keys: [ctrl, c]
+  - keys: [alt, tab]
+  - keys: [ctrl, v]
+```
+
 ### Local sound / system volume
 
 | `type` | Parameters |

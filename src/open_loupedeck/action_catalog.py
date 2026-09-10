@@ -720,6 +720,25 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         ],
     },
     {
+        "type": "keyboard.play_sequence",
+        "label": "Keyboard — play recorded key sequence",
+        "fields": [
+            {
+                "name": "steps",
+                "label": "Key sequence",
+                "input": "key_sequence",
+                "placeholder": "Click Record, then press keys in this window, in order",
+            },
+            {
+                "name": "delay_ms",
+                "label": "Delay between steps (ms)",
+                "input": "number",
+                "optional": True,
+                "placeholder": "30",
+            },
+        ],
+    },
+    {
         "type": "command.run",
         "label": "Run shell command",
         "fields": [
