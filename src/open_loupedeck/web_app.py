@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import uuid
+import webbrowser
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,7 @@ from .package_paths import package_root
 from .runtime_refs import AgentRuntimeRefs
 from .simulate_input import build_synthetic_loupedeck_message
 from .spotify_client import SpotifyManager
+from .twitch_api import DEFAULT_CLIENT_ID, TwitchManager
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +59,13 @@ SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
 
 def _static_dir() -> Path:
     return package_root() / "static"
+
+
+def _twitch_accounts_from(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    t = raw.get("twitch")
+    if isinstance(t, list):
+        return [a for a in t if isinstance(a, dict)]
+    return [dict(t)] if isinstance(t, dict) and t else []
 
 
 def create_web_app(
@@ -78,6 +87,9 @@ def create_web_app(
         )
     ensure_application_dirs(config_path)
     config_dir = config_path.parent.resolve()
+    if rt.twitch is None:
+        rt.twitch = TwitchManager(config_dir / "twitch_tokens.json", lambda: _twitch_accounts_from(state.raw))
+    tw: TwitchManager = rt.twitch
 
     @app.middleware("http")
     async def _no_cache(request: Any, call_next: Any) -> Any:
@@ -399,6 +411,59 @@ def create_web_app(
     @app.post("/api/spotify/disconnect")
     async def spotify_disconnect() -> JSONResponse:
         sp.clear_tokens()
+        return JSONResponse({"ok": True})
+
+    def _twitch_account(ix: Any) -> dict[str, Any]:
+        """Account ``ix`` of the config's twitch list; index 0 (built-in app) if none configured."""
+
+        accounts = _twitch_accounts_from(state.raw)
+        try:
+            i = int(ix)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "account index required") from None
+        if accounts:
+            if not 0 <= i < len(accounts):
+                raise HTTPException(400, "unknown Twitch account")
+            return accounts[i]
+        if i != 0:
+            raise HTTPException(400, "unknown Twitch account")
+        return {}
+
+    @app.get("/api/twitch/status")
+    async def twitch_status() -> JSONResponse:
+        accounts = _twitch_accounts_from(state.raw) or [{}]
+        rows = [{"index": i, "connected": tw.is_connected(a), "login": tw.login_for(a)} for i, a in enumerate(accounts)]
+        return JSONResponse({"builtin_app": bool(DEFAULT_CLIENT_ID), "accounts": rows})
+
+    @app.post("/api/twitch/device/start")
+    async def twitch_device_start(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        """Begin the Twitch login: returns the code and opens twitch.tv's approval page."""
+
+        account = _twitch_account(body.get("index"))
+        try:
+            async with httpx.AsyncClient() as client:
+                info = await tw.start_device_flow(client, account)
+        except RuntimeError as e:
+            raise HTTPException(400, str(e)) from e
+        uri = str(info.get("verification_uri") or "")
+        if uri.startswith("https://www.twitch.tv/"):
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(webbrowser.open, uri)
+        return JSONResponse(info)
+
+    @app.post("/api/twitch/device/poll")
+    async def twitch_device_poll(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        account = _twitch_account(body.get("index"))
+        try:
+            async with httpx.AsyncClient() as client:
+                return JSONResponse(await tw.poll_device_flow(client, account))
+        except Exception as e:
+            logger.exception("twitch device poll failed")
+            return JSONResponse({"status": "error", "detail": str(e)})
+
+    @app.post("/api/twitch/disconnect")
+    async def twitch_disconnect(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        tw.disconnect(_twitch_account(body.get("index")))
         return JSONResponse({"ok": True})
 
     @app.get("/api/config")

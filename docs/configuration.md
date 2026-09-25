@@ -281,6 +281,28 @@ Everything above is previewable in the config window before you touch the real h
 | `http.request` | `url`, `method`, optional `headers`, `json`, `body`, `timeout` |
 | `command.run` | `argv` (list of strings) **or** `shell` (string) — not both |
 
+### Twitch (after Connect)
+
+Services > Twitch > **Connect with Twitch** opens twitch.tv, you log in and approve, and the token is
+stored and refreshed automatically (`twitch_tokens.json` next to the config) -- no keys to copy. Each
+action runs once per account listed under Twitch and acts on that account's own channel.
+
+| `type` | Parameters |
+|---|---|
+| `twitch.create_clip` | optional `open` (`true` opens the clip editor) |
+| `twitch.start_commercial` | `length`: 30, 60, 90, 120, 150 or 180 seconds |
+| `twitch.snooze_ad` | -- (pushes the next ad back 5 min) |
+| `twitch.create_marker` | optional `description` |
+| `twitch.update_channel` | `title` and/or `game` (exact category name) |
+| `twitch.chat_mode` | `setting`: `slow`, `followers`, `subscribers`, `emote`, `unique`; `state`: `on`/`off`/`toggle`; optional `duration` (slow: seconds, followers: minutes) |
+| `twitch.announce` | `message`; optional `color` |
+| `twitch.send_chat` | `message` |
+| `twitch.clear_chat` | -- |
+| `twitch.raid`, `twitch.shoutout` | `channel` (login name) |
+| `twitch.cancel_raid` | -- |
+
+Ads and raids need an Affiliate/Partner channel that is live; clips need the channel to be live.
+
 ### Keyboard
 
 | `type` | Parameters |

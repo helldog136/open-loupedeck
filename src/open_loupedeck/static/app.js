@@ -880,6 +880,64 @@ function ensureTwitch() {
   cfg.twitch = [];
 }
 
+/** The UI shows one implicit account when none is configured; materialize it on first edit. */
+function ensureTwitchAccount(ix) {
+  ensureTwitch();
+  while (cfg.twitch.length <= ix) cfg.twitch.push({});
+}
+
+async function refreshTwitchStatus() {
+  try {
+    const j = await (await fetch("/api/twitch/status")).json();
+    document.querySelectorAll(".twitch-acct").forEach((fs) => {
+      const row = (j.accounts || []).find((a) => a.index === Number(fs.dataset.ix));
+      const line = fs.querySelector(".twitch-conn-line");
+      if (!line || !row) return;
+      line.textContent = row.connected
+        ? `Connected${row.login ? ` as ${row.login}` : ""}.`
+        : "Not connected — click Connect with Twitch.";
+    });
+  } catch {
+    /* status is cosmetic */
+  }
+}
+
+async function connectTwitchAccount(fs) {
+  const line = fs && fs.querySelector(".twitch-conn-line");
+  const errEl = $("#twitchErrorLine");
+  if (errEl) errEl.hidden = true;
+  const index = Number(fs.dataset.ix);
+  const post = (path) =>
+    fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index }),
+    });
+  try {
+    // The server reads the account (client_id override, label) from the saved config.
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    await runAutosave();
+    const r = await post("/api/twitch/device/start");
+    if (!r.ok) throw new Error((await r.json()).detail || (await r.text()));
+    const info = await r.json();
+    if (line) line.textContent = `Approve on twitch.tv (code ${info.user_code}) — waiting…`;
+    const deadline = Date.now() + info.expires_in * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, Math.max(2, info.interval) * 1000));
+      const p = await (await post("/api/twitch/device/poll")).json();
+      if (p.status === "connected") break;
+      if (p.status !== "pending") throw new Error(p.detail || p.status);
+    }
+  } catch (e) {
+    if (errEl) {
+      errEl.hidden = false;
+      errEl.textContent = String(e.message || e);
+    }
+  }
+  void refreshTwitchStatus();
+}
+
 function escapeAttr(s) {
   return escapeHtml(String(s || "")).replace(/\"/g, "&quot;");
 }
@@ -888,29 +946,34 @@ function renderTwitchAccounts() {
   ensureTwitch();
   const mount = $("#twitchAccountsMount");
   if (!mount) return;
-  const rows = cfg.twitch || [];
-  if (!rows.length) {
-    mount.innerHTML = `<p class="hint small">No Twitch accounts configured.</p>`;
-    return;
-  }
+  const rows = cfg.twitch && cfg.twitch.length ? cfg.twitch : [{}];
   mount.innerHTML = rows
     .map((acct, i) => {
       const a = acct && typeof acct === "object" ? acct : {};
       const cid = a.client_id || "";
       const cs = a.client_secret || "";
       const tok = a.access_token || "";
+      const label = a.label || "";
       return `
         <fieldset class="twitch-acct" data-ix="${i}">
-          <legend>Account ${i + 1}${cid ? ` — ${escapeHtml(String(cid).slice(0, 10))}…` : ""}</legend>
-          <label class="row">Client ID</label>
-          <input class="full-width mono" data-tw="client_id" value="${escapeAttr(cid)}" spellcheck="false" />
-          <label class="row">Client secret</label>
-          <input type="password" class="full-width mono" data-tw="client_secret" value="${escapeAttr(cs)}" />
-          <label class="row">Access token (optional)</label>
-          <input type="password" class="full-width mono" data-tw="access_token" value="${escapeAttr(tok)}" />
-          <div class="row-actions">
+          <legend>Account ${i + 1}</legend>
+          <p class="hint small twitch-conn-line">…</p>
+          <div class="row gap-row">
+            <button type="button" class="btnTwitchConnect">Connect with Twitch</button>
+            <button type="button" class="btnTwitchDisconnect">Disconnect</button>
             <button type="button" class="btnRemoveTwitchAccount">Remove</button>
           </div>
+          <details class="adv-json">
+            <summary>Advanced</summary>
+            <label class="row">Label (to tell two logins apart)</label>
+            <input class="full-width" data-tw="label" value="${escapeAttr(label)}" />
+            <label class="row">Own app: Client ID (empty = built-in app)</label>
+            <input class="full-width mono" data-tw="client_id" value="${escapeAttr(cid)}" spellcheck="false" />
+            <label class="row">Client secret (stream-status keys only)</label>
+            <input type="password" class="full-width mono" data-tw="client_secret" value="${escapeAttr(cs)}" />
+            <label class="row">Access token (optional)</label>
+            <input type="password" class="full-width mono" data-tw="access_token" value="${escapeAttr(tok)}" />
+          </details>
         </fieldset>`;
     })
     .join("");
@@ -921,11 +984,27 @@ function renderTwitchAccounts() {
       if (!fs) return;
       const ix = Number(fs.dataset.ix);
       const key = el.dataset.tw;
-      if (!Number.isFinite(ix) || !cfg.twitch[ix]) return;
+      if (!Number.isFinite(ix)) return;
+      ensureTwitchAccount(ix);
       cfg.twitch[ix][key] = el.value;
       scheduleAutosave();
     });
   });
+  mount.querySelectorAll(".btnTwitchConnect").forEach((btn) => {
+    btn.addEventListener("click", () => void connectTwitchAccount(btn.closest(".twitch-acct")));
+  });
+  mount.querySelectorAll(".btnTwitchDisconnect").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const fs = btn.closest(".twitch-acct");
+      await fetch("/api/twitch/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: Number(fs.dataset.ix) }),
+      });
+      void refreshTwitchStatus();
+    });
+  });
+  void refreshTwitchStatus();
   mount.querySelectorAll(".btnRemoveTwitchAccount").forEach((btn) => {
     btn.addEventListener("click", () => {
       const fs = btn.closest(".twitch-acct");
@@ -951,7 +1030,7 @@ async function refreshSpotifyStatus() {
     if (!line) return;
     if (!j.configured) {
       line.textContent =
-        "Not configured: enter Client ID and Redirect URI, then Save Spotify settings.";
+        "No built-in Spotify app in this build: open Advanced and enter your own Client ID.";
     } else if (!j.connected) {
       line.textContent = "Configured — not connected. Click Connect with Spotify.";
     } else {
@@ -3852,7 +3931,8 @@ async function init() {
   if (btnAddTwitch) {
     btnAddTwitch.addEventListener("click", () => {
       ensureTwitch();
-      cfg.twitch.push({ client_id: "", client_secret: "", access_token: "" });
+      if (!cfg.twitch.length) cfg.twitch.push({}); // the implicit first account
+      cfg.twitch.push({});
       renderTwitchAccounts();
       scheduleAutosave();
     });
