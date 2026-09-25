@@ -754,6 +754,144 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         ],
     },
     {
+        "type": "twitch.create_clip",
+        "category": "Twitch",
+        "label": "Twitch — create clip",
+        "fields": [
+            {
+                "name": "open",
+                "label": "Open the clip editor afterwards",
+                "input": "select",
+                "options": ["false", "true"],
+                "default": "false",
+                "optional": True,
+            }
+        ],
+    },
+    {
+        "type": "twitch.start_commercial",
+        "category": "Twitch",
+        "label": "Twitch — run ads",
+        "fields": [
+            {
+                "name": "length",
+                "label": "Ad length (seconds)",
+                "input": "select",
+                "options": ["30", "60", "90", "120", "150", "180"],
+                "default": "30",
+            }
+        ],
+    },
+    {
+        "type": "twitch.snooze_ad",
+        "category": "Twitch",
+        "label": "Twitch — snooze next ad (+5 min)",
+        "fields": [],
+    },
+    {
+        "type": "twitch.create_marker",
+        "category": "Twitch",
+        "label": "Twitch — add stream marker",
+        "fields": [
+            {
+                "name": "description",
+                "label": "Description",
+                "input": "text",
+                "optional": True,
+                "placeholder": "Shown in the VOD timeline",
+            }
+        ],
+    },
+    {
+        "type": "twitch.update_channel",
+        "category": "Twitch",
+        "label": "Twitch — set title / category",
+        "fields": [
+            {"name": "title", "label": "Stream title", "input": "text", "optional": True},
+            {
+                "name": "game",
+                "label": "Category (exact name)",
+                "input": "text",
+                "optional": True,
+                "placeholder": "e.g. Just Chatting",
+            },
+        ],
+    },
+    {
+        "type": "twitch.chat_mode",
+        "category": "Twitch",
+        "label": "Twitch — chat mode (slow, followers, subs, emotes)",
+        "fields": [
+            {
+                "name": "setting",
+                "label": "Mode",
+                "input": "select",
+                "options": ["slow", "followers", "subscribers", "emote", "unique"],
+                "default": "slow",
+            },
+            {
+                "name": "state",
+                "label": "State",
+                "input": "select",
+                "options": ["toggle", "on", "off"],
+                "default": "toggle",
+            },
+            {
+                "name": "duration",
+                "label": "Slow: seconds (3-120) / Followers: minutes",
+                "input": "number",
+                "optional": True,
+                "placeholder": "slow 30 / followers 0",
+            },
+        ],
+    },
+    {
+        "type": "twitch.announce",
+        "category": "Twitch",
+        "label": "Twitch — chat announcement",
+        "fields": [
+            {"name": "message", "label": "Message", "input": "text"},
+            {
+                "name": "color",
+                "label": "Color",
+                "input": "select",
+                "options": ["primary", "blue", "green", "orange", "purple"],
+                "default": "primary",
+                "optional": True,
+            },
+        ],
+    },
+    {
+        "type": "twitch.send_chat",
+        "category": "Twitch",
+        "label": "Twitch — send chat message",
+        "fields": [{"name": "message", "label": "Message", "input": "text"}],
+    },
+    {
+        "type": "twitch.clear_chat",
+        "category": "Twitch",
+        "label": "Twitch — clear chat",
+        "fields": [],
+    },
+    {
+        "type": "twitch.raid",
+        "category": "Twitch",
+        "label": "Twitch — start raid",
+        "fields": [{"name": "channel", "label": "Channel to raid", "input": "text", "placeholder": "login name"}],
+    },
+    {
+        "type": "twitch.cancel_raid",
+        "category": "Twitch",
+        "label": "Twitch — cancel raid",
+        "fields": [],
+    },
+    {
+        "type": "twitch.shoutout",
+        "category": "Twitch",
+        "label": "Twitch — shoutout",
+        "fields": [{"name": "channel", "label": "Channel to shout out", "input": "text", "placeholder": "login name"}],
+    },
+    {
         "type": "keyboard.play_sequence",
         "category": "Keyboard",
         "label": "Keyboard — play recorded key sequence",

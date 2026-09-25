@@ -23,6 +23,7 @@ class AgentRuntimeRefs:
     intentional_deck_shutdown: bool = False
     obs: Any | None = None
     ha: Any | None = None
+    twitch: Any | None = None
     no_device: bool = False
     knob_page_indices: dict[str, int] = field(default_factory=dict)
     live_message_text: dict[str, str] = field(default_factory=dict)

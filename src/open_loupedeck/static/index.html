@@ -108,31 +108,37 @@
         </summary>
         <div class="spotify-inner">
           <p class="hint small spotify-intro">
-            <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Create an app</a>
-            (Web API). Add the redirect URI below to the app&rsquo;s settings, paste your Client ID, save, then
-            connect. Playback control needs
+            Click <strong>Connect with Spotify</strong> and log in &mdash; nothing to copy or paste.
+            Playback control needs
             <a href="https://www.spotify.com/premium/" target="_blank" rel="noopener">Spotify Premium</a> for
             most users, and an active Spotify Connect device (app open on phone, desktop, or web).
           </p>
-          <label class="row" for="spotifyClientId">Client ID</label>
-          <input
-            type="text"
-            id="spotifyClientId"
-            class="full-width mono"
-            placeholder="From Spotify Developer Dashboard"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <label class="row" for="spotifyRedirectUri">Redirect URI (must match Dashboard exactly)</label>
-          <input type="text" id="spotifyRedirectUri" class="full-width mono" spellcheck="false" />
-          <div class="row gap-row">
-            <button type="button" id="btnSpotifySave">Save Spotify settings</button>
-          </div>
           <p class="hint small" id="spotifyStatusLine"></p>
           <div class="row gap-row">
             <button type="button" id="btnSpotifyConnect">Connect with Spotify</button>
             <button type="button" id="btnSpotifyDisconnect">Disconnect</button>
           </div>
+          <details class="adv-json">
+            <summary>Advanced: use my own Spotify app</summary>
+            <p class="hint small">
+              <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Create an app</a>
+              (Web API), add the redirect URI below to its settings, paste its Client ID, then save and connect.
+            </p>
+            <label class="row" for="spotifyClientId">Client ID</label>
+            <input
+              type="text"
+              id="spotifyClientId"
+              class="full-width mono"
+              placeholder="Empty = built-in app"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <label class="row" for="spotifyRedirectUri">Redirect URI (must match Dashboard exactly)</label>
+            <input type="text" id="spotifyRedirectUri" class="full-width mono" spellcheck="false" />
+            <div class="row gap-row">
+              <button type="button" id="btnSpotifySave">Save Spotify settings</button>
+            </div>
+          </details>
           <p class="error" id="spotifyErrorLine" hidden></p>
         </div>
       </details>
@@ -237,9 +243,10 @@
         </summary>
         <div class="twitch-inner">
           <p class="hint small">
-            Configure one or more Twitch app credentials. Display keys (like
-            <code>display.twitch_live</code>) use an app token. Any action whose type starts with
-            <code>twitch.</code> will run once per configured account.
+            Click <strong>Connect</strong> and log in on twitch.tv &mdash; nothing to copy or paste. This enables the
+            <code>Twitch</code> actions (clip, ads, chat modes, raid, &hellip;). Each one runs once per
+            account listed here. Display keys (like <code>display.twitch_live</code>) only need a Client
+            ID / secret under &ldquo;Advanced&rdquo;.
           </p>
           <div id="twitchAccountsMount"></div>
           <div class="row gap-row">

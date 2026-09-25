@@ -59,6 +59,14 @@ def normalize_playlist_uri(raw: str) -> str:
     return s
 
 
+# client_id of the Open-Loupedeck Spotify application. PKCE needs no client secret, so this is not a
+# secret; shipping it means "Connect" just opens Spotify's login page. ``spotify.client_id`` in
+# config overrides it. The redirect URI must be registered on that app (the agent's fixed local
+# address, see DEFAULT_WEB_ADDR in app.py).
+DEFAULT_CLIENT_ID = ""
+DEFAULT_REDIRECT_URI = "http://127.0.0.1:8765/api/spotify/callback"
+
+
 class SpotifyManager:
     """PKCE OAuth (no client secret). Tokens live beside config in ``spotify_tokens.json``."""
 
@@ -74,14 +82,13 @@ class SpotifyManager:
         return dict(self._get_section() or {})
 
     def is_configured(self) -> bool:
-        s = self._section()
-        return bool(str(s.get("client_id") or "").strip() and str(s.get("redirect_uri") or "").strip())
+        return bool(self.client_id() and self.redirect_uri())
 
     def client_id(self) -> str:
-        return str(self._section().get("client_id") or "").strip()
+        return str(self._section().get("client_id") or "").strip() or DEFAULT_CLIENT_ID
 
     def redirect_uri(self) -> str:
-        return str(self._section().get("redirect_uri") or "").strip()
+        return str(self._section().get("redirect_uri") or "").strip() or DEFAULT_REDIRECT_URI
 
     def _load_tokens(self) -> dict[str, Any] | None:
         if not self._token_path.is_file():

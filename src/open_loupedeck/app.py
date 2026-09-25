@@ -49,6 +49,7 @@ from .page_runtime import PageNavigator, actions_for_page_event
 from .plugins import load_plugin_files
 from .runtime_refs import AgentRuntimeRefs
 from .spotify_client import SpotifyManager
+from .twitch_api import DEFAULT_CLIENT_ID, TwitchManager
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +237,7 @@ async def run_agent(
             spotify=spotify,
             overlay_hub=runtime.overlay_hub,
             ha=ha,
+            twitch_api=runtime.twitch,
         )
 
         async def live_message_tick() -> bool:
@@ -429,6 +431,8 @@ async def run_agent(
                 accounts = [a for a in twitch_raw if isinstance(a, dict)]
             elif isinstance(twitch_raw, dict) and twitch_raw:
                 accounts = [dict(twitch_raw)]
+            if not accounts and DEFAULT_CLIENT_ID:
+                accounts = [{}]  # nothing configured: use the built-in Twitch app
             ctx.twitch_accounts = accounts or None
             ctx.twitch_account = accounts[0] if accounts else None
             if ctx.source_storage_key is not None:
@@ -624,6 +628,7 @@ async def _async_main(
         config_dir / "spotify_tokens.json",
         lambda: dict(state.raw.get("spotify") or {}),
     )
+    runtime.twitch = TwitchManager(config_dir / "twitch_tokens.json", lambda: _twitch_accounts(state.raw))
     redraw_skin_lock = asyncio.Lock()
     # Monotonic redraw counter for log correlation only (not errors, not memory).
     redraw_seq = count(1)
@@ -771,6 +776,13 @@ async def _async_main(
         if exc is not None:
             raise exc
         return
+
+
+def _twitch_accounts(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    t = raw.get("twitch")
+    if isinstance(t, list):
+        return [a for a in t if isinstance(a, dict)]
+    return [dict(t)] if isinstance(t, dict) and t else []
 
 
 DEFAULT_WEB_ADDR = "127.0.0.1:8765"

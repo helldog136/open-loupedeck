@@ -47,6 +47,9 @@ class ActionContext:
     # Twitch: optional multi-account context. If set, twitch.* actions may be run per account.
     twitch_accounts: list[dict[str, Any]] | None = None
     twitch_account: dict[str, Any] | None = None
+    """``twitch_api.TwitchManager`` (user-token Helix calls for twitch.* management actions)."""
+
+    twitch_api: Any | None = None
     """Home Assistant REST client (``ha_client.HaClient``); ``None`` if not wired."""
 
     ha: Any | None = None
