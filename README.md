@@ -46,7 +46,7 @@ Hardware protocol via [python-loupedeck-live](https://github.com/devleaks/python
 Open it from the tray icon ("Open configuration"). Two tabs:
 
 - **Buttons** — the page list (left rail: drag to reorder, click to switch, ✕ to remove), the deck grid, and the button editor. Editing a button autosaves as you type (a red outline means the value isn't valid yet, so it's never saved half-broken) and pushes the update to the physical device live. **Ctrl+Z / Ctrl+Shift+Z** undo/redo anything you just did, for the current session.
-- **Services** — OBS, Home Assistant, Spotify, Twitch, and logging credentials/settings; hardware model override; "Launch at startup"; config backups (one is taken automatically every time the app starts, and you can restore any of the last 3 from here); a button to open the config folder directly.
+- **Services** — OBS, Home Assistant, Spotify, Twitch, and logging credentials/settings; hardware model override; "Launch at startup" (starts silently in the tray at login — no config window; open it from the tray icon or by launching the app again); config backups (one is taken automatically every time the app starts, and you can restore any of the last 3 from here); a button to open the config folder directly.
 
 Drag one button onto another to swap their entire configuration (action, text, colors, animations — everything).
 
