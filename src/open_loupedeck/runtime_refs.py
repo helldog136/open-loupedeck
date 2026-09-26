@@ -24,6 +24,10 @@ class AgentRuntimeRefs:
     obs: Any | None = None
     ha: Any | None = None
     twitch: Any | None = None
+    spotify: Any | None = None
+    # Last polled Spotify playback state (None = unknown / not connected); drives play/pause keys.
+    spotify_playing: bool | None = None
+    spotify_last_fetch: float = 0.0
     no_device: bool = False
     knob_page_indices: dict[str, int] = field(default_factory=dict)
     live_message_text: dict[str, str] = field(default_factory=dict)

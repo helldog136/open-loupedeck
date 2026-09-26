@@ -383,9 +383,15 @@ steps:
 
 ### Spotify (after OAuth)
 
+A `spotify.play_pause` key shows a **pause** icon while music plays and a **play** icon otherwise (polled
+every ~2 s; a key with its own `image` keeps it). Commands no longer fail when no Spotify device is
+"active": the agent activates your computer (or another available device) first. If Spotify is not open
+anywhere, open it once.
+
 | `type` | Parameters |
 |---|---|
-| `spotify.play_pause`, `spotify.next`, `spotify.previous` | optional `device_id` |
+| `spotify.play_pause` | optional `device_id`, `icon_playing` (default `lucide:pause`), `icon_paused` (default `lucide:play`) |
+| `spotify.next`, `spotify.previous` | optional `device_id` |
 | `spotify.volume_set`, `spotify.volume_delta` | volume params, optional `device_id` |
 | `spotify.play_playlist` | `playlist` (URI, link, or id), optional `device_id` |
 

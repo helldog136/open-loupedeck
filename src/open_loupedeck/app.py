@@ -628,6 +628,7 @@ async def _async_main(
         config_dir / "spotify_tokens.json",
         lambda: dict(state.raw.get("spotify") or {}),
     )
+    runtime.spotify = spotify_mgr
     runtime.twitch = TwitchManager(config_dir / "twitch_tokens.json", lambda: _twitch_accounts(state.raw))
     redraw_skin_lock = asyncio.Lock()
     # Monotonic redraw counter for log correlation only (not errors, not memory).

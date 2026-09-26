@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -244,6 +245,48 @@ class SpotifyManager:
             return {}
         return r.json()
 
+    async def activate_device(self, client: httpx.AsyncClient, *, play: bool) -> None:
+        """Transfer playback to an available device (prefers a computer, then anything usable).
+
+        Spotify rejects player commands with ``NO_ACTIVE_DEVICE`` while no client is the "active"
+        one -- e.g. the desktop app is open but idle, which is the normal state on a streaming PC.
+        """
+
+        r = await self.api(client, "GET", "/me/player/devices")
+        devices = r.json().get("devices", []) if r.status_code == 200 else []
+        usable = [d for d in devices if isinstance(d, dict) and d.get("id") and not d.get("is_restricted")]
+        if not usable:
+            raise RuntimeError("No Spotify device found; open the Spotify app on this PC or your phone")
+        usable.sort(key=lambda d: (not d.get("is_active"), str(d.get("type")) != "Computer"))
+        target = usable[0]
+        r2 = await self.api(
+            client,
+            "PUT",
+            "/me/player",
+            json_body={"device_ids": [target["id"]], "play": play},
+        )
+        if r2.status_code not in (200, 202, 204):
+            raise RuntimeError(f"Spotify could not activate {target.get('name')!r} ({r2.status_code}): {r2.text[:200]}")
+        logger.info("Spotify: activated device %r", target.get("name"))
+        await asyncio.sleep(0.6)  # the transfer takes a moment to apply
+
+    async def _player_command(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_body: Any | None = None,
+    ) -> httpx.Response:
+        """Send a player command; on ``NO_ACTIVE_DEVICE`` activate a device and retry once."""
+
+        r = await self.api(client, method, path, params=params, json_body=json_body)
+        if r.status_code == 404 and "NO_ACTIVE_DEVICE" in r.text and not (params or {}).get("device_id"):
+            await self.activate_device(client, play=False)
+            r = await self.api(client, method, path, params=params, json_body=json_body)
+        return r
+
     def _device_qs(self, device_id: str | None) -> dict[str, Any]:
         d = str(device_id or "").strip()
         return {"device_id": d} if d else {}
@@ -251,28 +294,28 @@ class SpotifyManager:
     async def play_pause(self, client: httpx.AsyncClient, device_id: str | None = None) -> None:
         r = await self.api(client, "GET", "/me/player")
         if r.status_code == 204:
-            raise RuntimeError(
-                "No active Spotify player; open Spotify on a phone, desktop, or web player and try again"
-            )
+            # Nothing is playing/active anywhere: wake a device and start playback there.
+            await self.activate_device(client, play=True)
+            return
         if r.status_code != 200:
             raise RuntimeError(f"Spotify player state failed ({r.status_code})")
         st = r.json()
         playing = bool(st.get("is_playing"))
         dev = self._device_qs(device_id)
         if playing:
-            r2 = await self.api(client, "PUT", "/me/player/pause", params=dev)
+            r2 = await self._player_command(client, "PUT", "/me/player/pause", params=dev)
         else:
-            r2 = await self.api(client, "PUT", "/me/player/play", params=dev)
+            r2 = await self._player_command(client, "PUT", "/me/player/play", params=dev)
         if r2.status_code not in (200, 202, 204):
             raise RuntimeError(f"Spotify play/pause failed ({r2.status_code}): {r2.text[:200]}")
 
     async def next_track(self, client: httpx.AsyncClient, device_id: str | None = None) -> None:
-        r = await self.api(client, "POST", "/me/player/next", params=self._device_qs(device_id))
+        r = await self._player_command(client, "POST", "/me/player/next", params=self._device_qs(device_id))
         if r.status_code not in (200, 202, 204):
             raise RuntimeError(f"Spotify next failed ({r.status_code}): {r.text[:200]}")
 
     async def previous_track(self, client: httpx.AsyncClient, device_id: str | None = None) -> None:
-        r = await self.api(client, "POST", "/me/player/previous", params=self._device_qs(device_id))
+        r = await self._player_command(client, "POST", "/me/player/previous", params=self._device_qs(device_id))
         if r.status_code not in (200, 202, 204):
             raise RuntimeError(f"Spotify previous failed ({r.status_code}): {r.text[:200]}")
 
@@ -285,7 +328,7 @@ class SpotifyManager:
         pct = max(0, min(100, int(percent)))
         params: dict[str, Any] = {"volume_percent": pct}
         params.update(self._device_qs(device_id))
-        r = await self.api(client, "PUT", "/me/player/volume", params=params)
+        r = await self._player_command(client, "PUT", "/me/player/volume", params=params)
         if r.status_code not in (200, 202, 204):
             raise RuntimeError(f"Spotify volume failed ({r.status_code}): {r.text[:200]}")
 
@@ -300,6 +343,6 @@ class SpotifyManager:
             raise ValueError("spotify.play_playlist needs a playlist id, URI, or open.spotify.com link")
         body = {"context_uri": uri}
         params = self._device_qs(device_id)
-        r = await self.api(client, "PUT", "/me/player/play", params=params, json_body=body)
+        r = await self._player_command(client, "PUT", "/me/player/play", params=params, json_body=body)
         if r.status_code not in (200, 202, 204):
             raise RuntimeError(f"Spotify play playlist failed ({r.status_code}): {r.text[:200]}")

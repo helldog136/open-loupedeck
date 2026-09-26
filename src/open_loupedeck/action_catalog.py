@@ -663,6 +663,20 @@ ACTION_CATALOG: list[dict[str, Any]] = [
                 "optional": True,
                 "placeholder": "Active Connect device if empty",
             },
+            {
+                "name": "icon_playing",
+                "label": "Icon while playing",
+                "input": "text",
+                "optional": True,
+                "placeholder": "lucide:pause (default)",
+            },
+            {
+                "name": "icon_paused",
+                "label": "Icon while paused",
+                "input": "text",
+                "optional": True,
+                "placeholder": "lucide:play (default)",
+            },
         ],
     },
     {

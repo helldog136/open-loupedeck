@@ -75,7 +75,8 @@ class SpotifyVolumeDelta:
         client: httpx.AsyncClient = ctx.http_client
         r = await sm.api(client, "GET", "/me/player")
         if r.status_code == 204:
-            raise RuntimeError("No active Spotify player; open Spotify on a device and try again")
+            await sm.activate_device(client, play=False)
+            r = await sm.api(client, "GET", "/me/player")
         if r.status_code != 200:
             raise RuntimeError(f"Spotify player state failed ({r.status_code})")
         st = r.json()

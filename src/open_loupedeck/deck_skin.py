@@ -12,7 +12,12 @@ from .button_render import effective_graphic_source, key_size_for_control, rende
 from .control_ids import is_page_scoped_control
 from .hardware.live_s_device import LoupedeckLiveS
 from .key_media_cache import raw_graphic_needs_skin_animation
-from .live_message import dynamic_display_overlay_entry, overlay_text_for_control
+from .live_message import (
+    dynamic_display_overlay_entry,
+    overlay_text_for_control,
+    spotify_state_entry,
+    spotify_state_params_from_entry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +239,12 @@ def apply_page_skin(
                 entry = dict(base)
                 if str(overlay).strip():
                     entry["text"] = overlay
+            elif (
+                overlay in ("playing", "paused")
+                and base is not None
+                and spotify_state_params_from_entry(base) is not None
+            ):
+                entry = spotify_state_entry(base, str(overlay))
             else:
                 entry = base
             img: Image.Image | None = None
