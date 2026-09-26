@@ -156,6 +156,40 @@ def clock_params_from_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+SPOTIFY_PLAY_PAUSE_ACTION = "spotify.play_pause"
+SPOTIFY_STATE_INTERVAL_S = 2.0
+DEFAULT_ICON_PLAYING = "lucide:pause"  # shown while music plays: pressing pauses it
+DEFAULT_ICON_PAUSED = "lucide:play"
+
+
+def spotify_state_params_from_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Params if this key is a Spotify play/pause key (its icon follows the playback state)."""
+
+    act = entry.get("action")
+    if isinstance(act, dict) and act.get("type") == SPOTIFY_PLAY_PAUSE_ACTION:
+        return {k: v for k, v in act.items() if k != "type"}
+    return None
+
+
+def spotify_state_entry(base: dict[str, Any], state: str) -> dict[str, Any]:
+    """``base`` with its icon swapped to reflect ``state`` (``playing`` / ``paused``).
+
+    A key that sets its own ``image`` is left alone. Override the defaults per key with the
+    action's ``icon_playing`` / ``icon_paused`` parameters.
+    """
+
+    entry = dict(base)
+    if entry.get("image"):
+        return entry
+    params = spotify_state_params_from_entry(base) or {}
+    if state == "playing":
+        icon = str(params.get("icon_playing") or "").strip() or DEFAULT_ICON_PLAYING
+    else:
+        icon = str(params.get("icon_paused") or "").strip() or DEFAULT_ICON_PAUSED
+    entry["icon"] = icon
+    return entry
+
+
 def twitch_live_params_from_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
     """Params for Twitch stream status overlay (Helix)."""
 
@@ -264,6 +298,10 @@ def _append_entry_slots(
     cp = clock_params_from_entry(entry)
     if cp is not None:
         out.append((f"{prefix}{cid}", "clock", cp))
+        return
+    spp = spotify_state_params_from_entry(entry)
+    if spp is not None:
+        out.append((f"{prefix}{cid}", "spotify_state", spp))
 
 
 def _now_for_clock(params: dict[str, Any]) -> datetime:
@@ -676,7 +714,32 @@ async def refresh_live_messages(
             runtime.ha_weather_by_entity[entity_id] = _ha_weather_fields(entity_id, None)
         runtime.ha_weather_last_fetch[entity_id] = now
 
+    # Spotify playback state (one shared poll for every play/pause key).
+    if any(kind == "spotify_state" for _k, kind, _p in slots):
+        sm = getattr(runtime, "spotify", None)
+        if sm is not None and now - float(getattr(runtime, "spotify_last_fetch", 0.0)) >= SPOTIFY_STATE_INTERVAL_S:
+            runtime.spotify_last_fetch = now
+            try:
+                if sm.has_tokens():
+                    r = await sm.api(http_client, "GET", "/me/player")
+                    if r.status_code == 204:
+                        runtime.spotify_playing = False
+                    elif r.status_code == 200:
+                        runtime.spotify_playing = bool(r.json().get("is_playing"))
+            except Exception:
+                log.debug("spotify state poll failed", exc_info=True)
+
     for key, kind, params in slots:
+        if kind == "spotify_state":
+            playing = getattr(runtime, "spotify_playing", None)
+            if playing is None:
+                continue
+            state = "playing" if playing else "paused"
+            if runtime.live_message_text.get(key) != state:
+                runtime.live_message_text[key] = state
+                changed = True
+            continue
+
         if kind == "clock":
             text = format_clock_overlay_text(params)
             if len(text) > 500:
