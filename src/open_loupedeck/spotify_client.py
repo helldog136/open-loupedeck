@@ -63,7 +63,7 @@ def normalize_playlist_uri(raw: str) -> str:
 # secret; shipping it means "Connect" just opens Spotify's login page. ``spotify.client_id`` in
 # config overrides it. The redirect URI must be registered on that app (the agent's fixed local
 # address, see DEFAULT_WEB_ADDR in app.py).
-DEFAULT_CLIENT_ID = ""
+DEFAULT_CLIENT_ID = "31f6d477516c4ca9b81f38117f326c04"
 DEFAULT_REDIRECT_URI = "http://127.0.0.1:8765/api/spotify/callback"
 
 

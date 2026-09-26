@@ -44,7 +44,7 @@ TWITCH_SCOPES = [
 # client_id of the Open-Loupedeck Twitch application (a *Public* client, so it is not a secret and
 # needs no client secret). Lets users just click "Connect" and log in on twitch.tv instead of
 # registering their own developer app; an account's own ``client_id`` in config overrides it.
-DEFAULT_CLIENT_ID = ""
+DEFAULT_CLIENT_ID = "i2bc7qcz6t72syr61qcbrim4zqvx8h"
 
 _DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 _EXPIRY_MARGIN_S = 60.0

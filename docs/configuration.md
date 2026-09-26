@@ -281,6 +281,29 @@ Everything above is previewable in the config window before you touch the real h
 | `http.request` | `url`, `method`, optional `headers`, `json`, `body`, `timeout` |
 | `command.run` | `argv` (list of strings) **or** `shell` (string) — not both |
 
+### Connecting Twitch and Spotify (and using your own app)
+
+Both services connect with one click (Services > Twitch / Spotify > **Connect**): a page opens, you log
+in and approve, and the token is stored and refreshed for you. Open-Loupedeck ships with its own Twitch
+and Spotify apps for this; their Client IDs are public identifiers, not secrets, so sharing them
+between all users is normal and gives nobody access to your account.
+
+**When you need your own app** (under *Advanced* in each section, or `client_id` in `config.yaml`):
+
+- **Spotify** limits an app in development mode to 25 hand-approved users. If Connect fails with
+  "user not registered" (or you are not on the built-in app's list), create your own -- it is free:
+  1. Open <https://developer.spotify.com/dashboard> > **Create app**.
+  2. Tick **Web API**; set the Redirect URI to `http://127.0.0.1:8765/api/spotify/callback`
+     (exactly, as shown in Services > Spotify > Advanced).
+  3. Copy its **Client ID** into Services > Spotify > Advanced, save, then **Connect**.
+
+  (Maintainer note: to let someone use the *built-in* Spotify app, add their Spotify account e-mail under
+  the app's **User Management** on the Spotify dashboard -- limited to 25 people.)
+- **Twitch** has no user cap, but you can use your own app if the built-in one is ever unavailable:
+  1. Open <https://dev.twitch.tv/console/apps/create>.
+  2. Client type **Public**, OAuth Redirect URL `http://localhost`, any category.
+  3. Copy its **Client ID** into Services > Twitch > Advanced, then **Connect**.
+
 ### Twitch (after Connect)
 
 Services > Twitch > **Connect with Twitch** opens twitch.tv, you log in and approve, and the token is
