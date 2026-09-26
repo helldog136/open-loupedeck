@@ -22,7 +22,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw, ImageFile, ImageFont, ImageOps
 
-from .icon_loader import load_icon_image, looks_like_icon_uri
+from .icon_loader import icon_is_tintable, load_icon_image, looks_like_icon_uri
 from .key_media_cache import (
     VIDEO_EXTENSIONS,
     is_video_path,
@@ -183,6 +183,15 @@ def _composite_fill_through_mask(
 
     fill_img = gradient if gradient is not None else Image.new("RGBA", (w, h), fg)
     img.paste(fill_img, (0, 0), mask)
+
+
+def _tint_icon(icon: Image.Image, color: tuple[int, int, int, int]) -> Image.Image:
+    """Recolor a monochrome icon: keep its shape (alpha), fill it with ``color``."""
+
+    rgba = icon.convert("RGBA")
+    out = Image.new("RGBA", rgba.size, (0, 0, 0, 0))
+    _composite_fill_through_mask(out, rgba.getchannel("A"), color, None)
+    return out
 
 
 def _resolve_font_path(raw: str | None, config_dir: Path) -> str | None:
@@ -736,6 +745,8 @@ def render_tactile_key_image(
             (inner_w, inner_h),
             animation_frame=animation_frame,
         )
+        if graphic is not None and icon_is_tintable(rs):
+            graphic = _tint_icon(graphic, text_fg)
 
     if text and graphic is not None:
         if layout_overlay:
