@@ -119,8 +119,16 @@
             <button type="button" id="btnSpotifyDisconnect">Disconnect</button>
           </div>
           <details class="adv-json">
-            <summary>Advanced: use my own Spotify app</summary>
+            <summary>
+              Advanced: use my own Spotify app
+              <span class="info-tip" tabindex="0" title="Spotify limits the built-in app to 25 hand-approved users. If Connect fails or you are not on that list, create your own free Spotify app: dashboard -> Create app -> tick 'Web API' -> Redirect URI = the value below -> paste its Client ID here. See docs/configuration.md.">&#9432;</span>
+            </summary>
             <p class="hint small">
+              <strong>Connect says &ldquo;user not registered&rdquo; or fails?</strong> Spotify limits the built-in app to
+              25 approved users. Create your own (free, 2 minutes): open the dashboard below &rarr;
+              <em>Create app</em> &rarr; tick <em>Web API</em> &rarr; add the Redirect URI shown here &rarr; paste the
+              Client ID, save, then Connect.
+            </p>            <p class="hint small">
               <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Create an app</a>
               (Web API), add the redirect URI below to its settings, paste its Client ID, then save and connect.
             </p>

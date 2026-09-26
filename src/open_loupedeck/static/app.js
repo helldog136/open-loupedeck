@@ -964,8 +964,12 @@ function renderTwitchAccounts() {
             <button type="button" class="btnRemoveTwitchAccount">Remove</button>
           </div>
           <details class="adv-json">
-            <summary>Advanced</summary>
-            <label class="row">Label (to tell two logins apart)</label>
+            <summary>
+              Advanced
+              <span class="info-tip" tabindex="0" title="Only needed if the built-in Twitch app is suspended or you want your own. Create a free app at dev.twitch.tv/console (Client type: Public, OAuth Redirect URL: http://localhost), paste its Client ID below. See docs/configuration.md.">&#9432;</span>
+            </summary>
+            <p class="hint small">Want your own Twitch app? Create one at dev.twitch.tv/console with client type
+              <em>Public</em> and redirect URL <code>http://localhost</code>, then paste its Client ID here.</p>            <label class="row">Label (to tell two logins apart)</label>
             <input class="full-width" data-tw="label" value="${escapeAttr(label)}" />
             <label class="row">Own app: Client ID (empty = built-in app)</label>
             <input class="full-width mono" data-tw="client_id" value="${escapeAttr(cid)}" spellcheck="false" />

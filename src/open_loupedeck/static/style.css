@@ -1861,3 +1861,16 @@ label.stack {
   border-radius: 0.2rem;
   vertical-align: middle;
 }
+
+.info-tip {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: var(--muted);
+  cursor: help;
+  font-size: 0.9em;
+}
+
+.info-tip:hover,
+.info-tip:focus {
+  color: var(--accent);
+}
