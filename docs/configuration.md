@@ -211,7 +211,7 @@ Every value under `buttons` is a mapping of optional visuals plus one or more ac
 |---|---|
 | `text`, `label` | Line(s) of text; font scales down to fit. |
 | `image` | Bitmap background (path relative to config dir, or absolute). |
-| `icon` | `si:slug` / `simpleicons:slug` (Simple Icons), `lucide:name`, `heroicons:24/solid/name`, `mdi:name`, or any `https://…` SVG URL. |
+| `icon` | `si:slug` / `simpleicons:slug` (Simple Icons), `lucide:name`, `heroicons:24/solid/name`, `mdi:name`, or any `https://…` SVG URL. `lucide:`, `mdi:`, `heroicons:` and `si:slug` icons are drawn in the key's **`text_color`** (white by default); `si:slug/rrggbb` and URL icons keep their own colors. |
 | `background`, `text_color` | Solid color (`#rrggbb` or CSS name). |
 | `font_size`, `font_file` | Optional typography (`.ttf`/`.otf`/`.ttc`, path under `library/fonts/`). |
 | `graphic_text_layout` | `split` (graphic on top, text below) or `overlay` (text on top of the graphic) — only relevant when both a graphic and text are set. |

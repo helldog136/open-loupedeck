@@ -25,8 +25,23 @@ _SLUG_SAFE = re.compile(r"^[a-zA-Z0-9._-]+$")
 def _svg_to_rgba(svg_bytes: bytes, width: int, height: int) -> Image.Image:
     import resvg_py
 
-    png = bytes(resvg_py.svg_to_bytes(svg_string=svg_bytes.decode("utf-8"), width=width, height=height))
-    return Image.open(io.BytesIO(png)).convert("RGBA")
+    """Rasterize into a ``width`` x ``height`` canvas, keeping the SVG's aspect ratio, centered.
+
+    Passing both dimensions to resvg stretches non-square targets, and the key renderer then crops
+    the result to fit -- which cut off parts of icons in the layout that reserves a text band.
+    """
+
+    svg = svg_bytes.decode("utf-8")
+
+    def render(**dim: int) -> Image.Image:
+        return Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=svg, **dim)))).convert("RGBA")
+
+    img = render(height=height)
+    if img.width > width:
+        img = render(width=width)
+    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    canvas.paste(img, ((width - img.width) // 2, (height - img.height) // 2))
+    return canvas
 
 
 def _cache_path(cache_dir: Path, key: str, w: int, h: int) -> Path:
@@ -137,7 +152,8 @@ def load_icon_image(
     cache_key, url = parsed
     w, h = size
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cpath = _cache_path(cache_dir, cache_key + "|" + url, w, h)
+    # "v2": rasterization changed (aspect-preserving); older cached PNGs were stretched/cropped.
+    cpath = _cache_path(cache_dir, "v2|" + cache_key + "|" + url, w, h)
     if cpath.is_file():
         try:
             logger.debug("Icon cache hit %s", cpath.name)
@@ -173,6 +189,21 @@ def load_icon_image(
 
     logger.info("Loaded icon %s -> %sx%s", cache_key, w, h)
     return img
+
+
+def icon_is_tintable(raw: str) -> bool:
+    """True for monochrome icon sets that should take the key's text color.
+
+    Simple Icons with an explicit color (``si:github/ff0000``) and arbitrary SVG URLs keep their own
+    colors.
+    """
+
+    s = str(raw or "").strip().lower()
+    if s.startswith(("lucide:", "mdi:", "heroicons:")):
+        return True
+    if s.startswith(("si:", "simpleicons:")):
+        return "/" not in s.split(":", 1)[1]
+    return False
 
 
 def looks_like_icon_uri(raw: str) -> bool:
