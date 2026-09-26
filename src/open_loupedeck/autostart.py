@@ -19,13 +19,17 @@ _APP_NAME = "open-loupedeck"
 _WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _MACOS_LAUNCH_AGENT_LABEL = "com.open-loupedeck.agent"
 
+# Passed by the autostart entry so logging in to the PC starts only the tray + agent, without
+# popping the configuration window open (launching the app by hand still shows it).
+BACKGROUND_FLAG = "--background"
+
 
 def _launch_argv() -> list[str]:
     """Command to relaunch this program, whether running from source or a frozen build."""
 
     if getattr(sys, "frozen", False):
-        return [sys.executable]
-    return [sys.executable, "-m", "open_loupedeck.tray_app"]
+        return [sys.executable, BACKGROUND_FLAG]
+    return [sys.executable, "-m", "open_loupedeck.tray_app", BACKGROUND_FLAG]
 
 
 # --- Windows -----------------------------------------------------------------
@@ -76,9 +80,16 @@ def _macos_set_enabled(enabled: bool) -> None:
             path.unlink(missing_ok=True)
         return
 
+    plist = _macos_plist_text()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(plist)
+    subprocess.run(["launchctl", "load", "-w", str(path)], check=False, capture_output=True)
+
+
+def _macos_plist_text() -> str:
     argv = _launch_argv()
     program_args = "\n".join(f"        <string>{arg}</string>" for arg in argv)
-    plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -93,9 +104,6 @@ def _macos_set_enabled(enabled: bool) -> None:
 </dict>
 </plist>
 """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(plist)
-    subprocess.run(["launchctl", "load", "-w", str(path)], check=False, capture_output=True)
 
 
 # --- Linux (XDG autostart) ------------------------------------------------------
@@ -115,16 +123,19 @@ def _linux_set_enabled(enabled: bool) -> None:
         path.unlink(missing_ok=True)
         return
 
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_linux_desktop_text())
+
+
+def _linux_desktop_text() -> str:
     exec_line = " ".join(_launch_argv())
-    entry = f"""[Desktop Entry]
+    return f"""[Desktop Entry]
 Type=Application
 Name=open-loupedeck
 Exec={exec_line}
 X-GNOME-Autostart-enabled=true
 NoDisplay=false
 """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(entry)
 
 
 # --- Public API ------------------------------------------------------------------
@@ -140,6 +151,32 @@ def is_enabled() -> bool:
     except Exception:
         logger.exception("autostart.is_enabled failed")
         return False
+
+
+def refresh_if_enabled() -> None:
+    """Rewrite an existing autostart entry if it is out of date (e.g. created by a version that
+    did not yet pass ``--background``), so upgrades pick up new launch arguments on their own."""
+
+    try:
+        if sys.platform == "win32":
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _WINDOWS_RUN_KEY) as key:
+                current, _ = winreg.QueryValueEx(key, _APP_NAME)
+            if current != _windows_command_line():
+                _windows_set_enabled(True)
+        elif sys.platform == "darwin":
+            path = _macos_plist_path()
+            if path.is_file() and path.read_text() != _macos_plist_text():
+                path.write_text(_macos_plist_text())  # takes effect at next login
+        else:
+            path = _linux_desktop_path()
+            if path.is_file() and path.read_text() != _linux_desktop_text():
+                path.write_text(_linux_desktop_text())
+    except FileNotFoundError:
+        pass
+    except Exception:
+        logger.exception("autostart.refresh_if_enabled failed")
 
 
 def set_enabled(enabled: bool) -> None:

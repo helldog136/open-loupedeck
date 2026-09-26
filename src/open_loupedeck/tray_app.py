@@ -25,7 +25,7 @@ import pystray
 import webview
 from PIL import Image
 
-from . import single_instance, updater
+from . import autostart, single_instance, updater
 from .app import DEFAULT_WEB_ADDR, AgentHandle, start_agent_in_background_thread
 from .config_paths import default_config_path
 from .package_paths import package_root
@@ -64,7 +64,10 @@ def _spawn_relaunch() -> None:
 
 
 class TrayApp:
-    def __init__(self) -> None:
+    def __init__(self, *, background: bool = False) -> None:
+        # Started by the OS at login: run the agent + tray icon, keep the config window hidden
+        # until the user asks for it (tray click, or launching the app again).
+        self._background = background
         self._window: webview.Window | None = None
         self._icon: pystray.Icon | None = None
         self._agent: AgentHandle | None = None
@@ -223,6 +226,8 @@ class TrayApp:
             return
 
         _create_windows_app_mutex()
+        if getattr(sys, "frozen", False):  # never let a dev run rewrite the installed app's entry
+            autostart.refresh_if_enabled()
 
         self._agent = start_agent_in_background_thread(default_config_path())
 
@@ -231,6 +236,7 @@ class TrayApp:
             url=_WEB_URL,
             width=1100,
             height=760,
+            hidden=self._background,
         )
         self._window.events.closing += self._on_window_closing
 
@@ -250,7 +256,7 @@ class TrayApp:
 
 
 def main() -> None:
-    TrayApp().run()
+    TrayApp(background=autostart.BACKGROUND_FLAG in sys.argv[1:]).run()
 
 
 if __name__ == "__main__":
