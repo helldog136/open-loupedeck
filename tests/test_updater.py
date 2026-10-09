@@ -91,3 +91,21 @@ def test_expected_sha256_matches_by_filename(monkeypatch: pytest.MonkeyPatch):
     got = updater._expected_sha256("https://example/SHA256SUMS.txt", "open-loupedeck-Setup-9.9.9.exe", timeout=5.0)
 
     assert got == "abc123"
+
+
+def test_apply_windows_update_launches_silent_installer_with_log(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    import subprocess
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "DETACHED_PROCESS", 8, raising=False)
+    monkeypatch.setattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 512, raising=False)
+    monkeypatch.setattr(subprocess, "Popen", lambda args, **_kw: calls.append(list(args)))
+    monkeypatch.setattr(updater.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    log_path = updater.apply_windows_update(tmp_path / "Setup.exe")
+
+    args = calls[0]
+    assert args[0].endswith("Setup.exe")
+    assert "/VERYSILENT" in args
+    assert f"/LOG={log_path}" in args
+    assert log_path.parent == tmp_path

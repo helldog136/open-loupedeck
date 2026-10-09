@@ -197,7 +197,8 @@ class TrayApp:
         icon.update_menu()
         try:
             installer_path = updater.download_update(info)
-            updater.apply_windows_update(installer_path)
+            log_path = updater.apply_windows_update(installer_path)
+            logger.info("Update installer launched (%s); installer log: %s", installer_path, log_path)
             icon.notify(t("updater.installing"), t("app.name"))
         except Exception:
             logger.exception("Update to %s failed", info.version)
@@ -205,6 +206,13 @@ class TrayApp:
             self._update_downloading = False
             self._update_info = None
             icon.update_menu()
+            # The user can still install by hand: open the release page.
+            with contextlib.suppress(Exception):
+                webbrowser.open(info.html_url)
+            return
+        # The installer cannot run while this process holds its AppMutex: leave so it can. The
+        # delay lets the "installing" notification show and the installer get started first.
+        threading.Timer(2.0, self._quit, args=(icon, None)).start()
 
     # --- setup ------------------------------------------------------------------------
 
