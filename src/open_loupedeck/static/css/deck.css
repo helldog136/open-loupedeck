@@ -1,0 +1,412 @@
+/* Interactive deck (see js/deck.js): Loupedeck Live S / Live chassis, touch keys showing their real look,
+   round LED buttons, knobs with a caption. Tokens come from tokens.css. */
+
+#deckRoot {
+  --dk-gap: 7px;
+  --dk-led-off: 0.55;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.dk-device {
+  background: var(--device-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  padding: 22px 18px 34px;
+}
+
+/* ---- Live S ---- */
+.dk-live-s {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 46px;
+  gap: 16px;
+  align-items: stretch;
+}
+.dk-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.dk-left {
+  justify-content: space-between;
+  gap: 18px;
+}
+.dk-right {
+  justify-content: space-around;
+  gap: 14px;
+}
+.dk-knobs {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  align-items: center;
+}
+
+/* ---- Live ---- */
+.dk-live {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+}
+.dk-live-center {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.dk-side {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.dk-side .dk-knobs {
+  justify-content: space-around;
+}
+.dk-key.dk-strip {
+  width: 44px;
+  aspect-ratio: auto;
+  height: auto;
+  min-height: 160px;
+}
+.dk-row-btns {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ---- touch screen ---- */
+.dk-screen {
+  background: var(--screen-bg);
+  border: 1px solid #1a2030;
+  border-radius: 12px;
+  padding: 8px;
+  display: grid;
+  gap: var(--dk-gap);
+  align-content: center;
+  min-width: 0;
+}
+.dk-cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.dk-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dk-key {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 1px solid #1c2333;
+  background: #0b0e14;
+  overflow: hidden;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  user-select: none;
+}
+.dk-key:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+.dk-key:hover {
+  border-color: var(--line-strong);
+}
+.dk-key.is-selected {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+.dk-key.is-selected:focus-visible {
+  outline-style: solid;
+}
+.dk-key.is-knob-link {
+  outline: 2px dashed #5b667c;
+  outline-offset: 2px;
+}
+.dk-key.error-outline {
+  border-color: var(--bad);
+}
+.dk-key.dragging {
+  opacity: 0.4;
+}
+.dk-key.drag-over {
+  outline: 2px dashed var(--ok);
+  outline-offset: 2px;
+}
+
+.dk-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+.dk-key.is-loading .dk-img {
+  opacity: 0.6;
+}
+.dk-skel {
+  position: absolute;
+  inset: 0;
+  display: none;
+  background: linear-gradient(100deg, #10151f 30%, #1a2232 50%, #10151f 70%) 0 0 / 220% 100%;
+  animation: dk-shimmer 1.2s linear infinite;
+}
+.dk-key.is-loading:not(.has-image) .dk-skel {
+  display: block;
+}
+@keyframes dk-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dk-skel {
+    animation: none;
+  }
+  .dk-img {
+    transition: none;
+  }
+}
+
+/* A filled key the server could not draw: show its action name instead of a blank. */
+.dk-fallback {
+  display: none;
+  padding: 4px;
+  font-size: 11px;
+  line-height: 1.15;
+  color: var(--muted);
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.dk-key.no-image.is-filled .dk-fallback {
+  display: block;
+}
+
+.dk-plus {
+  display: none;
+  font-size: 22px;
+  color: #39445a;
+}
+.dk-key.is-empty .dk-plus {
+  display: block;
+}
+.dk-key.is-empty:hover .dk-plus,
+.dk-key.is-empty:focus-visible .dk-plus {
+  color: var(--accent);
+}
+
+.dk-warn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 11px;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+.dk-warn[hidden] {
+  display: none;
+}
+
+.dk-dup {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  display: none;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.3;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: rgba(12, 15, 20, 0.88);
+  color: var(--fg);
+  cursor: pointer;
+}
+.dk-key.is-selected.is-filled .dk-dup,
+.dk-key.is-filled:focus-within .dk-dup {
+  display: block;
+}
+.dk-dup:hover {
+  border-color: var(--accent);
+}
+
+.dk-flash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  background: #000;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: clamp(12px, 3.4vw, 18px);
+  line-height: 1.1;
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* ---- knobs (no text on the knob itself) ---- */
+.dk-knobwrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 14px;
+}
+.dk-knob {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #2c3445;
+  background: var(--knob-face);
+  cursor: pointer;
+}
+.dk-knob:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 3px;
+}
+.dk-knob[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.dk-notch {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 4px;
+  height: 10px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: #5b667c;
+}
+.dk-knob[aria-pressed="true"] .dk-notch {
+  background: var(--accent);
+}
+.dk-kcap {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 7px;
+  width: 88px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.15;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dk-knob[aria-pressed="true"] + .dk-kcap {
+  color: var(--fg);
+}
+
+/* ---- round LED buttons ---- */
+.dk-round {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid var(--led, #5b667c);
+  background: #0b0e14;
+  box-shadow: 0 0 10px var(--led, transparent), inset 0 0 6px #000;
+  opacity: var(--dk-led-off);
+  cursor: pointer;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+.dk-round:hover {
+  opacity: 0.85;
+}
+.dk-round[aria-pressed="true"] {
+  opacity: 1;
+  box-shadow: 0 0 22px var(--led, transparent), 0 0 4px var(--led, transparent), inset 0 0 6px #000;
+}
+.dk-round:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 3px;
+}
+.dk-round.is-circle {
+  width: 42px;
+  height: 42px;
+}
+
+/* ---- footer ---- */
+.dk-hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+.dk-note {
+  min-height: 1.2em;
+  margin: 4px 0 0;
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+
+@media (max-width: 620px) {
+  .dk-device {
+    padding: 14px 10px 30px;
+  }
+  .dk-live-s {
+    grid-template-columns: 46px minmax(0, 1fr) 34px;
+    gap: 8px;
+  }
+  #deckRoot {
+    --dk-gap: 4px;
+  }
+  .dk-knobwrap,
+  .dk-knob {
+    width: 44px;
+    height: 44px;
+  }
+  .dk-kcap {
+    width: 56px;
+    font-size: 10px;
+  }
+  .dk-round {
+    width: 30px;
+    height: 30px;
+    border-width: 2px;
+  }
+  .dk-round.is-circle {
+    width: 34px;
+    height: 34px;
+  }
+  .dk-screen {
+    padding: 5px;
+  }
+  .dk-dup {
+    display: none !important;
+  }
+  .dk-live {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dk-side {
+    justify-content: center;
+  }
+  .dk-side .dk-knobs {
+    flex-direction: row;
+  }
+  .dk-key.dk-strip {
+    min-height: 44px;
+    width: 100%;
+  }
+  .dk-side {
+    flex-direction: column;
+  }
+}

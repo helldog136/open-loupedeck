@@ -10,7 +10,7 @@ import { getServiceState, setServiceState } from "./services/cards.js";
 import { refreshSpotifyStatus } from "./services/spotify.js";
 import { refreshTwitchStatus } from "./services/twitch.js";
 import { goToService } from "./shell.js";
-import { state } from "./state.js";
+import { emit, state } from "./state.js";
 import { $ } from "./util.js";
 
 let statusPollTimer = null;
@@ -95,6 +95,7 @@ async function refreshConnectionStatus() {
     if (!r.ok) return;
     const j = await r.json();
     lastStatus = j;
+    emit("status:updated", j);
 
     const prevLayout = state.agentDeckLayout;
     if (j.deck_layout === "live" || j.deck_layout === "live_s") {
@@ -119,7 +120,7 @@ async function refreshConnectionStatus() {
     syncPageLedColors();
     state.touchErrors = j.touch_errors && typeof j.touch_errors === "object" ? j.touch_errors : {};
     // Update outlines without waiting for a full re-render.
-    document.querySelectorAll(".cell").forEach((el) => {
+    document.querySelectorAll(".cell, .dk-key").forEach((el) => {
       const cid = el && el.dataset && el.dataset.cid;
       if (cid && typeof cid === "string" && cid.startsWith("touch_") && state.touchErrors[cid]) {
         el.classList.add("error-outline");
