@@ -468,5 +468,21 @@
   "svc.twitch.line.connected_as": "Connected as {user}.",
   "svc.twitch.line.not_connected": "Not connected. Click Connect.",
   "svc.twitch.own_app_help": "Want your own Twitch app? Create one at dev.twitch.tv/console with client type Public and redirect URL http://localhost, then paste its Client ID here.",
-  "svc.twitch.remove": "Remove"
+  "svc.twitch.remove": "Remove",
+  "deck.hint": "Click a key to set it up. Drag one key onto another to swap them.",
+  "deck.key.aria": "Key {number}, {what}",
+  "deck.key.aria_empty": "Key {number}, empty",
+  "deck.key.empty_add": "Add",
+  "deck.key.loading": "Drawing the key",
+  "deck.overflow": "The text is too long for this key. Shorten it or use a smaller size.",
+  "deck.duplicate": "Duplicate",
+  "deck.duplicate.title": "Copy this key to the next free key (Ctrl+D)",
+  "deck.no_free_key": "No free key on this page.",
+  "deck.duplicated": "Key copied to key {number}.",
+  "deck.knob.aria": "Knob {name}, {role}",
+  "deck.round.aria_page": "Round button {number}, opens page {page}",
+  "deck.round.aria_plain": "Round button {number}",
+  "deck.round.title_page": "Opens page {page}. Double-click to set its LED colour.",
+  "deck.strip.left": "Left strip",
+  "deck.strip.right": "Right strip"
 }

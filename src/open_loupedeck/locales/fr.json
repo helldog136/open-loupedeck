@@ -468,5 +468,21 @@
   "svc.twitch.line.connected_as": "Connecté en tant que {user}.",
   "svc.twitch.line.not_connected": "Non connecté. Cliquez sur Se connecter.",
   "svc.twitch.own_app_help": "Envie de votre propre application Twitch ? Créez-en une sur dev.twitch.tv/console, type de client Public et URL de redirection http://localhost, puis collez son Client ID ici.",
-  "svc.twitch.remove": "Retirer"
+  "svc.twitch.remove": "Retirer",
+  "deck.hint": "Clique une touche pour la configurer. Glisse une touche sur une autre pour les échanger.",
+  "deck.key.aria": "Touche {number}, {what}",
+  "deck.key.aria_empty": "Touche {number}, vide",
+  "deck.key.empty_add": "Ajouter",
+  "deck.key.loading": "Dessin de la touche",
+  "deck.overflow": "Le texte est trop long pour cette touche. Raccourcis-le ou réduis la taille.",
+  "deck.duplicate": "Dupliquer",
+  "deck.duplicate.title": "Copier cette touche sur la prochaine touche libre (Ctrl+D)",
+  "deck.no_free_key": "Aucune touche libre sur cette page.",
+  "deck.duplicated": "Touche copiée sur la touche {number}.",
+  "deck.knob.aria": "Molette {name}, {role}",
+  "deck.round.aria_page": "Bouton rond {number}, ouvre la page {page}",
+  "deck.round.aria_plain": "Bouton rond {number}",
+  "deck.round.title_page": "Ouvre la page {page}. Double-clic pour régler la couleur de sa LED.",
+  "deck.strip.left": "Bande gauche",
+  "deck.strip.right": "Bande droite"
 }
