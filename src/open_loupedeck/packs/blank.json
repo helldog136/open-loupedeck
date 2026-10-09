@@ -1,0 +1,8 @@
+{
+  "id": "blank",
+  "name_key": "pack.blank.name",
+  "description_key": "pack.blank.desc",
+  "icon": "lucide:layout-grid",
+  "services": [],
+  "pages": []
+}

@@ -58,6 +58,7 @@ from .logging_setup import reapply_logging_from_config
 from .look_defaults import proposed_entry, resolve_look
 from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unused_library_media
 from .package_paths import package_root
+from .packs import list_packs
 from .runtime_refs import AgentRuntimeRefs
 from .simulate_input import build_synthetic_loupedeck_message
 from .spotify_client import SpotifyManager
@@ -384,6 +385,13 @@ def create_web_app(
         code = resolve_language(lang) if lang else get_language()
         return JSONResponse({"lang": code, "actions": merged_catalog(code)})
 
+    @app.get("/api/packs")
+    async def starter_packs(
+        lang: str | None = Query(None, description="Language code; default = the app's current language"),
+    ) -> JSONResponse:
+        code = resolve_language(lang) if lang else get_language()
+        return JSONResponse({"lang": code, "packs": list_packs(code)})
+
     @app.get("/api/knob_duos")
     async def knob_duos(
         lang: str | None = Query(None, description="Language code; default = the app's current language"),
@@ -558,6 +566,8 @@ def create_web_app(
             # The UI language is owned by PUT /api/language; a stale full-config autosave from
             # another tab/module must not silently revert it.
             merged["language"] = state.raw.get("language") or "auto"
+            # Same for the dismissed onboarding: once done it stays done.
+            merged["onboarding_done"] = bool(state.raw.get("onboarding_done")) or bool(merged.get("onboarding_done"))
             save_raw_config(config_path, merged)
             state.replace_raw(merged)
             prune_stale_live_message_keys(dict(state.raw), rt)

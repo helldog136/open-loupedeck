@@ -1,0 +1,22 @@
+{
+  "id": "music",
+  "name_key": "pack.music.name",
+  "description_key": "pack.music.desc",
+  "icon": "si:spotify",
+  "services": ["spotify"],
+  "pages": [
+    {
+      "keys": {
+        "7": {"action": {"type": "spotify.previous"}},
+        "8": {"action": {"type": "spotify.play_pause"}},
+        "9": {"action": {"type": "spotify.next"}},
+        "13": {"action": {"type": "sound.mute_toggle"}},
+        "14": {"action": {"type": "display.clock", "time_format": "%H:%M", "date_format": "%a %d %b"}}
+      },
+      "knobs": {
+        "knobTL": {"rotate": {"duo": "spotify_volume", "params": {"step": 5}}, "press": {"type": "spotify.play_pause"}},
+        "knobCL": {"rotate": {"duo": "spotify_track"}}
+      }
+    }
+  ]
+}
