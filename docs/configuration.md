@@ -49,7 +49,6 @@ pages:
           scene: "Starting Soon"
 
 global_buttons: {}
-knob_pages: {}
 bindings: []
 plugin_modules: []
 ```
@@ -58,10 +57,10 @@ plugin_modules: []
 
 ## Dispatch order (how an input picks actions)
 
-1. **Knob rotation** — if `knob_pages` defines a page stack for that encoder, `rotate_left` / `rotate_right` runs and no `pages` / `bindings` lookup happens for that rotation.
-2. **Knob push** — cycles the virtual knob page (and may flash its name on a touch key); tied to `knob_pages` + `knob_page_feedback`.
+1. **Knob rotation** — the role of that knob on the **current deck page** (`pages[].knobs.<id>.rotate`) runs; no role = nothing happens. No `global_buttons` / `bindings` lookup for knobs. (Only for a config without deck pages: a legacy `knob_pages` stack is used.)
+2. **Knob push** — `pages[].knobs.<id>.press` of the current page (no role = nothing); feedback text flashes on the neighbouring touch key (`knob_page_feedback`).
 3. **Loupedeck Live S physical keys** — a short press on `btn_circle`, `btn_1`, `btn_2`, `btn_3` switches the deck page **index** (0–3 only) and redraws the skin. This path does **not** run `pages[].buttons` actions for those keys — the hardware is reserved for page switching, and only the first four pages are reachable this way (the config window's page rail marks them ①–④).
-4. **Otherwise** — `actions_for_page_event`: for `touch_*`, only the current page's `buttons` map is used; for non-touch controls (strips, side buttons, knobs not handled by `knob_pages`), `global_buttons` is tried first if it has real actions, then the current page's `buttons` for that id.
+4. **Otherwise** — `actions_for_page_event`: for `touch_*`, only the current page's `buttons` map is used; for non-touch controls (strips, side buttons), `global_buttons` is tried first if it has real actions, then the current page's `buttons` for that id.
 5. If still nothing — `bindings` (legacy): first matching rule wins.
 
 Then `run_actions` executes the list (OBS, Home Assistant, HTTP, sound, …) in order.
@@ -77,9 +76,10 @@ Then `run_actions` executes the list (OBS, Home Assistant, HTTP, sound, …) in 
 | `obs` | OBS WebSocket host, port, password. |
 | `ha` | Home Assistant base URL + long-lived access token. |
 | `device` | Serial port path, baud rate, hardware model. |
-| `pages` | Primary UI: list of pages, each with a `buttons` map. |
+| `pages` | Primary UI: list of pages, each with a `buttons` map and optional `knobs` roles. |
 | `global_buttons` | Controls shared across pages: knobs, strips, side buttons (not the center touch grid). |
-| `knob_pages` | Per-knob stacks of virtual pages (rotate = actions, push = cycle). |
+| `knob_page_feedback` | `duration_sec` (0–2 s) of the feedback text drawn next to a knob after a turn / push. |
+| `legacy_knob_pages` | Old per-knob page stacks kept after migration (not used at run time). |
 | `bindings` | Legacy event → actions list (fallback when `pages` matching fails). |
 | `spotify` | Client ID + redirect URI for PKCE (tokens stored beside config). |
 | `twitch` | Client ID/secret or token for `display.twitch_live`. |
@@ -134,34 +134,38 @@ pages:
 
 ### `global_buttons`
 
-Knobs, strips, physical side buttons — same shape as under `pages[].buttons`. Touch cells (`touch_*`) always belong under `pages[].buttons`, never here.
+Strips and physical side buttons — same shape as under `pages[].buttons` (knobs: see `pages[].knobs` below). Touch cells (`touch_*`) always belong under `pages[].buttons`, never here.
 
 ```yaml
 global_buttons:
   strip_left: { text: Prev, action: { type: agent.prev_page } }
-  knobTL: { text: Vol, action: { type: sound.volume_delta, delta: 2 } }
 ```
 
 Lookup: for a non-touch control, `global_buttons.<id>` wins if it has an action; otherwise the current page's `buttons.<id>` is used.
 
-### `knob_pages`
+### Knobs (`pages[].knobs`)
+
+Knobs have no pages of their own: their role depends on the deck page shown. Full model, duo list and
+migration: [`docs/ui-redesign/knobs-model.md`](ui-redesign/knobs-model.md).
 
 ```yaml
 knob_page_feedback:
-  duration_sec: 1.5   # cap on how long the page name flashes on a touch key after cycling
+  duration_sec: 1.5   # feedback text next to the knob after a turn / push, 0–2 s (0 = off)
 
-knob_pages:
-  knobTL:
-    pages:
-      - name: System volume
-        rotate_left: { type: sound.volume_delta, delta: -2 }
-        rotate_right: { type: sound.volume_delta, delta: 2 }
-      - name: Deck pages
-        rotate_left: { type: agent.prev_page }
-        rotate_right: { type: agent.next_page }
+pages:
+  - name: Main
+    knobs:
+      knobTL:
+        rotate: { duo: system_volume, params: { step: 5 } }   # linked left/right (-/+)
+        press: { type: sound.mute_toggle }                     # optional
+      knobCL:
+        rotate:                                                # advanced: split left / right
+          left: { type: agent.prev_page }
+          right: { type: agent.next_page }
 ```
 
-`rotate_left`/`rotate_right` (aliases `left`/`right`) take one action or a list. Push cycles to the next inner page. Don't put knob rotation in `global_buttons` with fake ids like `knobTL_left` — use `knob_pages` only.
+A legacy top-level `knob_pages` is migrated on load: its first knob page becomes the knob's role on every deck page
+without one, and the original is kept under `legacy_knob_pages`.
 
 ### `bindings` (legacy)
 
@@ -418,7 +422,7 @@ Use `--no-device` until permissions work.
 
 | Symptom | Check |
 |---|---|
-| No actions on key | Wrong control id (canonical ids only); empty `action`/`actions`; Live S `btn_circle`/`btn_1-3` are reserved for page switching; knob rotation only via `knob_pages`. |
+| No actions on key | Wrong control id (canonical ids only); empty `action`/`actions`; Live S `btn_circle`/`btn_1-3` are reserved for page switching; knob rotation / push only via `pages[].knobs` (role of the page shown). |
 | OBS errors | `obs.password`, firewall, WebSocket server enabled on `obs.port`. |
 | Home Assistant errors | `ha.base_url` reachable from this machine, `ha.token` valid (Services tab shows Connected/Offline). |
 | Overlay blank | Browser source URL/port; agent running with `--web`; file under `library/` and path correct in YAML. |

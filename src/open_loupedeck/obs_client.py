@@ -169,6 +169,24 @@ class ObsSession:
             return str(data.get("currentProgramSceneName") or "")
         return ""
 
+    async def get_scene_names(self) -> list[str]:
+        """Scene names in the order OBS shows them (top of the Scenes dock first).
+
+        ``GetSceneList`` returns scenes by ascending ``sceneIndex``, where index 0 is the *bottom*
+        of the dock, so the list is reversed.
+        """
+
+        data = await self.call("GetSceneList")
+        scenes = data.get("scenes") if isinstance(data, dict) else None
+        if not isinstance(scenes, list):
+            return []
+        ordered = sorted(
+            (s for s in scenes if isinstance(s, dict) and s.get("sceneName")),
+            key=lambda s: int(s.get("sceneIndex") or 0),
+            reverse=True,
+        )
+        return [str(s["sceneName"]) for s in ordered]
+
     async def toggle_input_mute(self, input_name: str) -> None:
         await self.call("ToggleInputMute", {"inputName": input_name})
 

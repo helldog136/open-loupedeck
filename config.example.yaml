@@ -46,32 +46,29 @@ device:
   model: auto
   # baudrate: 460800
 
-# Knob dials: configure only via knob_pages (not knobTL / knobTL_left in global_buttons).
-# Push cycles pages; rotate runs the current page’s rotate_left / rotate_right. Page `name` flashes
-# on one touch cell (Live S: knobTL→touch_0, knobCL→touch_5) for up to 2s.
+# Knob dials: no pages of their own. Each deck page gives each knob a role (pages[].knobs, below):
+# rotate = one linked "duo" (left/right = -/+) or split left/right actions; press = optional action.
+# No role on the page shown = the knob does nothing. After a turn/push a short text ("Volume +5")
+# flashes on the neighbouring touch key (Live S: knobTL->touch_0, knobCL->touch_5) for 0-2 s.
+# Duo ids: GET /api/knob_duos, see docs/ui-redesign/knobs-model.md. A legacy top-level
+# knob_pages is migrated automatically (kept under legacy_knob_pages).
 # knob_page_feedback:
-#   duration_sec: 2
-# knob_pages:
-#   knobTL:
-#     pages:
-#       - name: "Volume"
-#         rotate_left: { type: sound.volume_delta, delta: -2 }
-#         rotate_right: { type: sound.volume_delta, delta: 2 }
-#       - name: "Deck page"
-#         rotate_left: { type: agent.prev_page }
-#         rotate_right: { type: agent.next_page }
-#   knobCL:
-#     pages:
-#       - name: "Scroll"
-#         rotate_left: { type: command.run, argv: ["xdotool", "click", "4"] }
-#         rotate_right: { type: command.run, argv: ["xdotool", "click", "5"] }
+#   duration_sec: 1.5
 
 # Multi-page layout (recommended). When `pages` is non-empty, it is used for input + images;
 # `bindings` below is only used if no page entry matches.
 # Control ids: touch_0..touch_11, btn_1..btn_7, btn_circle, strip_left, strip_right.
-# Knob rotation and push are not bound here — use top-level knob_pages instead.
+# Knob rotation and push: pages[].knobs (role per deck page).
 pages:
   - name: Main
+    # knobs:
+    #   knobTL:
+    #     rotate: { duo: system_volume, params: { step: 5 } }
+    #     press: { type: sound.mute_toggle }
+    #   knobCL:
+    #     rotate:
+    #       left: { type: command.run, argv: ["xdotool", "click", "4"] }
+    #       right: { type: command.run, argv: ["xdotool", "click", "5"] }
     buttons:
       touch_0:
         text: "BRB"

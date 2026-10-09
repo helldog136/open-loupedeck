@@ -89,9 +89,10 @@ def test_ensure_minimal_structure_fills_missing_sections():
         "ha",
         "logging",
         "global_buttons",
-        "knob_pages",
     ):
         assert key in out
+    # Knobs live on each deck page now; the legacy top-level knob_pages is no longer created.
+    assert "knob_pages" not in out
     assert out["device"]["model"] == "auto"
     assert out["ha"] == {"base_url": "", "token": ""}
 

@@ -40,6 +40,43 @@ class ObsSetScene:
             raise RuntimeError(f"OBS did not switch scene (current={cur!r}, target={target!r})")
 
 
+def next_scene_name(names: list[str], current: str, step: int, wrap: bool = True) -> str | None:
+    """Scene ``step`` positions away from ``current`` in ``names`` (OBS dock order); ``None`` = stay."""
+
+    if not names or step == 0:
+        return None
+    try:
+        i = names.index(current)
+    except ValueError:
+        return names[0] if step > 0 else names[-1]
+    j = i + step
+    if wrap:
+        j %= len(names)
+    elif j < 0 or j >= len(names):
+        return None
+    return names[j] if names[j] != current else None
+
+
+@register_action("obs.scene_step")
+class ObsSceneStep:
+    """Switch to the previous (``step: -1``) or next (``step: 1``) scene of the OBS Scenes dock.
+
+    Used by the "OBS scene" knob duo; wraps around at the ends unless ``wrap: false``.
+    """
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        step = int(float(params.get("step", 1) or 0))
+        obs = ctx.obs
+        if obs is None:
+            raise RuntimeError("OBS is not configured (obs section missing in config)")
+        names = await obs.get_scene_names()
+        current = await obs.get_current_program_scene()
+        wrap = params.get("wrap", True) not in (False, "false", "0", 0)
+        target = next_scene_name(names, current, step, wrap)
+        if target:
+            await obs.set_current_program_scene(target)
+
+
 @register_action("obs.toggle_mute")
 class ObsToggleMute:
     async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
