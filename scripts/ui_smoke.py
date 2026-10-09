@@ -84,6 +84,13 @@ def main() -> int:
         try:
             step("load page")
             page.goto(base + "/")
+            # An empty config starts on the welcome card (starter packs): skip it with "Start blank".
+            page.wait_for_selector("#deckRoot .dk-key, #obStartBlank")
+            if page.locator("#obStartBlank").is_visible():
+                step("welcome card: start blank")
+                page.click("#obStartBlank")
+                page.wait_for_function("document.getElementById('deckRoot').hidden === false")
+                page.wait_for_timeout(800)  # debounced autosave of onboarding_done
             page.wait_for_selector("#deckRoot .dk-key")
             page.wait_for_selector("#keyEditorBlock .insp-empty-state")  # inspector mounted (catalog loaded)
             page.wait_for_timeout(500)  # rest of the boot sequence (status, wiring)

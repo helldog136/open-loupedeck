@@ -93,6 +93,7 @@ def raw_to_settings(raw: dict[str, Any]) -> Settings:
 def default_raw_config() -> dict[str, Any]:
     return {
         "language": "auto",
+        "onboarding_done": False,
         "logging": {
             "dir": "",
             "level": "INFO",
@@ -205,6 +206,7 @@ def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
         out["ha"] = {"base_url": "", "token": ""}
     if not isinstance(out.get("language"), str) or not out["language"].strip():
         out["language"] = "auto"
+    out["onboarding_done"] = out.get("onboarding_done") is True
     if "logging" not in out:
         out["logging"] = {
             "dir": "",

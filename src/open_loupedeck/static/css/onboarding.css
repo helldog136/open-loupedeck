@@ -1,0 +1,135 @@
+/* First launch (see js/onboarding.js): welcome card with starter packs inside the deck area, then the
+   "next steps" checklist. Tokens come from tokens.css. */
+
+.ob-mount {
+  max-width: 640px;
+  margin: 0 auto var(--sp-4);
+}
+.ob-mount[hidden] {
+  display: none;
+}
+
+.ob-welcome,
+.ob-next {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-5);
+}
+.ob-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+.ob-lead {
+  margin: 0 0 var(--sp-4);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.ob-packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--sp-3);
+}
+.ob-pack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
+}
+.ob-pack:hover {
+  border-color: var(--accent);
+}
+.ob-pack-name {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+.ob-pack-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  flex: 1;
+}
+.ob-pack-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ob-chip {
+  background: var(--line-strong);
+  color: #fff;
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.ob-use {
+  align-self: flex-start;
+  margin-top: var(--sp-1);
+}
+.ob-foot {
+  margin-top: var(--sp-4);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ob-next-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.ob-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-2);
+}
+.ob-step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--sp-2) var(--sp-3);
+}
+.ob-step-label {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ob-check {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--line-strong);
+  flex: none;
+}
+.ob-step.done .ob-check {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.ob-step.done .ob-step-label {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.ob-step.done .ob-go {
+  visibility: hidden;
+}
+.ob-alldone {
+  display: none;
+  margin: var(--sp-3) 0 0;
+  color: var(--ok);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.ob-next.all-done .ob-alldone {
+  display: block;
+}

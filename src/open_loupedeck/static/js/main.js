@@ -23,6 +23,7 @@ import {
   updateLiveSPageChrome,
   wirePageSelect,
 } from "./pages.js";
+import { renderOnboarding, wireOnboarding } from "./onboarding.js";
 import { scheduleAutosave, setSaveStatus } from "./save.js";
 import { refreshBackupsList, wireBackupButtons } from "./services/backups.js";
 import { setServiceState, wireConfigureButtons } from "./services/cards.js";
@@ -67,6 +68,7 @@ function onConfigReplaced(prevPageIndex) {
   renderTwitchAccounts();
   syncPageSelect();
   renderDeck();
+  renderOnboarding();
   if (state.pageIndex !== prevPageIndex) state.selectedControl = null;
   refreshInspector();
   scheduleAutosave();
@@ -145,6 +147,8 @@ async function init() {
   $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
   syncPageSelect();
   renderDeck();
+  renderOnboarding();
+  wireOnboarding();
   syncKnobPagesEditor();
   syncTestPressButton();
   syncCopyPasteButtons();
