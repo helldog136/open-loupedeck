@@ -105,25 +105,37 @@ export function canPasteToControl(cid) {
   return true;
 }
 
+/** Page N is bound to round button N (page 1 = circle button, 2-4 = the three right-hand buttons). */
+export const HARDWARE_PAGE_COUNT = 4;
+
+function defaultPageName(n) {
+  return t("pages.default_name", { number: n });
+}
+
 export function ensurePages() {
   if (!Array.isArray(state.cfg.pages)) state.cfg.pages = [];
+  const pages = state.cfg.pages;
+  // The four hardware pages always exist: pad (never alters existing pages).
+  while (pages.length < HARDWARE_PAGE_COUNT) {
+    pages.push({ name: defaultPageName(pages.length + 1), buttons: {} });
+  }
   if (isLiveSModel()) {
-    if (state.cfg.pages.length === 0) {
-      state.cfg.pages.push({ id: 0, name: "Page 1", buttons: {} });
-    }
-    state.cfg.pages.forEach((p, i) => {
+    pages.forEach((p, i) => {
       if (!p || typeof p !== "object") {
-        state.cfg.pages[i] = { id: i, name: `Page ${i + 1}`, buttons: {} };
+        pages[i] = { id: i, name: defaultPageName(i + 1), buttons: {} };
         return;
       }
       p.id = i;
-      if (!p.name) p.name = `Page ${i + 1}`;
+      if (!p.name) p.name = defaultPageName(i + 1);
       if (!p.buttons || typeof p.buttons !== "object") p.buttons = {};
     });
-    if (state.pageIndex >= state.cfg.pages.length) state.pageIndex = Math.max(0, state.cfg.pages.length - 1);
-  } else if (state.cfg.pages.length === 0) {
-    state.cfg.pages = [{ name: "Page 1", buttons: {} }];
+  } else {
+    pages.forEach((p, i) => {
+      if (p && typeof p === "object" && !p.buttons) p.buttons = {};
+      else if (!p || typeof p !== "object") pages[i] = { name: defaultPageName(i + 1), buttons: {} };
+    });
   }
+  if (state.pageIndex >= pages.length) state.pageIndex = Math.max(0, pages.length - 1);
 }
 
 export function ensureDevice() {

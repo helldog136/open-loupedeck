@@ -4,6 +4,7 @@
  */
 
 import { emit, state } from "./state.js";
+import { $ } from "./util.js";
 
 // --- Undo/redo: client-side, session-only (cleared on page reload). ------------------------
 
@@ -16,6 +17,12 @@ let undoSnapshotPendingForFocus = false;
 /** True while applying an undo/redo snapshot, so that doing so does not itself get pushed. */
 let applyingUndoRedo = false;
 
+/** Header "Undo" button: enabled only when there is something to undo. */
+export function syncUndoButton() {
+  const btn = $("#btnUndo");
+  if (btn) btn.disabled = undoStack.length === 0;
+}
+
 function pushUndoSnapshot() {
   if (applyingUndoRedo) return;
   try {
@@ -25,6 +32,7 @@ function pushUndoSnapshot() {
   }
   if (undoStack.length > UNDO_STACK_MAX) undoStack.shift();
   redoStack.length = 0;
+  syncUndoButton();
 }
 
 /** Use for discrete one-shot actions (click a button, drop a drag) — always pushes. */
@@ -57,23 +65,28 @@ function currentUndoSnapshot() {
   return JSON.stringify({ cfg: state.cfg, pageIndex: state.pageIndex });
 }
 
-function undo() {
+export function undo() {
   if (undoStack.length === 0) return;
   const current = currentUndoSnapshot();
   const snapshot = undoStack.pop();
   redoStack.push(current);
   applyCfgSnapshot(snapshot);
+  syncUndoButton();
 }
 
-function redo() {
+export function redo() {
   if (redoStack.length === 0) return;
   const current = currentUndoSnapshot();
   const snapshot = redoStack.pop();
   undoStack.push(current);
   applyCfgSnapshot(snapshot);
+  syncUndoButton();
 }
 
 export function wireUndoRedoKeyboard() {
+  const btn = $("#btnUndo");
+  if (btn) btn.addEventListener("click", undo);
+  syncUndoButton();
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;
     e.preventDefault();
