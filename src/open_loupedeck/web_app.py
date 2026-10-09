@@ -45,6 +45,7 @@ from .live_message import (
     twitch_live_params_from_entry,
 )
 from .logging_setup import reapply_logging_from_config
+from .look_defaults import resolve_look
 from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unused_library_media
 from .package_paths import package_root
 from .runtime_refs import AgentRuntimeRefs
@@ -330,6 +331,16 @@ def create_web_app(
     @app.get("/api/action_catalog")
     async def action_catalog() -> JSONResponse:
         return JSONResponse({"actions": merged_catalog()})
+
+    @app.post("/api/resolve_look")
+    async def post_resolve_look(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        """Final look (label/icon/colours/mode + proposed|modified source) of a key entry."""
+
+        entry = body.get("entry")
+        if not isinstance(entry, dict):
+            raise HTTPException(400, "body.entry must be an object")
+        lang = body.get("lang")
+        return JSONResponse(resolve_look(entry, str(lang) if lang else None))
 
     @app.get("/api/spotify/status")
     async def spotify_status() -> JSONResponse:

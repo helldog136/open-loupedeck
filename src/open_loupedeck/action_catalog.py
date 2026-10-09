@@ -949,6 +949,101 @@ ACTION_CATALOG: list[dict[str, Any]] = [
 ]
 
 
+# --- Proposed default looks -------------------------------------------------------------------
+# Colour families (one per product area, so the deck reads at a glance):
+#   OBS scenes / OBS overlay  blue     #1f6fe0 / #2b4a8f      OBS audio            violet  #33266f
+#   Twitch (incl. display)    purple   #9146ff                 Spotify              green   #1a9a48
+#   Sound (local + overlay)   amber    #e08a00                 Home Assistant       cyan    #0f8fb8
+#   Deck / pages, HTTP, shell slate    #2a3345 / #3a3f4b       Display (live info)  indigo  #4a4f8f
+# Text keys (white, big) are the default; transport controls are icon-only. ``live`` gives the
+# offline look of keys whose text comes from a runtime source. Labels live in
+# ``look_defaults.DEFAULT_LABELS_*`` under ``label_key``.
+_LIVE_OFFLINE = {"offline_bg": "#2b2f45", "offline_fg": "#9aa0bd"}
+_OBS_SCENE, _OBS_AUDIO, _OBS_OVERLAY = "#1f6fe0", "#33266f", "#2b4a8f"
+_TWITCH, _SPOTIFY, _SOUND, _HA = "#9146ff", "#1a9a48", "#e08a00", "#0f8fb8"
+_SLATE, _SLATE2, _DISPLAY = "#2a3345", "#3a3f4b", "#4a4f8f"
+
+# action type -> (icon, bg, mode, label_from or None, live offline colours or None)
+_LOOK_SPECS: dict[str, tuple[str, str, str, str | None, dict[str, str] | None]] = {
+    "obs.set_scene": ("lucide:clapperboard", _OBS_SCENE, "text", "scene", None),
+    "obs.toggle_mute": ("lucide:mic-off", _OBS_AUDIO, "both", "input_name", None),
+    "obs.input_volume_set": ("lucide:sliders-horizontal", _OBS_AUDIO, "both", "input_name", None),
+    "obs.input_volume_delta": ("lucide:volume-2", _OBS_AUDIO, "both", "input_name", None),
+    "ha.turn_on": ("lucide:lightbulb", _HA, "both", "entity_id", None),
+    "ha.turn_off": ("lucide:lightbulb-off", _HA, "both", "entity_id", None),
+    "ha.toggle": ("lucide:toggle-right", _HA, "both", "entity_id", None),
+    "ha.run_script": ("lucide:scroll-text", _HA, "both", "script", None),
+    "ha.call_service": ("lucide:settings-2", _HA, "both", None, None),
+    "http.request": ("lucide:globe", _SLATE2, "text", None, None),
+    "overlay.show_media": ("lucide:image", _OBS_OVERLAY, "both", "file", None),
+    "overlay.play_sound": ("lucide:volume-2", _SOUND, "both", "file", None),
+    "overlay.clear": ("lucide:eraser", _OBS_OVERLAY, "both", None, None),
+    "sound.play": ("lucide:volume-2", _SOUND, "both", "file", None),
+    "sound.volume_set": ("lucide:sliders-horizontal", _SOUND, "icon", None, None),
+    "sound.volume_delta": ("lucide:volume-1", _SOUND, "icon", None, None),
+    "sound.mute_toggle": ("lucide:volume-x", _SOUND, "icon", None, None),
+    "agent.next_page": ("lucide:chevron-right", _SLATE, "icon", None, None),
+    "agent.prev_page": ("lucide:chevron-left", _SLATE, "icon", None, None),
+    "agent.goto_page": ("lucide:layers", _SLATE, "text", "name", None),
+    "display.clock": ("lucide:clock", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "display.twitch_live": (
+        "si:twitch",
+        _TWITCH,
+        "text",
+        None,
+        {"offline_bg": "#3a2a63", "offline_fg": "#b7a2e6"},
+    ),
+    "display.obs_stream": ("lucide:radio", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "display.obs_scene": ("lucide:clapperboard", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "display.battery": ("lucide:battery-medium", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "display.ha_sensor": ("lucide:gauge", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "display.ha_weather": ("lucide:cloud-sun", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "display.live_message": ("lucide:message-square", _DISPLAY, "text", None, _LIVE_OFFLINE),
+    "spotify.play_pause": ("lucide:play", _SPOTIFY, "icon", None, None),
+    "spotify.next": ("lucide:skip-forward", _SPOTIFY, "icon", None, None),
+    "spotify.previous": ("lucide:skip-back", _SPOTIFY, "icon", None, None),
+    "spotify.volume_set": ("lucide:sliders-horizontal", _SPOTIFY, "icon", None, None),
+    "spotify.volume_delta": ("lucide:volume-2", _SPOTIFY, "icon", None, None),
+    "spotify.play_playlist": ("lucide:list-music", _SPOTIFY, "both", "playlist", None),
+    "twitch.create_clip": ("lucide:scissors", _TWITCH, "text", None, None),
+    "twitch.start_commercial": ("lucide:megaphone", _TWITCH, "text", None, None),
+    "twitch.snooze_ad": ("lucide:alarm-clock-off", _TWITCH, "text", None, None),
+    "twitch.create_marker": ("lucide:bookmark", _TWITCH, "text", None, None),
+    "twitch.update_channel": ("lucide:pencil", _TWITCH, "text", "game", None),
+    "twitch.chat_mode": ("lucide:message-circle", _TWITCH, "text", None, None),
+    "twitch.announce": ("lucide:bell", _TWITCH, "text", None, None),
+    "twitch.send_chat": ("lucide:message-square", _TWITCH, "text", None, None),
+    "twitch.clear_chat": ("lucide:eraser", _TWITCH, "text", None, None),
+    "twitch.raid": ("lucide:swords", _TWITCH, "text", None, None),
+    "twitch.cancel_raid": ("lucide:circle-x", _TWITCH, "text", None, None),
+    "twitch.shoutout": ("lucide:megaphone", _TWITCH, "text", None, None),
+    "keyboard.play_sequence": ("lucide:keyboard", _SLATE2, "text", None, None),
+    "command.run": ("lucide:terminal", _SLATE2, "text", None, None),
+}
+
+
+def _build_default_look(action: str, spec: tuple[Any, ...]) -> dict[str, Any]:
+    icon, bg, mode, label_from, live = spec
+    look: dict[str, Any] = {
+        "icon": icon,
+        "bg": bg,
+        "fg": "#ffffff",
+        "mode": mode,
+        "label_key": f"look.{action}.label",
+    }
+    if label_from:
+        look["label_from"] = label_from
+    if live:
+        look["live"] = dict(live)
+    return look
+
+
+DEFAULT_LOOKS: dict[str, dict[str, Any]] = {t: _build_default_look(t, s) for t, s in _LOOK_SPECS.items()}
+for _entry in ACTION_CATALOG:
+    if _entry["type"] in DEFAULT_LOOKS:
+        _entry["default_look"] = DEFAULT_LOOKS[_entry["type"]]
+
+
 def merged_catalog() -> list[dict[str, Any]]:
     """Registered kinds with labels/fields; unknown kinds get params JSON editor."""
 
@@ -968,6 +1063,7 @@ def merged_catalog() -> list[dict[str, Any]]:
                 "label": base["label"],
                 "fields": list(base.get("fields") or []),
                 "params_json": bool(base.get("params_json", False)),
+                "default_look": base.get("default_look"),
             }
         else:
             # Plugin-registered kind with no catalog entry: bucket it by its type prefix (e.g.
@@ -979,6 +1075,7 @@ def merged_catalog() -> list[dict[str, Any]]:
                 "label": t,
                 "fields": [],
                 "params_json": True,
+                "default_look": None,
             }
         out.append(entry)
     out.sort(key=lambda e: (str(e.get("category") or "").lower(), str(e.get("label") or e["type"]).lower()))

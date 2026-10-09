@@ -30,6 +30,7 @@ from .key_media_cache import (
     resolve_graphic_load_path,
 )
 from .logging_setup import default_icon_cache_dir
+from .look_defaults import proposed_entry
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -686,6 +687,8 @@ def render_tactile_key_image(
       is used as the key graphic automatically.
     """
 
+    # An action with no visual fields yet draws its proposed look (see look_defaults.py).
+    entry = proposed_entry(entry) or entry
     text = (entry.get("text") or entry.get("label") or "").strip()
     raw_img = effective_graphic_source(entry)
     has_bg_grad = (
