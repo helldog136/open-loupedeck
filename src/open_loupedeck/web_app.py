@@ -376,8 +376,11 @@ def create_web_app(
         return JSONResponse({"ok": True})
 
     @app.get("/api/action_catalog")
-    async def action_catalog() -> JSONResponse:
-        return JSONResponse({"actions": merged_catalog()})
+    async def action_catalog(
+        lang: str | None = Query(None, description="Language code; default = the app's current language"),
+    ) -> JSONResponse:
+        code = resolve_language(lang) if lang else get_language()
+        return JSONResponse({"lang": code, "actions": merged_catalog(code)})
 
     @app.post("/api/resolve_look")
     async def post_resolve_look(body: dict[str, Any] = Body(...)) -> JSONResponse:

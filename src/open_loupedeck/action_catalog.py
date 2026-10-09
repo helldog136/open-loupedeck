@@ -4,313 +4,108 @@ from __future__ import annotations
 
 from typing import Any
 
-# Each entry: type, label, optional fields (see static/js/action-fields.js), optional params_json for plugins.
-# Field input types: text, number, select, json, asset (path + Browse uploads via /api/upload; optional "accept").
+from . import i18n
+
+# Structure only: no user-visible English lives here. Every text is a locale key derived from the
+# type / field name (see ``label_key`` & co. below) and translated through ``i18n.t``:
+#   action.<type>.label                                 category.<category>
+#   action.<type>.help                                  (optional)
+#   action.<type>.field.<name>.label | placeholder | help   (placeholder/help optional)
+#   action.<type>.field.<name>.option.<value>           (select options; see ``option_has_key``)
+#   look.<type>.label                                   (default key label, see DEFAULT_LOOKS)
+# Each entry: type, category (a slug), fields. Field input types: text, number, select, json, asset (path +
+# Browse uploads via /api/upload; optional "accept"), key_sequence. A purely numeric placeholder is stored
+# here as-is (not translatable). Check completeness with ``python scripts/check_catalog_keys.py``.
 ACTION_CATALOG: list[dict[str, Any]] = [
-    {
-        "type": "obs.set_scene",
-        "category": "OBS",
-        "label": "OBS — set program scene",
-        "fields": [
-            {
-                "name": "scene",
-                "label": "Scene name",
-                "input": "text",
-                "placeholder": "e.g. Starting Soon",
-            },
-        ],
-    },
-    {
-        "type": "obs.toggle_mute",
-        "category": "OBS",
-        "label": "OBS — toggle input mute",
-        "fields": [
-            {
-                "name": "input_name",
-                "label": "Input name",
-                "input": "text",
-                "placeholder": "As in OBS audio mixer",
-            },
-        ],
-    },
+    {"type": "obs.set_scene", "category": "obs", "fields": [{"name": "scene", "input": "text"}]},
+    {"type": "obs.toggle_mute", "category": "obs", "fields": [{"name": "input_name", "input": "text"}]},
     {
         "type": "obs.input_volume_set",
-        "category": "OBS",
-        "label": "OBS — set source volume",
-        "fields": [
-            {
-                "name": "input_name",
-                "label": "Input name",
-                "input": "text",
-                "placeholder": "As in OBS audio mixer",
-            },
-            {
-                "name": "percent",
-                "label": "Volume (%)",
-                "input": "number",
-                "placeholder": "0–100",
-            },
-        ],
+        "category": "obs",
+        "fields": [{"name": "input_name", "input": "text"}, {"name": "percent", "input": "number"}],
     },
     {
         "type": "obs.input_volume_delta",
-        "category": "OBS",
-        "label": "OBS — source volume up / down",
-        "fields": [
-            {
-                "name": "input_name",
-                "label": "Input name",
-                "input": "text",
-                "placeholder": "As in OBS audio mixer",
-            },
-            {
-                "name": "delta",
-                "label": "Change (percent points)",
-                "input": "number",
-                "placeholder": "e.g. 5 or -5",
-            },
-        ],
+        "category": "obs",
+        "fields": [{"name": "input_name", "input": "text"}, {"name": "delta", "input": "number"}],
     },
     {
         "type": "ha.turn_on",
-        "category": "Home Assistant",
-        "label": "Home Assistant — turn on",
-        "fields": [
-            {
-                "name": "entity_id",
-                "label": "Entity ID",
-                "input": "text",
-                "placeholder": "e.g. light.living_room",
-            },
-            {
-                "name": "data",
-                "label": "Extra service data (JSON object)",
-                "input": "json",
-                "optional": True,
-                "placeholder": '{"brightness_pct": 60, "rgb_color": [255, 120, 0]}',
-            },
-        ],
+        "category": "home_assistant",
+        "fields": [{"name": "entity_id", "input": "text"}, {"name": "data", "input": "json", "optional": True}],
     },
     {
         "type": "ha.turn_off",
-        "category": "Home Assistant",
-        "label": "Home Assistant — turn off",
-        "fields": [
-            {
-                "name": "entity_id",
-                "label": "Entity ID",
-                "input": "text",
-                "placeholder": "e.g. light.living_room",
-            },
-            {
-                "name": "data",
-                "label": "Extra service data (JSON object)",
-                "input": "json",
-                "optional": True,
-            },
-        ],
+        "category": "home_assistant",
+        "fields": [{"name": "entity_id", "input": "text"}, {"name": "data", "input": "json", "optional": True}],
     },
     {
         "type": "ha.toggle",
-        "category": "Home Assistant",
-        "label": "Home Assistant — toggle",
-        "fields": [
-            {
-                "name": "entity_id",
-                "label": "Entity ID",
-                "input": "text",
-                "placeholder": "e.g. switch.desk_lamp",
-            },
-            {
-                "name": "data",
-                "label": "Extra service data (JSON object)",
-                "input": "json",
-                "optional": True,
-            },
-        ],
+        "category": "home_assistant",
+        "fields": [{"name": "entity_id", "input": "text"}, {"name": "data", "input": "json", "optional": True}],
     },
-    {
-        "type": "ha.run_script",
-        "category": "Home Assistant",
-        "label": "Home Assistant — run script",
-        "fields": [
-            {
-                "name": "script",
-                "label": "Script object id or entity id",
-                "input": "text",
-                "placeholder": "e.g. good_night or script.good_night",
-            },
-        ],
-    },
+    {"type": "ha.run_script", "category": "home_assistant", "fields": [{"name": "script", "input": "text"}]},
     {
         "type": "ha.call_service",
-        "category": "Home Assistant",
-        "label": "Home Assistant — call service (advanced)",
+        "category": "home_assistant",
         "fields": [
-            {
-                "name": "domain",
-                "label": "Domain",
-                "input": "text",
-                "placeholder": "e.g. cover, climate, automation, scene",
-            },
-            {
-                "name": "service",
-                "label": "Service",
-                "input": "text",
-                "placeholder": "e.g. open_cover, set_temperature, trigger, turn_on",
-            },
-            {
-                "name": "entity_id",
-                "label": "Entity ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "e.g. climate.bedroom",
-            },
-            {
-                "name": "data",
-                "label": "Extra service data (JSON object)",
-                "input": "json",
-                "optional": True,
-                "placeholder": '{"temperature": 21}',
-            },
+            {"name": "domain", "input": "text"},
+            {"name": "service", "input": "text"},
+            {"name": "entity_id", "input": "text", "optional": True},
+            {"name": "data", "input": "json", "optional": True},
         ],
     },
     {
         "type": "http.request",
-        "category": "HTTP",
-        "label": "HTTP request",
+        "category": "http",
         "fields": [
             {
                 "name": "method",
-                "label": "Method",
                 "input": "select",
                 "options": ["GET", "POST", "PUT", "PATCH", "DELETE"],
                 "default": "GET",
             },
-            {"name": "url", "label": "URL", "input": "text", "placeholder": "https://…"},
-            {
-                "name": "headers",
-                "label": "Headers (JSON object)",
-                "input": "json",
-                "optional": True,
-                "placeholder": '{"Authorization": "Bearer …"}',
-            },
-            {
-                "name": "json",
-                "label": "JSON body",
-                "input": "json",
-                "optional": True,
-                "placeholder": '{"key": "value"}',
-            },
-            {
-                "name": "body",
-                "label": "Raw body",
-                "input": "text",
-                "optional": True,
-            },
-            {
-                "name": "timeout",
-                "label": "Timeout (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "15",
-            },
+            {"name": "url", "input": "text"},
+            {"name": "headers", "input": "json", "optional": True},
+            {"name": "json", "input": "json", "optional": True},
+            {"name": "body", "input": "text", "optional": True},
+            {"name": "timeout", "input": "number", "optional": True, "placeholder": "15"},
         ],
     },
     {
         "type": "overlay.show_media",
-        "category": "OBS Overlay",
-        "label": "OBS overlay — video or image (GIF)",
+        "category": "obs_overlay",
         "fields": [
             {
                 "name": "file",
-                "label": "Media file (under config)",
                 "input": "asset",
                 "accept": (
                     "video/*,image/gif,image/webp,image/png,image/jpeg,.mp4,.webm,.mov,.gif,.webp,.png,.jpg,.jpeg"
                 ),
-                "placeholder": "library/videos/… or library/images/…",
             },
-            {
-                "name": "x",
-                "label": "Left (px)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "empty = centered horizontally",
-            },
-            {
-                "name": "y",
-                "label": "Top (px)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "empty = centered vertically",
-            },
-            {
-                "name": "width",
-                "label": "Width (px, height keeps aspect ratio)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "empty = maximize in overlay (contain)",
-            },
-            {
-                "name": "duration_sec",
-                "label": "Display time (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "empty = one video play or one GIF loop",
-            },
-            {
-                "name": "muted",
-                "label": "Mute video (no sound in OBS — use if autoplay fails)",
-                "input": "select",
-                "options": ["false", "true"],
-                "default": "false",
-                "optional": True,
-            },
+            {"name": "x", "input": "number", "optional": True},
+            {"name": "y", "input": "number", "optional": True},
+            {"name": "width", "input": "number", "optional": True},
+            {"name": "duration_sec", "input": "number", "optional": True},
+            {"name": "muted", "input": "select", "options": ["false", "true"], "default": "false", "optional": True},
         ],
     },
     {
         "type": "overlay.play_sound",
-        "category": "OBS Overlay",
-        "label": "OBS overlay — play sound in browser",
+        "category": "obs_overlay",
         "fields": [
-            {
-                "name": "file",
-                "label": "Audio file (under config)",
-                "input": "asset",
-                "accept": "audio/*,.wav,.mp3,.ogg,.flac,.m4a,.opus,.aac",
-                "placeholder": "library/sounds/…",
-            },
-            {
-                "name": "volume",
-                "label": "Volume (0–1 or 0–100)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "1",
-            },
+            {"name": "file", "input": "asset", "accept": "audio/*,.wav,.mp3,.ogg,.flac,.m4a,.opus,.aac"},
+            {"name": "volume", "input": "number", "optional": True, "placeholder": "1"},
         ],
     },
-    {
-        "type": "overlay.clear",
-        "category": "OBS Overlay",
-        "label": "OBS overlay — clear all media",
-        "fields": [],
-    },
+    {"type": "overlay.clear", "category": "obs_overlay", "fields": []},
     {
         "type": "sound.play",
-        "category": "Sound",
-        "label": "Play sound file",
+        "category": "sound",
         "fields": [
-            {
-                "name": "file",
-                "label": "Sound file",
-                "input": "asset",
-                "accept": "audio/*,.wav,.mp3,.ogg,.flac,.m4a,.opus,.aac",
-                "placeholder": "library/sounds/… or absolute path",
-            },
+            {"name": "file", "input": "asset", "accept": "audio/*,.wav,.mp3,.ogg,.flac,.m4a,.opus,.aac"},
             {
                 "name": "player",
-                "label": "Player",
                 "input": "select",
                 "options": ["auto", "afplay", "mpv", "paplay", "aplay", "ffplay"],
                 "default": "auto",
@@ -319,555 +114,190 @@ ACTION_CATALOG: list[dict[str, Any]] = [
     },
     {
         "type": "sound.volume_set",
-        "category": "Sound",
-        "label": "System — set output volume",
-        "fields": [
-            {
-                "name": "percent",
-                "label": "Volume (%)",
-                "input": "number",
-                "placeholder": "0–120 (capped)",
-            },
-            {
-                "name": "sink",
-                "label": "Sink",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Linux only (pactl/wpctl); default sink if empty",
-            },
-        ],
+        "category": "sound",
+        "fields": [{"name": "percent", "input": "number"}, {"name": "sink", "input": "text", "optional": True}],
     },
     {
         "type": "sound.volume_delta",
-        "category": "Sound",
-        "label": "System — volume up / down",
-        "fields": [
-            {
-                "name": "delta",
-                "label": "Change (percent points)",
-                "input": "number",
-                "placeholder": "e.g. 5 or -5",
-            },
-            {
-                "name": "sink",
-                "label": "Sink",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Leave empty for default output",
-            },
-        ],
+        "category": "sound",
+        "fields": [{"name": "delta", "input": "number"}, {"name": "sink", "input": "text", "optional": True}],
     },
     {
         "type": "sound.mute_toggle",
-        "category": "Sound",
-        "label": "System — mute output",
+        "category": "sound",
         "fields": [
-            {
-                "name": "mode",
-                "label": "Mode",
-                "input": "select",
-                "options": ["toggle", "mute", "unmute"],
-                "default": "toggle",
-            },
-            {
-                "name": "sink",
-                "label": "Sink",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Leave empty for default output",
-            },
+            {"name": "mode", "input": "select", "options": ["toggle", "mute", "unmute"], "default": "toggle"},
+            {"name": "sink", "input": "text", "optional": True},
         ],
     },
-    {
-        "type": "agent.next_page",
-        "category": "Deck / Pages",
-        "label": "Deck — next page",
-        "fields": [],
-    },
-    {
-        "type": "agent.prev_page",
-        "category": "Deck / Pages",
-        "label": "Deck — previous page",
-        "fields": [],
-    },
+    {"type": "agent.next_page", "category": "deck", "fields": []},
+    {"type": "agent.prev_page", "category": "deck", "fields": []},
     {
         "type": "agent.goto_page",
-        "category": "Deck / Pages",
-        "label": "Deck — go to page",
+        "category": "deck",
         "fields": [
-            {
-                "name": "id",
-                "label": "Page id",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Exact pages[].id (if you use ids in YAML)",
-            },
-            {
-                "name": "name",
-                "label": "Page name",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Exact name from YAML",
-            },
-            {
-                "name": "index",
-                "label": "Page index (0-based)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "0",
-            },
+            {"name": "id", "input": "text", "optional": True},
+            {"name": "name", "input": "text", "optional": True},
+            {"name": "index", "input": "number", "optional": True, "placeholder": "0"},
         ],
     },
     {
         "type": "display.clock",
-        "category": "Display",
-        "label": "Display — clock (time + date, two lines; press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "time_format",
-                "label": "Time line (strftime)",
-                "input": "text",
-                "optional": True,
-                "placeholder": "%H:%M",
-            },
-            {
-                "name": "date_format",
-                "label": "Date line (strftime)",
-                "input": "text",
-                "optional": True,
-                "placeholder": "%a %d %b",
-            },
-            {
-                "name": "timezone",
-                "label": "Timezone (e.g. UTC or Europe/London)",
-                "input": "text",
-                "optional": True,
-                "placeholder": "empty = system local",
-            },
+            {"name": "time_format", "input": "text", "optional": True},
+            {"name": "date_format", "input": "text", "optional": True},
+            {"name": "timezone", "input": "text", "optional": True},
         ],
     },
     {
         "type": "display.twitch_live",
-        "category": "Display",
-        "label": "Display — Twitch stream status (Helix; press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "login",
-                "label": "Streamer login",
-                "input": "text",
-                "placeholder": "e.g. twitch",
-            },
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "optional": True,
-                "placeholder": "{twitch_status}\n{twitch_uptime} · {twitch_viewers} viewers",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "Refresh interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "60",
-            },
+            {"name": "login", "input": "text"},
+            {"name": "template", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "placeholder": "60"},
         ],
     },
     {
         "type": "display.obs_stream",
-        "category": "Display",
-        "label": "Display — OBS stream status (WebSocket; press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "optional": True,
-                "placeholder": "{obs_status}\n{obs_duration} · {obs_timecode}",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "Poll interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "5",
-            },
+            {"name": "template", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "placeholder": "5"},
         ],
     },
     {
         "type": "display.obs_scene",
-        "category": "Display",
-        "label": "Display — OBS current scene (WebSocket; press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "optional": True,
-                "placeholder": "{obs_scene}",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "Poll interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "2",
-            },
+            {"name": "template", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "placeholder": "2"},
         ],
     },
     {
         "type": "display.battery",
-        "category": "Display",
-        "label": "Display — computer battery (press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "optional": True,
-                "placeholder": "{battery_percent}\n{battery_status} · {battery_ac}",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "Refresh interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "30",
-            },
+            {"name": "template", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "placeholder": "30"},
         ],
     },
     {
         "type": "display.ha_sensor",
-        "category": "Display",
-        "label": "Display — Home Assistant entity state (press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "entity_id",
-                "label": "Entity ID",
-                "input": "text",
-                "placeholder": "e.g. sensor.living_room_temperature",
-            },
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "optional": True,
-                "placeholder": "{state}{unit}",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "Poll interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "30",
-            },
+            {"name": "entity_id", "input": "text"},
+            {"name": "template", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "placeholder": "30"},
         ],
     },
     {
         "type": "display.ha_weather",
-        "category": "Display",
-        "label": "Display — Home Assistant weather (press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "entity_id",
-                "label": "Weather entity ID",
-                "input": "text",
-                "placeholder": "e.g. weather.home",
-            },
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "optional": True,
-                "placeholder": "{condition}\n{temperature}{temperature_unit}",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "Poll interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "300",
-            },
+            {"name": "entity_id", "input": "text"},
+            {"name": "template", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "placeholder": "300"},
         ],
     },
     {
         "type": "display.live_message",
-        "category": "Display",
-        "label": "Display — live text (HTTP / page info; press does nothing)",
+        "category": "display",
         "fields": [
-            {
-                "name": "template",
-                "label": "Template",
-                "input": "text",
-                "placeholder": "e.g. {http} viewers  |  {page_name} ({page_number}/{page_count})",
-            },
-            {
-                "name": "url",
-                "label": "HTTP URL",
-                "input": "text",
-                "optional": True,
-                "placeholder": "https://… (GET; value goes into {http} and {value})",
-            },
-            {
-                "name": "interval_seconds",
-                "label": "HTTP refresh interval (seconds)",
-                "input": "number",
-                "optional": True,
-                "default": 60,
-                "placeholder": "60",
-            },
-            {
-                "name": "extract_mode",
-                "label": "How to read HTTP body",
-                "input": "select",
-                "options": ["text", "json", "regex"],
-                "default": "text",
-            },
-            {
-                "name": "json_path",
-                "label": "JSON path (dot segments, for json mode)",
-                "input": "text",
-                "optional": True,
-                "placeholder": "e.g. data.viewer_count",
-            },
-            {
-                "name": "regex",
-                "label": "Regex (first capture group, for regex mode)",
-                "input": "text",
-                "optional": True,
-            },
-            {
-                "name": "headers",
-                "label": "HTTP headers (JSON object)",
-                "input": "json",
-                "optional": True,
-            },
-            {
-                "name": "timeout",
-                "label": "HTTP timeout (seconds)",
-                "input": "number",
-                "optional": True,
-                "default": 15,
-            },
+            {"name": "template", "input": "text"},
+            {"name": "url", "input": "text", "optional": True},
+            {"name": "interval_seconds", "input": "number", "optional": True, "default": 60, "placeholder": "60"},
+            {"name": "extract_mode", "input": "select", "options": ["text", "json", "regex"], "default": "text"},
+            {"name": "json_path", "input": "text", "optional": True},
+            {"name": "regex", "input": "text", "optional": True},
+            {"name": "headers", "input": "json", "optional": True},
+            {"name": "timeout", "input": "number", "optional": True, "default": 15},
         ],
     },
     {
         "type": "spotify.play_pause",
-        "category": "Spotify",
-        "label": "Spotify — play / pause",
+        "category": "spotify",
         "fields": [
-            {
-                "name": "device_id",
-                "label": "Device ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Active Connect device if empty",
-            },
-            {
-                "name": "icon_playing",
-                "label": "Icon while playing",
-                "input": "text",
-                "optional": True,
-                "placeholder": "lucide:pause (default)",
-            },
-            {
-                "name": "icon_paused",
-                "label": "Icon while paused",
-                "input": "text",
-                "optional": True,
-                "placeholder": "lucide:play (default)",
-            },
+            {"name": "device_id", "input": "text", "optional": True},
+            {"name": "icon_playing", "input": "text", "optional": True},
+            {"name": "icon_paused", "input": "text", "optional": True},
         ],
     },
     {
         "type": "spotify.next",
-        "category": "Spotify",
-        "label": "Spotify — next track",
-        "fields": [
-            {
-                "name": "device_id",
-                "label": "Device ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Active Connect device if empty",
-            },
-        ],
+        "category": "spotify",
+        "fields": [{"name": "device_id", "input": "text", "optional": True}],
     },
     {
         "type": "spotify.previous",
-        "category": "Spotify",
-        "label": "Spotify — previous track",
-        "fields": [
-            {
-                "name": "device_id",
-                "label": "Device ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Active Connect device if empty",
-            },
-        ],
+        "category": "spotify",
+        "fields": [{"name": "device_id", "input": "text", "optional": True}],
     },
     {
         "type": "spotify.volume_set",
-        "category": "Spotify",
-        "label": "Spotify — set playback volume (%)",
-        "fields": [
-            {
-                "name": "percent",
-                "label": "Volume (0–100)",
-                "input": "number",
-                "placeholder": "e.g. 50",
-            },
-            {
-                "name": "device_id",
-                "label": "Device ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Active Connect device if empty",
-            },
-        ],
+        "category": "spotify",
+        "fields": [{"name": "percent", "input": "number"}, {"name": "device_id", "input": "text", "optional": True}],
     },
     {
         "type": "spotify.volume_delta",
-        "category": "Spotify",
-        "label": "Spotify — volume up / down",
-        "fields": [
-            {
-                "name": "delta",
-                "label": "Change",
-                "input": "number",
-                "placeholder": "e.g. 5 or -5",
-            },
-            {
-                "name": "device_id",
-                "label": "Device ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Active Connect device if empty",
-            },
-        ],
+        "category": "spotify",
+        "fields": [{"name": "delta", "input": "number"}, {"name": "device_id", "input": "text", "optional": True}],
     },
     {
         "type": "spotify.play_playlist",
-        "category": "Spotify",
-        "label": "Spotify — play playlist",
-        "fields": [
-            {
-                "name": "playlist",
-                "label": "Playlist",
-                "input": "text",
-                "placeholder": "URI, open.spotify.com link, or 22-char id",
-            },
-            {
-                "name": "device_id",
-                "label": "Device ID",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Active Connect device if empty",
-            },
-        ],
+        "category": "spotify",
+        "fields": [{"name": "playlist", "input": "text"}, {"name": "device_id", "input": "text", "optional": True}],
     },
     {
         "type": "twitch.create_clip",
-        "category": "Twitch",
-        "label": "Twitch — create clip",
+        "category": "twitch",
         "fields": [
-            {
-                "name": "open",
-                "label": "Open the clip editor afterwards",
-                "input": "select",
-                "options": ["false", "true"],
-                "default": "false",
-                "optional": True,
-            }
+            {"name": "open", "input": "select", "options": ["false", "true"], "default": "false", "optional": True}
         ],
     },
     {
         "type": "twitch.start_commercial",
-        "category": "Twitch",
-        "label": "Twitch — run ads",
+        "category": "twitch",
         "fields": [
-            {
-                "name": "length",
-                "label": "Ad length (seconds)",
-                "input": "select",
-                "options": ["30", "60", "90", "120", "150", "180"],
-                "default": "30",
-            }
+            {"name": "length", "input": "select", "options": ["30", "60", "90", "120", "150", "180"], "default": "30"}
         ],
     },
-    {
-        "type": "twitch.snooze_ad",
-        "category": "Twitch",
-        "label": "Twitch — snooze next ad (+5 min)",
-        "fields": [],
-    },
+    {"type": "twitch.snooze_ad", "category": "twitch", "fields": []},
     {
         "type": "twitch.create_marker",
-        "category": "Twitch",
-        "label": "Twitch — add stream marker",
-        "fields": [
-            {
-                "name": "description",
-                "label": "Description",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Shown in the VOD timeline",
-            }
-        ],
+        "category": "twitch",
+        "fields": [{"name": "description", "input": "text", "optional": True}],
     },
     {
         "type": "twitch.update_channel",
-        "category": "Twitch",
-        "label": "Twitch — set title / category",
+        "category": "twitch",
         "fields": [
-            {"name": "title", "label": "Stream title", "input": "text", "optional": True},
-            {
-                "name": "game",
-                "label": "Category (exact name)",
-                "input": "text",
-                "optional": True,
-                "placeholder": "e.g. Just Chatting",
-            },
+            {"name": "title", "input": "text", "optional": True},
+            {"name": "game", "input": "text", "optional": True},
         ],
     },
     {
         "type": "twitch.chat_mode",
-        "category": "Twitch",
-        "label": "Twitch — chat mode (slow, followers, subs, emotes)",
+        "category": "twitch",
         "fields": [
             {
                 "name": "setting",
-                "label": "Mode",
                 "input": "select",
                 "options": ["slow", "followers", "subscribers", "emote", "unique"],
                 "default": "slow",
             },
-            {
-                "name": "state",
-                "label": "State",
-                "input": "select",
-                "options": ["toggle", "on", "off"],
-                "default": "toggle",
-            },
-            {
-                "name": "duration",
-                "label": "Slow: seconds (3-120) / Followers: minutes",
-                "input": "number",
-                "optional": True,
-                "placeholder": "slow 30 / followers 0",
-            },
+            {"name": "state", "input": "select", "options": ["toggle", "on", "off"], "default": "toggle"},
+            {"name": "duration", "input": "number", "optional": True},
         ],
     },
     {
         "type": "twitch.announce",
-        "category": "Twitch",
-        "label": "Twitch — chat announcement",
+        "category": "twitch",
         "fields": [
-            {"name": "message", "label": "Message", "input": "text"},
+            {"name": "message", "input": "text"},
             {
                 "name": "color",
-                "label": "Color",
                 "input": "select",
                 "options": ["primary", "blue", "green", "orange", "purple"],
                 "default": "primary",
@@ -875,75 +305,25 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
         ],
     },
-    {
-        "type": "twitch.send_chat",
-        "category": "Twitch",
-        "label": "Twitch — send chat message",
-        "fields": [{"name": "message", "label": "Message", "input": "text"}],
-    },
-    {
-        "type": "twitch.clear_chat",
-        "category": "Twitch",
-        "label": "Twitch — clear chat",
-        "fields": [],
-    },
-    {
-        "type": "twitch.raid",
-        "category": "Twitch",
-        "label": "Twitch — start raid",
-        "fields": [{"name": "channel", "label": "Channel to raid", "input": "text", "placeholder": "login name"}],
-    },
-    {
-        "type": "twitch.cancel_raid",
-        "category": "Twitch",
-        "label": "Twitch — cancel raid",
-        "fields": [],
-    },
-    {
-        "type": "twitch.shoutout",
-        "category": "Twitch",
-        "label": "Twitch — shoutout",
-        "fields": [{"name": "channel", "label": "Channel to shout out", "input": "text", "placeholder": "login name"}],
-    },
+    {"type": "twitch.send_chat", "category": "twitch", "fields": [{"name": "message", "input": "text"}]},
+    {"type": "twitch.clear_chat", "category": "twitch", "fields": []},
+    {"type": "twitch.raid", "category": "twitch", "fields": [{"name": "channel", "input": "text"}]},
+    {"type": "twitch.cancel_raid", "category": "twitch", "fields": []},
+    {"type": "twitch.shoutout", "category": "twitch", "fields": [{"name": "channel", "input": "text"}]},
     {
         "type": "keyboard.play_sequence",
-        "category": "Keyboard",
-        "label": "Keyboard — play recorded key sequence",
+        "category": "keyboard",
         "fields": [
-            {
-                "name": "steps",
-                "label": "Key sequence",
-                "input": "key_sequence",
-                "placeholder": "Click Record, then press keys in this window, in order",
-            },
-            {
-                "name": "delay_ms",
-                "label": "Delay between steps (ms)",
-                "input": "number",
-                "optional": True,
-                "placeholder": "30",
-            },
+            {"name": "steps", "input": "key_sequence"},
+            {"name": "delay_ms", "input": "number", "optional": True, "placeholder": "30"},
         ],
     },
     {
         "type": "command.run",
-        "category": "Shell",
-        "label": "Run shell command",
+        "category": "shell",
         "fields": [
-            {
-                "name": "argv",
-                "label": "Argv (JSON array)",
-                "input": "json",
-                "optional": True,
-                "placeholder": '["notify-send", "Loupedeck", "Hello"]',
-            },
-            {
-                "name": "shell",
-                "label": "Shell command (alternative to argv)",
-                "input": "text",
-                "optional": True,
-                "placeholder": "Only if not using argv",
-            },
+            {"name": "argv", "input": "json", "optional": True},
+            {"name": "shell", "input": "text", "optional": True},
         ],
     },
 ]
@@ -956,8 +336,8 @@ ACTION_CATALOG: list[dict[str, Any]] = [
 #   Sound (local + overlay)   amber    #e08a00                 Home Assistant       cyan    #0f8fb8
 #   Deck / pages, HTTP, shell slate    #2a3345 / #3a3f4b       Display (live info)  indigo  #4a4f8f
 # Text keys (white, big) are the default; transport controls are icon-only. ``live`` gives the
-# offline look of keys whose text comes from a runtime source. Labels live in
-# ``look_defaults.DEFAULT_LABELS_*`` under ``label_key``.
+# offline look of keys whose text comes from a runtime source. Labels live in the locale files
+# (``look.<type>.label``, stored here as ``label_key``).
 _LIVE_OFFLINE = {"offline_bg": "#2b2f45", "offline_fg": "#9aa0bd"}
 _OBS_SCENE, _OBS_AUDIO, _OBS_OVERLAY = "#1f6fe0", "#33266f", "#2b4a8f"
 _TWITCH, _SPOTIFY, _SOUND, _HA = "#9146ff", "#1a9a48", "#e08a00", "#0f8fb8"
@@ -1044,39 +424,118 @@ for _entry in ACTION_CATALOG:
         _entry["default_look"] = DEFAULT_LOOKS[_entry["type"]]
 
 
-def merged_catalog() -> list[dict[str, Any]]:
-    """Registered kinds with labels/fields; unknown kinds get params JSON editor."""
+# --- Locale keys ------------------------------------------------------------------------------
+# Select options that are technical identifiers (HTTP verbs, player binaries, numbers) are shown as-is
+# and have no locale key.
+_RAW_OPTIONS = frozenset({"afplay", "mpv", "paplay", "aplay", "ffplay"})
+
+
+def label_key(action: str) -> str:
+    return f"action.{action}.label"
+
+
+def help_key(action: str) -> str:
+    return f"action.{action}.help"
+
+
+def field_key(action: str, name: str, part: str) -> str:
+    """``part`` is ``label``, ``placeholder`` or ``help``."""
+
+    return f"action.{action}.field.{name}.{part}"
+
+
+def option_key(action: str, name: str, value: str) -> str:
+    return f"action.{action}.field.{name}.option.{value}"
+
+
+def category_key(slug: str) -> str:
+    return f"category.{slug}"
+
+
+def option_has_key(value: Any) -> bool:
+    """False for options shown verbatim (``GET``, ``30``, ``mpv``...)."""
+
+    v = str(value)
+    return not (v.isdigit() or v.isupper() or v in _RAW_OPTIONS)
+
+
+def _text(key: str, lang: str, fallback: str = "") -> str:
+    """Translated text for ``key`` (English when missing in ``lang``), else ``fallback``."""
+
+    out = i18n.t(key, lang)
+    return fallback if out == key else out
+
+
+def _translated_field(action: str, field: dict[str, Any], lang: str) -> dict[str, Any]:
+    name = str(field["name"])
+    out = dict(field)
+    out["label_key"] = field_key(action, name, "label")
+    out["label"] = _text(out["label_key"], lang, name)
+    for part in ("placeholder", "help"):
+        key = field_key(action, name, part)
+        text = _text(key, lang)
+        if text:
+            out[part], out[f"{part}_key"] = text, key
+    options = field.get("options")
+    if options:
+        keys = {str(o): option_key(action, name, str(o)) for o in options if option_has_key(o)}
+        out["option_label_keys"] = keys
+        out["option_labels"] = {
+            str(o): _text(keys[str(o)], lang, str(o)) if str(o) in keys else str(o) for o in options
+        }
+    return out
+
+
+def merged_catalog(lang: str | None = None) -> list[dict[str, Any]]:
+    """Registered kinds with translated labels/fields; unknown kinds get a params JSON editor.
+
+    ``lang`` (a language code; default: the current app language) selects the locale. Every translated
+    text comes with its ``*_key`` so clients can re-translate after a language change. Actions without
+    locale keys (plugins) keep their raw type as label.
+    """
 
     import open_loupedeck.actions  # noqa: F401 — register builtins + spotify
 
     from .actions.registry import registered_action_kinds
 
+    code = i18n.resolve_language(lang) if lang else i18n.get_language()
     reg = registered_action_kinds()
     known = {c["type"]: c for c in ACTION_CATALOG}
     out: list[dict[str, Any]] = []
     for t in reg:
+        lk = label_key(t)
         if t in known:
             base = known[t]
+            slug = str(base.get("category") or "other")
             entry = {
                 "type": base["type"],
-                "category": base.get("category") or "Other",
-                "label": base["label"],
-                "fields": list(base.get("fields") or []),
+                "category": _text(category_key(slug), code, slug),
+                "category_key": category_key(slug),
+                "label": _text(lk, code, t),
+                "label_key": lk,
+                "fields": [_translated_field(t, f, code) for f in base.get("fields") or []],
                 "params_json": bool(base.get("params_json", False)),
                 "default_look": base.get("default_look"),
             }
         else:
             # Plugin-registered kind with no catalog entry: bucket it by its type prefix (e.g.
             # "myplugin.foo" -> "Myplugin") so it still gets a sensible category in the UI.
-            prefix = t.split(".", 1)[0].replace("_", " ")
+            raw_prefix = t.split(".", 1)[0]
+            prefix = raw_prefix.replace("_", " ")
+            fallback = prefix[:1].upper() + prefix[1:] if prefix else "Other"
             entry = {
                 "type": t,
-                "category": prefix[:1].upper() + prefix[1:] if prefix else "Other",
-                "label": t,
+                "category": _text(category_key(raw_prefix), code, fallback),
+                "category_key": category_key(raw_prefix or "other"),
+                "label": _text(lk, code, t),
+                "label_key": lk,
                 "fields": [],
                 "params_json": True,
                 "default_look": None,
             }
+        help_text = _text(help_key(t), code)
+        if help_text:
+            entry["help"], entry["help_key"] = help_text, help_key(t)
         out.append(entry)
     out.sort(key=lambda e: (str(e.get("category") or "").lower(), str(e.get("label") or e["type"]).lower()))
     return out

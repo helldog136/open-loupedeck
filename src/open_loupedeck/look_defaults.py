@@ -10,120 +10,16 @@ no stored key yet: an optional ``mode`` key (text/icon/both) is honoured when pr
 
 from __future__ import annotations
 
-import logging
 import re
 from collections.abc import Callable
 from pathlib import PurePosixPath
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from . import i18n
 
 MODES = ("text", "icon", "both")
 FIELDS = ("label", "icon", "bg", "fg", "mode")
 
-DEFAULT_LABELS_EN: dict[str, str] = {
-    "look.obs.set_scene.label": "Scene",
-    "look.obs.toggle_mute.label": "Mute",
-    "look.obs.input_volume_set.label": "Volume",
-    "look.obs.input_volume_delta.label": "Volume",
-    "look.ha.turn_on.label": "Turn on",
-    "look.ha.turn_off.label": "Turn off",
-    "look.ha.toggle.label": "Toggle",
-    "look.ha.run_script.label": "Script",
-    "look.ha.call_service.label": "Service",
-    "look.http.request.label": "Request",
-    "look.overlay.show_media.label": "Media",
-    "look.overlay.play_sound.label": "Sound",
-    "look.overlay.clear.label": "Clear",
-    "look.sound.play.label": "Sound",
-    "look.sound.volume_set.label": "Volume",
-    "look.sound.volume_delta.label": "Volume",
-    "look.sound.mute_toggle.label": "Mute",
-    "look.agent.next_page.label": "Next",
-    "look.agent.prev_page.label": "Back",
-    "look.agent.goto_page.label": "Page",
-    "look.display.clock.label": "Clock",
-    "look.display.twitch_live.label": "Live",
-    "look.display.obs_stream.label": "Stream",
-    "look.display.obs_scene.label": "Scene",
-    "look.display.battery.label": "Battery",
-    "look.display.ha_sensor.label": "Sensor",
-    "look.display.ha_weather.label": "Weather",
-    "look.display.live_message.label": "Message",
-    "look.spotify.play_pause.label": "Play",
-    "look.spotify.next.label": "Next",
-    "look.spotify.previous.label": "Previous",
-    "look.spotify.volume_set.label": "Volume",
-    "look.spotify.volume_delta.label": "Volume",
-    "look.spotify.play_playlist.label": "Playlist",
-    "look.twitch.create_clip.label": "Clip",
-    "look.twitch.start_commercial.label": "Ad break",
-    "look.twitch.snooze_ad.label": "Snooze ad",
-    "look.twitch.create_marker.label": "Marker",
-    "look.twitch.update_channel.label": "Channel",
-    "look.twitch.chat_mode.label": "Chat mode",
-    "look.twitch.announce.label": "Announce",
-    "look.twitch.send_chat.label": "Chat",
-    "look.twitch.clear_chat.label": "Clear chat",
-    "look.twitch.raid.label": "Raid",
-    "look.twitch.cancel_raid.label": "Cancel raid",
-    "look.twitch.shoutout.label": "Shoutout",
-    "look.keyboard.play_sequence.label": "Keys",
-    "look.command.run.label": "Command",
-}
-
-DEFAULT_LABELS_FR: dict[str, str] = {
-    "look.obs.set_scene.label": "Scène",
-    "look.obs.toggle_mute.label": "Muet",
-    "look.obs.input_volume_set.label": "Volume",
-    "look.obs.input_volume_delta.label": "Volume",
-    "look.ha.turn_on.label": "Allumer",
-    "look.ha.turn_off.label": "Éteindre",
-    "look.ha.toggle.label": "Basculer",
-    "look.ha.run_script.label": "Script",
-    "look.ha.call_service.label": "Service",
-    "look.http.request.label": "Requête",
-    "look.overlay.show_media.label": "Média",
-    "look.overlay.play_sound.label": "Son",
-    "look.overlay.clear.label": "Effacer",
-    "look.sound.play.label": "Son",
-    "look.sound.volume_set.label": "Volume",
-    "look.sound.volume_delta.label": "Volume",
-    "look.sound.mute_toggle.label": "Muet",
-    "look.agent.next_page.label": "Suivant",
-    "look.agent.prev_page.label": "Retour",
-    "look.agent.goto_page.label": "Page",
-    "look.display.clock.label": "Heure",
-    "look.display.twitch_live.label": "Live",
-    "look.display.obs_stream.label": "Stream",
-    "look.display.obs_scene.label": "Scène",
-    "look.display.battery.label": "Batterie",
-    "look.display.ha_sensor.label": "Capteur",
-    "look.display.ha_weather.label": "Météo",
-    "look.display.live_message.label": "Message",
-    "look.spotify.play_pause.label": "Lecture",
-    "look.spotify.next.label": "Suivant",
-    "look.spotify.previous.label": "Précédent",
-    "look.spotify.volume_set.label": "Volume",
-    "look.spotify.volume_delta.label": "Volume",
-    "look.spotify.play_playlist.label": "Playlist",
-    "look.twitch.create_clip.label": "Clip",
-    "look.twitch.start_commercial.label": "Pub",
-    "look.twitch.snooze_ad.label": "Reporter pub",
-    "look.twitch.create_marker.label": "Repère",
-    "look.twitch.update_channel.label": "Chaîne",
-    "look.twitch.chat_mode.label": "Mode chat",
-    "look.twitch.announce.label": "Annonce",
-    "look.twitch.send_chat.label": "Chat",
-    "look.twitch.clear_chat.label": "Vider chat",
-    "look.twitch.raid.label": "Raid",
-    "look.twitch.cancel_raid.label": "Annuler raid",
-    "look.twitch.shoutout.label": "Dédicace",
-    "look.keyboard.play_sequence.label": "Touches",
-    "look.command.run.label": "Commande",
-}
-
-_TABLES = {"en": DEFAULT_LABELS_EN, "fr": DEFAULT_LABELS_FR}
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 _GRADIENT_BG = ("background_gradient_from", "background_gradient_to")
 _GRADIENT_FG = ("text_gradient_from", "text_gradient_to")
@@ -133,27 +29,11 @@ LIVE_PLACEHOLDER = "—"
 Translate = Callable[[str, "str | None"], str]
 
 
-def table_translate(key: str, lang: str | None = None) -> str:
-    """Built-in fallback: ``lang`` table, then English, then the key itself."""
-
-    code = (lang or "en").lower().split("-")[0].split("_")[0]
-    return _TABLES.get(code, DEFAULT_LABELS_EN).get(key) or DEFAULT_LABELS_EN.get(key) or key
-
-
 def default_translate(key: str, lang: str | None = None) -> str:
-    """Use the app's i18n module when it provides a translation, else the built-in tables."""
+    """Translate a ``look.<type>.label`` key; ``lang`` may be a region tag (``fr-FR``) or unknown (-> English)."""
 
-    try:  # i18n is built by another package; stay importable without it.
-        from . import i18n  # type: ignore[attr-defined]
-
-        fn = getattr(i18n, "translate", None) or getattr(i18n, "t", None)
-        if callable(fn):
-            out = fn(key, lang)
-            if isinstance(out, str) and out and out != key:
-                return out
-    except Exception:  # ImportError, or an i18n bug must not break key rendering
-        logger.debug("i18n translate failed for %r", key, exc_info=True)
-    return table_translate(key, lang)
+    code = i18n.resolve_language(lang) if lang else None
+    return i18n.t(key, code)
 
 
 def first_action(entry: dict[str, Any]) -> dict[str, Any] | None:

@@ -11,7 +11,7 @@ def test_every_static_catalog_entry_has_a_category():
 
 
 def test_merged_catalog_includes_category_for_known_types():
-    catalog = merged_catalog()
+    catalog = merged_catalog("en")
     by_type = {e["type"]: e for e in catalog}
     assert by_type["obs.set_scene"]["category"] == "OBS"
     assert by_type["ha.turn_on"]["category"] == "Home Assistant"
@@ -19,6 +19,6 @@ def test_merged_catalog_includes_category_for_known_types():
 
 
 def test_merged_catalog_sorted_by_category_then_label():
-    catalog = merged_catalog()
+    catalog = merged_catalog("en")
     keys = [(e["category"].lower(), e["label"].lower()) for e in catalog]
     assert keys == sorted(keys)
