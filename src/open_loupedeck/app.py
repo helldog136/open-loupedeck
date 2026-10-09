@@ -318,6 +318,8 @@ async def run_agent(
 
         set_serial_fatal_callback(on_serial_fatal)
 
+        knob_flash_tasks: set[asyncio.Task[Any]] = set()
+
         async def run_knob_role(kid: str, event: str) -> bool:
             """Knob role on the current deck page (``pages[].knobs``). False = not handled here."""
 
@@ -347,9 +349,15 @@ async def run_agent(
             if failed and text:
                 text = t("knob.feedback.failed", text=text)
             if text and runtime.deck is not None:
-                await flash_knob_feedback(
-                    runtime.deck, config_dir, raw_snap, model, kid, text, redraw_skin, res.feedback_sec
+                # In the background: the event (and a UI test press) completes without waiting for
+                # the feedback to be restored.
+                task = asyncio.create_task(
+                    flash_knob_feedback(
+                        runtime.deck, config_dir, raw_snap, model, kid, text, redraw_skin, res.feedback_sec
+                    )
                 )
+                knob_flash_tasks.add(task)
+                task.add_done_callback(knob_flash_tasks.discard)
             return True
 
         async def handle_raw_message(msg: dict[str, Any]) -> None:
