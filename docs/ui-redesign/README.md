@@ -73,9 +73,9 @@ it owns.
 | `inspector/page-button-view.js` | Live S round buttons: light colour only |
 | `inspector/entry.js`, `inspector/edit.js` | Stored-config contract (which keys make a field "modified"); the single edit path (Undo snapshot, save, device refresh) |
 | `inspector/preview.js`, `inspector/controls.js`, `inspector/dom.js` | `/api/preview_key` + `/api/resolve_look` clients, animations; control kinds and names; small DOM helpers |
-| `inspector/panel.js`, `inspector/clipboard.js` | Panel/button states shared with pages.js and knobs.js; copy / paste / clear |
+| `inspector/panel.js`, `inspector/clipboard.js` | Panel/button states shared with pages.js; copy / paste / clear |
 | `catalog.js`, `action-fields.js`, `key-sequence.js` | Action-type picker; catalog-driven parameter forms; key recorder |
-| `knobs.js` | Encoder editor (dial pages, rotate actions, test buttons, all-encoders JSON) |
+| `inspector/knob-view.js` | Knob inspector: role per deck page (duo list, press action, display time, test buttons, split / JSON), knob captions for the deck |
 | `services/*.js` | One per Services section: `backups`, `spotify`, `twitch`, `obs`, `ha`, `logging`, `system` |
 
 Rules: imports only point "down" (no import cycles); when a lower module needs something a higher one owns it

@@ -20,7 +20,6 @@ import {
   ensureDevice,
   ensurePages,
   getButtonEntry,
-  knobPageLabelFromConfig,
   layoutMode,
   setButtonEntry,
 } from "./model.js";
@@ -58,9 +57,7 @@ const LIVE_SERVICE = {
 /* ---- knob caption hook ---------------------------------------------------------------------- */
 
 function defaultKnobCaption(knobId) {
-  const spec = state.cfg.knob_pages && state.cfg.knob_pages[knobId];
-  const pages = spec && Array.isArray(spec.pages) ? spec.pages.filter((x) => x && typeof x === "object") : [];
-  return (pages.length && knobPageLabelFromConfig(pages[0])) || knobId;
+  return knobId;
 }
 let knobCaptionProvider = defaultKnobCaption;
 
@@ -164,8 +161,11 @@ function previewRequest(cid, e) {
   const offline = isOffline(e);
   const body = { entry, control_id: cid };
   if (offline) body.offline = true;
+  // Proposed labels are translated: ask in the UI language, and keep languages apart in the cache.
+  const lang = (window.i18n && window.i18n.lang) || "";
+  if (lang) body.lang = lang;
   const sizeClass = cid.startsWith("strip_") ? "strip" : "key";
-  return { hash: `${sizeClass}|${offline ? 1 : 0}|${JSON.stringify(entry)}`, body };
+  return { hash: `${sizeClass}|${offline ? 1 : 0}|${lang}|${JSON.stringify(entry)}`, body };
 }
 
 function cacheSet(hash, val) {
@@ -355,7 +355,7 @@ function liveHtml() {
 
 /* ---- selection painting ---------------------------------------------------------------------- */
 
-/** Knob picked on the deck (the editor may or may not mirror it in state.selectedKnobEncoder). */
+/** Knob picked on the deck (the knob view mirrors it in state.selectedKnobEncoder). */
 let ownKnob = null;
 let lastSelectedControl = null;
 
@@ -580,8 +580,6 @@ function bindRoot(root) {
       const knobId = el.dataset.knob;
       ownKnob = knobId;
       emit("knob:open", { knobId });
-      // Until the knob editor package handles "knob:open", the existing encoder editor opens through this.
-      emit("control:open", knobId);
       paintSelection();
     });
   });

@@ -78,3 +78,12 @@ def test_every_inspector_string_key_exists_in_every_locale() -> None:
         messages = json.loads((LOCALES / f"{code}.json").read_text(encoding="utf-8"))
         missing = sorted(k for k in used if k not in messages and f"{k}.other" not in messages)
         assert not missing, f"{code}: {missing}"
+
+
+def test_knob_view_replaces_the_legacy_encoder_editor() -> None:
+    assert (INSPECTOR / "knob-view.js").exists()
+    assert not (STATIC / "js" / "knobs.js").exists()
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert "knobEncoderEditorBlock" not in html and "css/knobs.css" in html
+    deck = (STATIC / "js" / "deck.js").read_text(encoding="utf-8")
+    assert 'emit("control:open", knobId)' not in deck

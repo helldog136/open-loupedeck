@@ -18,6 +18,7 @@ from . import i18n
 # here as-is (not translatable). Check completeness with ``python scripts/check_catalog_keys.py``.
 ACTION_CATALOG: list[dict[str, Any]] = [
     {"type": "obs.set_scene", "category": "obs", "fields": [{"name": "scene", "input": "text"}]},
+    {"type": "obs.scene_step", "category": "obs", "fields": [{"name": "step", "input": "number"}]},
     {"type": "obs.toggle_mute", "category": "obs", "fields": [{"name": "input_name", "input": "text"}]},
     {
         "type": "obs.input_volume_set",
@@ -346,6 +347,7 @@ _SLATE, _SLATE2, _DISPLAY = "#2a3345", "#3a3f4b", "#4a4f8f"
 # action type -> (icon, bg, mode, label_from or None, live offline colours or None)
 _LOOK_SPECS: dict[str, tuple[str, str, str, str | None, dict[str, str] | None]] = {
     "obs.set_scene": ("lucide:clapperboard", _OBS_SCENE, "text", "scene", None),
+    "obs.scene_step": ("lucide:clapperboard", _OBS_SCENE, "both", None, None),
     "obs.toggle_mute": ("lucide:mic-off", _OBS_AUDIO, "both", "input_name", None),
     "obs.input_volume_set": ("lucide:sliders-horizontal", _OBS_AUDIO, "both", "input_name", None),
     "obs.input_volume_delta": ("lucide:volume-2", _OBS_AUDIO, "both", "input_name", None),

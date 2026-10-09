@@ -202,8 +202,3 @@ export function setButtonEntry(cid, entry) {
     }
   }
 }
-
-export function knobPageLabelFromConfig(page) {
-  if (!page || typeof page !== "object") return "";
-  return String(page.name || page.page_change_message || page.message || "").trim();
-}

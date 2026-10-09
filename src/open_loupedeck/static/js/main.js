@@ -6,14 +6,8 @@
 import { apiGet } from "./api.js";
 import { renderDeck } from "./deck.js";
 import { loadCopiedControlFromStorage } from "./inspector/clipboard.js";
-import { initInspector, refreshInspector } from "./inspector/index.js";
+import { initInspector, openControl, refreshInspector } from "./inspector/index.js";
 import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
-import {
-  closeKnobEncoderEditor,
-  syncKnobPagesEditor,
-  wireKnobEditorButtons,
-  wireKnobTestButtons,
-} from "./knobs.js";
 import { currentPage, ensureDevice, ensureGlobalButtons, ensurePages, liveKnobEncoderIds } from "./model.js";
 import {
   pullAgentLayoutAndPage,
@@ -82,7 +76,7 @@ function onModelChange() {
   updateLiveSPageChrome();
   renderDeck();
   if (state.selectedKnobEncoder && !liveKnobEncoderIds().includes(state.selectedKnobEncoder)) {
-    closeKnobEncoderEditor();
+    openControl(null);
   } else {
     refreshInspector();
   }
@@ -145,17 +139,14 @@ async function init() {
   $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
   syncPageSelect();
   renderDeck();
-  syncKnobPagesEditor();
   syncTestPressButton();
   syncCopyPasteButtons();
 
   wirePageSelect();
   wireBackupButtons();
   initInspector();
-  wireKnobTestButtons();
   if (dm) dm.addEventListener("change", onModelChange);
 
-  wireKnobEditorButtons();
   startConnectionStatusPolling();
 
   wireSpotifyButtons();
