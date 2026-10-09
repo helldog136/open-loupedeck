@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open-Loupedeck pickers</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="/assets/ui/tokens.css" />
+    <link rel="stylesheet" href="/assets/ui/components.css" />
+    <link rel="stylesheet" href="/assets/ui/css/pickers.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font); padding: 0 var(--sp-4) var(--sp-6); }
+      .wrap { max-width: 1100px; margin: 0 auto; }
+      h1 { font-size: 22px; margin: var(--sp-5) 0 var(--sp-2); }
+      h2 { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 var(--sp-3); }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--sp-4); align-items: start; margin-top: var(--sp-4); }
+      .stack { display: grid; gap: var(--sp-4); }
+      .key { width: 120px; height: 120px; border-radius: 12px; display: grid; place-items: center; gap: 4px; align-content: center; font-weight: 700; font-size: 18px; border: 1px solid #00000066; }
+      .key .pk-ico { width: 44px; height: 44px; }
+      .key .pk-ico-mask, .key .pk-ico img { width: 40px; height: 40px; }
+      pre { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 data-i18n="picker.page.title">Pickers</h1>
+      <p class="hint" data-i18n="picker.page.intro">Reusable pickers for the key inspector, shown with live values.</p>
+      <div class="grid">
+        <section class="card"><h2 data-i18n="picker.page.action">Action</h2><div id="actionHost"></div></section>
+        <section class="card"><h2 data-i18n="picker.page.icon">Icon</h2><div id="iconHost"></div></section>
+        <div class="stack">
+          <section class="card"><h2 data-i18n="picker.page.background">Background colour</h2><div id="bgHost"></div></section>
+          <section class="card"><h2 data-i18n="picker.page.text">Text colour</h2><div id="fgHost"></div></section>
+        </div>
+        <div class="stack">
+          <section class="card"><h2 data-i18n="picker.page.preview">Preview</h2><div class="key" id="key"><span id="keyIcon"></span><span id="keyLabel"></span></div></section>
+          <section class="card"><h2 data-i18n="picker.page.selected">Selected values</h2><pre id="out"></pre></section>
+        </div>
+      </div>
+    </div>
+    <script src="/assets/ui/i18n.js"></script>
+    <script type="module">
+      import { createActionPicker } from "/assets/ui/js/pickers/action-picker.js";
+      import { createIconGallery } from "/assets/ui/js/pickers/icon-gallery.js";
+      import { createColorPicker } from "/assets/ui/js/pickers/color-picker.js";
+      import { renderIcon } from "/assets/ui/js/pickers/common.js";
+
+      const sel = { action: "", icon: "lucide:play", bg: "#1f6fe0", fg: "#ffffff" };
+      const out = document.getElementById("out");
+      function show() {
+        out.textContent = JSON.stringify(sel, null, 2);
+        const key = document.getElementById("key");
+        key.style.background = sel.bg;
+        key.style.color = sel.fg;
+        renderIcon(document.getElementById("keyIcon"), sel.icon);
+        document.getElementById("keyLabel").textContent = sel.action ? sel.action.split(".").pop() : "";
+        window.__pickers = sel;
+      }
+
+      await i18n.ready;
+      const catalog = (await (await fetch("/api/action_catalog")).json()).actions;
+      const bgPicker = createColorPicker(document.getElementById("bgHost"), { value: sel.bg, against: sel.fg, onChange: (c) => { sel.bg = c; fgPicker.setAgainst(c); show(); } });
+      const fgPicker = createColorPicker(document.getElementById("fgHost"), { value: sel.fg, against: sel.bg, onChange: (c) => { sel.fg = c; bgPicker.setAgainst(c); show(); } });
+      const gallery = createIconGallery(document.getElementById("iconHost"), { value: sel.icon, onChange: (v) => { sel.icon = v; show(); } });
+      createActionPicker(document.getElementById("actionHost"), {
+        catalog,
+        value: sel.action,
+        lang: document.documentElement.lang,
+        onChange: (type, a) => {
+          sel.action = type;
+          const look = a.default_look || {};
+          if (look.icon) (sel.icon = look.icon, gallery.setValue(look.icon));
+          if (look.bg) (sel.bg = look.bg, bgPicker.setValue(look.bg), fgPicker.setAgainst(look.bg));
+          if (look.fg) (sel.fg = look.fg, fgPicker.setValue(look.fg), bgPicker.setAgainst(look.fg));
+          show();
+        },
+      });
+      show();
+      window.__pickersReady = true;
+    </script>
+  </body>
+</html>
