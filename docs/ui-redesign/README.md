@@ -67,9 +67,13 @@ it owns.
 | `shell.js`, `status.js` | Tab bar; status pills and the 1.5 s `/api/status` poll |
 | `pages.js` | Page rail and header, page ↔ agent `page_index` sync |
 | `deck.js` | Deck picture (`#deckRoot`), key previews, media backgrounds, drag-swap; a click emits `control:open` |
-| `inspector/editor.js` | Key editor: open a control, build the entry, autosave while typing, Apply / Clear, uploads |
-| `inspector/look-fields.js`, `inspector/preview.js` | Look form I/O (text, colours, gradients, animations); live preview |
-| `inspector/panel.js`, `inspector/clipboard.js` | Editor chrome (which panel, button states); copy / paste |
+| `inspector/index.js` | Inspector panel: empty state, `control:open` / `knob:open` routing, `registerInspectorView(name, {render, destroy, refresh?})` |
+| `inspector/key-view.js` | One control: header (copy / paste / clear), step 1 (action picker + parameters), steps 2 and 3 |
+| `inspector/appearance.js`, `inspector/advanced.js` | Step 2 (live preview, proposed / modified fields, live pair, overflow); step 3 (animations, gradients, font, layout, JSON, test press) |
+| `inspector/page-button-view.js` | Live S round buttons: light colour only |
+| `inspector/entry.js`, `inspector/edit.js` | Stored-config contract (which keys make a field "modified"); the single edit path (Undo snapshot, save, device refresh) |
+| `inspector/preview.js`, `inspector/controls.js`, `inspector/dom.js` | `/api/preview_key` + `/api/resolve_look` clients, animations; control kinds and names; small DOM helpers |
+| `inspector/panel.js`, `inspector/clipboard.js` | Panel/button states shared with pages.js and knobs.js; copy / paste / clear |
 | `catalog.js`, `action-fields.js`, `key-sequence.js` | Action-type picker; catalog-driven parameter forms; key recorder |
 | `knobs.js` | Encoder editor (dial pages, rotate actions, test buttons, all-encoders JSON) |
 | `services/*.js` | One per Services section: `backups`, `spotify`, `twitch`, `obs`, `ha`, `logging`, `system` |
@@ -87,5 +91,5 @@ python scripts/ui_smoke.py http://127.0.0.1:8775            # [--chromium PATH] 
 
 It loads the page, fails on any console error, uncaught page error or failed request (the browser's automatic
 `/favicon.ico` request excepted; `--ignore-external` also tolerates other origins such as web fonts when offline),
-clicks both tabs, selects `touch_0`, picks an action type in the picker, presses Ctrl+Z, checks the saved config is
+clicks both tabs, selects `touch_0`, picks an action in the inspector's action picker, presses Ctrl+Z, checks the saved config is
 unchanged and prints `OK` (exit code 0) or `FAILED` with the reasons (exit code 1).

@@ -1,19 +1,20 @@
 /*
- * inspector/clipboard.js — Copy / paste a control's entry between keys (persisted in localStorage).
+ * inspector/clipboard.js — Copy / paste a control's entry between keys (persisted in localStorage) and
+ * clear a control. Used by the inspector header buttons.
  */
 
-import { refreshSkin } from "../api.js";
-import { renderDeck } from "../deck.js";
-import { openEditor } from "./editor.js";
-import { syncCopyPasteButtons } from "./panel.js";
-import { canPasteToControl, getButtonEntry, isLiveSPageSwitchButton, setButtonEntry } from "../model.js";
-import { cancelPendingAutosave, runAutosave, setSaveStatus } from "../save.js";
+import { canPasteToControl, getButtonEntry, isLiveSPageSwitchButton } from "../model.js";
+import { setSaveStatus } from "../save.js";
 import { state } from "../state.js";
-import { $, deepCloneJson } from "../util.js";
+import { deepCloneJson } from "../util.js";
+import { controlName } from "./controls.js";
+import { editEntry } from "./edit.js";
+
+const STORAGE_KEY = "ld_clipboard_control_v1";
 
 export function loadCopiedControlFromStorage() {
   try {
-    const raw = localStorage.getItem("ld_clipboard_control_v1");
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const j = JSON.parse(raw);
     if (!j || typeof j !== "object") return;
@@ -26,62 +27,48 @@ export function loadCopiedControlFromStorage() {
 
 function saveCopiedControlToStorage() {
   try {
-    localStorage.setItem(
-      "ld_clipboard_control_v1",
-      JSON.stringify({ entry: state.copiedControlEntry, meta: state.copiedControlMeta })
-    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ entry: state.copiedControlEntry, meta: state.copiedControlMeta }));
   } catch {
-    /* ignore */
+    /* private mode / blocked storage: the clipboard still works for this session */
   }
 }
 
-/** Key editor: copy / paste a control (clipboard persisted in localStorage). */
-export function wireCopyPasteButtons() {
-  const btnCopyControl = $("#btnCopyControl");
-  const btnPasteControl = $("#btnPasteControl");
-  if (btnCopyControl) {
-    btnCopyControl.addEventListener("click", () => {
-      if (!state.selectedControl) return;
-      const e = getButtonEntry(state.selectedControl);
-      if (!e) return;
-      state.copiedControlEntry = deepCloneJson(e);
-      state.copiedControlMeta = {
-        cid: state.selectedControl,
-        at: Date.now(),
-      };
-      saveCopiedControlToStorage();
-      setSaveStatus(`Copied ${state.selectedControl}`);
-      syncCopyPasteButtons();
-    });
-  }
-  if (btnPasteControl) {
-    btnPasteControl.addEventListener("click", () => {
-      if (!state.selectedControl || !state.copiedControlEntry) return;
-      if (!canPasteToControl(state.selectedControl)) return;
-      const err = $("#editError");
-      if (err) err.textContent = "";
-      void (async () => {
-        try {
-          const entry = deepCloneJson(state.copiedControlEntry);
-          // Live S page-switch buttons are reserved for page switching; only LED color is editable.
-          if (isLiveSPageSwitchButton(state.selectedControl)) {
-            const c = entry && entry.button_color ? String(entry.button_color).trim() : "";
-            if (c) setButtonEntry(state.selectedControl, { button_color: c });
-            else setButtonEntry(state.selectedControl, null);
-          } else {
-            setButtonEntry(state.selectedControl, entry);
-          }
-          renderDeck();
-          openEditor(state.selectedControl);
-          cancelPendingAutosave();
-          const ok = await runAutosave();
-          if (!ok) return;
-          await refreshSkin();
-          setSaveStatus(`Pasted onto ${state.selectedControl}`);
-        } catch (e) {
-          if (err) err.textContent = String(e);
-        }
-      })();
-    });
-  }
+export function copyControl(cid) {
+  const e = cid && getButtonEntry(cid);
+  if (!e) return false;
+  state.copiedControlEntry = deepCloneJson(e);
+  state.copiedControlMeta = { cid, at: Date.now() };
+  saveCopiedControlToStorage();
+  setSaveStatus(t("inspector.copy.done", { name: controlName(cid) }));
+  return true;
+}
+
+export function canPaste(cid) {
+  return !!(cid && state.copiedControlEntry && canPasteToControl(cid));
+}
+
+export function pasteControl(cid) {
+  if (!canPaste(cid)) return false;
+  const src = deepCloneJson(state.copiedControlEntry);
+  editEntry(cid, (e) => {
+    for (const k of Object.keys(e)) delete e[k];
+    // Page buttons only switch pages: only their light colour can be pasted.
+    if (isLiveSPageSwitchButton(cid)) {
+      const c = src && src.button_color ? String(src.button_color).trim() : "";
+      if (c) e.button_color = c;
+    } else {
+      Object.assign(e, src);
+    }
+  });
+  setSaveStatus(t("inspector.paste.done", { name: controlName(cid) }));
+  return true;
+}
+
+export function clearControl(cid) {
+  if (!cid || !getButtonEntry(cid)) return false;
+  editEntry(cid, (e) => {
+    for (const k of Object.keys(e)) delete e[k];
+  });
+  setSaveStatus(t("inspector.clear.done", { name: controlName(cid) }));
+  return true;
 }

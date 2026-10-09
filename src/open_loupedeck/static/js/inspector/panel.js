@@ -1,10 +1,12 @@
 /*
- * inspector/panel.js — Inspector chrome shared by the key and encoder editors: which panel is shown,
- * page-switch-button mode, button enabled states, the sticky autosave/validation line.
+ * inspector/panel.js — Inspector chrome shared with other modules: which block of the panel is shown
+ * (the inspector or the legacy encoder editor) and the enabled state of the header buttons (copy /
+ * paste / clear) and of the test-press button. Modules that change the selection (pages.js, knobs.js)
+ * call these; the inspector re-syncs itself through the "inspector:sync" event.
  */
 
-import { canPasteToControl, controlCanSimulate, getButtonEntry, isLiveSPageSwitchButton } from "../model.js";
-import { state } from "../state.js";
+import { canPasteToControl, controlCanSimulate, getButtonEntry } from "../model.js";
+import { emit, state } from "../state.js";
 import { $ } from "../util.js";
 
 export function syncTestPressButton() {
@@ -12,45 +14,25 @@ export function syncTestPressButton() {
   if (!btn) return;
   const ok = controlCanSimulate(state.selectedControl);
   btn.disabled = !state.selectedControl || !ok;
-  btn.title = ok
-    ? "Run the same action as a physical press on this control (no USB)"
-    : "Side strips are not simulated (hardware uses touch coordinates)";
 }
 
 export function syncCopyPasteButtons() {
+  const sel = state.selectedControl;
   const bCopy = $("#btnCopyControl");
   const bPaste = $("#btnPasteControl");
-  if (bCopy) bCopy.disabled = !state.selectedControl || !getButtonEntry(state.selectedControl);
-  if (bPaste) {
-    const ok = !!state.selectedControl && !!state.copiedControlEntry && canPasteToControl(state.selectedControl);
-    bPaste.disabled = !ok;
-  }
+  const bClear = $("#btnClearControl");
+  if (bCopy) bCopy.disabled = !sel || !getButtonEntry(sel);
+  if (bClear) bClear.disabled = !sel || !getButtonEntry(sel);
+  if (bPaste) bPaste.disabled = !(sel && state.copiedControlEntry && canPasteToControl(sel));
+  // The selection may have been changed by another module (page switch): let the inspector follow.
+  emit("inspector:sync");
 }
 
-export function syncKeyEditorPageSwitchMode(cid) {
-  const pageSwitch = !!cid && isLiveSPageSwitchButton(cid);
-  const def = $("#keyEditorDefaultHint");
-  const psh = $("#keyEditorPageSwitchHint");
-  const act = $("#keyEditorActionAndAdv");
-  const tg = $("#keyEditorTouchGraphicFields");
-  const prev = $("#keyEditorPreviewHint");
-  if (def) def.hidden = pageSwitch;
-  if (psh) psh.hidden = !pageSwitch;
-  if (act) act.hidden = pageSwitch;
-  if (tg) tg.hidden = pageSwitch;
-  if (prev) prev.hidden = pageSwitch;
-}
-
+/** Show the inspector (and hide the legacy encoder editor). */
 export function showKeyEditorPanel() {
   const k = $("#keyEditorBlock");
   const kn = $("#knobEncoderEditorBlock");
   if (k) k.hidden = false;
   if (kn) kn.hidden = true;
-}
-
-export function setEditorAutosaveStatus(message) {
-  const el = $("#editorAutosaveStatus");
-  if (!el) return;
-  el.textContent = message || "";
-  el.classList.toggle("invalid", !!message);
+  emit("inspector:sync");
 }
