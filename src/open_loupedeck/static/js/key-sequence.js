@@ -57,7 +57,7 @@ export function renderKeySequenceChips(chipsEl, hiddenEl) {
   if (steps.length === 0) {
     const empty = document.createElement("span");
     empty.className = "key-sequence-empty";
-    empty.textContent = "No keys recorded yet";
+    empty.textContent = t("inspector.keyseq.empty");
     chipsEl.appendChild(empty);
     return;
   }
@@ -70,7 +70,8 @@ export function renderKeySequenceChips(chipsEl, hiddenEl) {
     rm.type = "button";
     rm.className = "key-chip-remove";
     rm.textContent = "×";
-    rm.title = "Remove this key";
+    rm.title = t("inspector.keyseq.remove");
+    rm.setAttribute("aria-label", rm.title);
     rm.addEventListener("click", () => {
       const cur = keySequenceStepsFromHidden(hiddenEl);
       cur.splice(i, 1);
@@ -89,7 +90,7 @@ export function stopKeySequenceRecording() {
   activeKeySequenceRecorder = null;
   if (rec.timeoutId) clearTimeout(rec.timeoutId);
   if (rec.wrapEl) rec.wrapEl.classList.remove("recording");
-  if (rec.recordBtn) rec.recordBtn.textContent = "● Record";
+  if (rec.recordBtn) rec.recordBtn.textContent = t("inspector.keyseq.record");
 }
 
 // Safety net: recording left on by accident (e.g. the user wandered off without clicking Stop)
@@ -101,7 +102,7 @@ function startKeySequenceRecording(wrapEl, hiddenEl, chipsEl, recordBtn) {
   stopKeySequenceRecording(); // only one recorder active at a time
   ensureKeySequenceGlobalListener();
   wrapEl.classList.add("recording");
-  recordBtn.textContent = "■ Stop";
+  recordBtn.textContent = t("inspector.keyseq.stop");
   activeKeySequenceRecorder = {
     wrapEl,
     hiddenEl,
@@ -162,11 +163,11 @@ export function renderKeySequenceField(wrap, f, idPrefix) {
   const recordBtn = document.createElement("button");
   recordBtn.type = "button";
   recordBtn.className = "btn-record";
-  recordBtn.textContent = "● Record";
+  recordBtn.textContent = t("inspector.keyseq.record");
   const clearBtn = document.createElement("button");
   clearBtn.type = "button";
   clearBtn.className = "btn-clear-seq";
-  clearBtn.textContent = "Clear";
+  clearBtn.textContent = t("inspector.keyseq.clear");
 
   recordBtn.addEventListener("click", () => {
     if (activeKeySequenceRecorder && activeKeySequenceRecorder.hiddenEl === hidden) {
@@ -186,7 +187,7 @@ export function renderKeySequenceField(wrap, f, idPrefix) {
 
   const hint = document.createElement("p");
   hint.className = "hint key-sequence-hint";
-  hint.textContent = "Click Record, then press the keys in this window, in order. Click Stop when done.";
+  hint.textContent = t("inspector.keyseq.hint");
 
   fieldWrap.appendChild(hidden);
   fieldWrap.appendChild(chips);
