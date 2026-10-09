@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import colorsys
 import contextlib
+import json
 import logging
 import math
 import os
 import shutil
 import sys
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +101,20 @@ def _font_candidates() -> tuple[str, ...]:
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    )
+
+
+def _bold_font_candidates() -> tuple[str, ...]:
+    if sys.platform == "win32":
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        return (str(Path(windir) / "Fonts" / "segoeuib.ttf"), str(Path(windir) / "Fonts" / "arialbd.ttf"))
+    if sys.platform == "darwin":
+        return ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/Library/Fonts/Arial Bold.ttf")
+    return (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
     )
 
 
@@ -211,7 +228,16 @@ def _resolve_font_path(raw: str | None, config_dir: Path) -> str | None:
     return None
 
 
-def _load_font(size: int, resolved_font_path: str | None) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _load_font(
+    size: int, resolved_font_path: str | None, *, bold: bool = False
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    if bold and not resolved_font_path:
+        for path in _bold_font_candidates():
+            if Path(path).is_file():
+                try:
+                    return ImageFont.truetype(path, size=size)
+                except Exception:
+                    logger.debug("Could not load font %s", path, exc_info=True)
     if resolved_font_path:
         try:
             return ImageFont.truetype(resolved_font_path, size=size)
@@ -254,6 +280,114 @@ def _wrap_lines(
     return out
 
 
+AUTOSIZE_MAX_LINES = 3
+MIN_FONT_SIZE = 8
+# Text mode is meant to be read at a glance: below this a 90px key label is not legible, so a word
+# that only fits smaller than this is reported as overflow (and drawn clipped at this size).
+TEXT_MODE_MIN_SIZE = 14
+KEY_PREVIEW_MODES = ("text", "icon", "both")
+
+
+def _fit_text(
+    text: str,
+    resolved_font_path: str | None,
+    max_w: int,
+    max_h: int,
+    *,
+    bold: bool = False,
+    max_lines: int = AUTOSIZE_MAX_LINES,
+    max_size: int | None = None,
+    min_size: int = MIN_FONT_SIZE,
+    gap: int = 2,
+) -> tuple[int, list[str], bool]:
+    """Largest font size whose wrapped text fits ``max_w`` x ``max_h`` in <= ``max_lines`` lines.
+
+    Returns ``(size, lines, fits)``; when nothing fits, ``(min_size, lines_at_min_size, False)``.
+    """
+
+    draw = ImageDraw.Draw(Image.new("L", (1, 1)))
+    top = max_size if max_size else max(min_size, max_h)
+    top = max(top, min_size)
+    lines: list[str] = []
+    for fs in range(top, min_size - 1, -1):
+        font = _load_font(fs, resolved_font_path, bold=bold)
+        lines = _wrap_lines(text, font, draw, max_w)
+        if not lines:
+            return fs, [], True
+        if len(lines) > max_lines:
+            continue
+        boxes = [draw.textbbox((0, 0), ln, font=font) for ln in lines]
+        total_h = sum(b[3] - b[1] for b in boxes) + gap * (len(lines) - 1)
+        if total_h <= max_h and max(b[2] - b[0] for b in boxes) <= max_w:
+            return fs, lines, True
+    return min_size, lines, False
+
+
+def _split_geometry(w: int, h: int) -> tuple[int, int, int, int]:
+    """``(icon_h, gap, text_top, text_bottom)`` of the split (graphic top / text bottom) layout."""
+
+    gap = max(1, min(w, h) // 24)
+    text_band = max(min(int(h * 0.32), max(20, h // 3)), 11)
+    if text_band + gap >= h - 4:
+        text_band = max(10, h // 4)
+    icon_h = max(1, h - text_band - gap)
+    ty_top = max(0, min(icon_h + gap + SPLIT_TEXT_BAND_OFFSET_Y, h - 6))
+    ty_bottom = max(ty_top + 4, min(h + SPLIT_TEXT_BAND_OFFSET_Y, h))
+    return icon_h, gap, ty_top, ty_bottom
+
+
+def measure_label(
+    text: str,
+    mode: str = "text",
+    size_px: int | tuple[int, int] = 90,
+    font_path: str | None = None,
+    font_size_cap: int | None = None,
+) -> dict[str, Any]:
+    """Would ``text`` fit on a key in ``mode``?  Pure (no icon loading).
+
+    ``mode``: ``text`` (centered, auto-sized, <= 3 lines), ``plain`` (the device's default centered text, no
+    preview mode), ``both`` (small label in the split
+    layout's bottom band, <= 2 lines), ``icon`` (no label: always fits).  A word that does not
+    fit on one line at the minimum font size counts as clipped; text needing more lines or
+    height than available at that size also does not fit.
+
+    Returns ``{"fits": bool, "clipped_words": [...], "lines": int, "font_size": int}``.
+    """
+
+    w, h = (size_px, size_px) if isinstance(size_px, int) else size_px
+    text = (text or "").strip()
+    if mode == "icon" or not text:
+        return {"fits": True, "clipped_words": [], "lines": 0, "font_size": 0}
+    if mode == "both":
+        _icon_h, _gap, ty_top, ty_bottom = _split_geometry(w, h)
+        max_w = w - 2 * max(2, min(w, h) // 14)
+        max_h = max(4, min(ty_bottom, h) - max(2, min(w, h) // 16) - (ty_top + 1))
+        max_lines, gap, bold, min_size = 2, 1, False, MIN_FONT_SIZE
+        max_size: int | None = min(font_size_cap or 14, 22)
+    elif mode == "plain":
+        # Device default for centered text (no preview mode): capped size, regular weight, any lines.
+        margin = max(4, min(w, h) // 14)
+        max_w, max_h = w - 2 * margin, h - 2 * margin
+        max_lines, gap, bold, min_size = 99, 2, False, 8
+        max_size = min(font_size_cap or min(22, h // 3, w // 4), 28)
+    else:
+        margin = max(4, min(w, h) // 14)
+        max_w, max_h = w - 2 * margin, h - 2 * margin
+        max_lines, gap, bold, min_size = AUTOSIZE_MAX_LINES, 2, True, TEXT_MODE_MIN_SIZE
+        max_size = font_size_cap or None
+    fs, lines, fits = _fit_text(
+        text, font_path, max_w, max_h, bold=bold, max_lines=max_lines, max_size=max_size, gap=gap, min_size=min_size
+    )
+    draw = ImageDraw.Draw(Image.new("L", (1, 1)))
+    font = _load_font(fs, font_path, bold=bold)
+    clipped = []
+    for wd in dict.fromkeys(text.split()):
+        bb = draw.textbbox((0, 0), wd, font=font)
+        if bb[2] - bb[0] > max_w:
+            clipped.append(wd)
+    return {"fits": fits and not clipped, "clipped_words": clipped, "lines": len(lines), "font_size": fs}
+
+
 def _draw_multiline_center(
     img: Image.Image,
     text: str,
@@ -264,6 +398,7 @@ def _draw_multiline_center(
     gradient: Image.Image | None = None,
     offset: tuple[int, int] = (0, 0),
     alpha_scale: float = 1.0,
+    autosize: bool = False,
 ) -> None:
     w, h = img.size
     mask = Image.new("L", (w, h), 0)
@@ -271,6 +406,20 @@ def _draw_multiline_center(
     margin = max(4, min(w, h) // 14)
     max_w = w - 2 * margin
     max_h = h - 2 * margin
+    if autosize:
+        # Preview "text" mode: biggest bold font that fits in at most AUTOSIZE_MAX_LINES lines.
+        fs, lines, _fits = _fit_text(
+            text, resolved_font_path, max_w, max_h, bold=True, max_size=font_size_cap, min_size=TEXT_MODE_MIN_SIZE
+        )
+        font = _load_font(fs, resolved_font_path, bold=True)
+        boxes = [draw.textbbox((0, 0), ln, font=font) for ln in lines]
+        total_h = sum(b[3] - b[1] for b in boxes) + 2 * max(0, len(lines) - 1)
+        y = (h - total_h) // 2
+        for ln, b in zip(lines, boxes, strict=True):
+            draw.text(((w - (b[2] - b[0])) // 2 - b[0], y - b[1]), ln, font=font, fill=255)
+            y += b[3] - b[1] + 2
+        _composite_fill_through_mask(img, mask, fg, gradient, offset, alpha_scale)
+        return
     cap = font_size_cap or min(22, h // 3, w // 4)
 
     for fs in range(min(cap, 28), 7, -1):
@@ -655,9 +804,18 @@ def render_tactile_key_image(
     *,
     animation_frame: int | None = None,
     press_elapsed_frames: int | None = None,
+    graphic_scale: float | None = None,
+    text_autosize: bool = False,
+    suppress_graphic: bool = False,
+    suppress_text: bool = False,
 ) -> Image.Image | None:
     """
     Build a PIL image for one key.
+
+    Preview-oriented keyword options (used by :func:`render_key_preview`; defaults keep the
+    device behaviour unchanged): ``graphic_scale`` draws the graphic as a centred square of that
+    fraction of the key's short side; ``text_autosize`` fits the biggest bold font (<= 3 lines)
+    for centered text; ``suppress_graphic`` / ``suppress_text`` ignore the graphic / text.
 
     - ``text`` / ``label``: with a graphic, layout is controlled by ``graphic_text_layout`` (see
       ``_graphic_text_layout_mode``); with no graphic, text is centered on the key.
@@ -686,8 +844,8 @@ def render_tactile_key_image(
       is used as the key graphic automatically.
     """
 
-    text = (entry.get("text") or entry.get("label") or "").strip()
-    raw_img = effective_graphic_source(entry)
+    text = "" if suppress_text else (entry.get("text") or entry.get("label") or "").strip()
+    raw_img = None if suppress_graphic else effective_graphic_source(entry)
     has_bg_grad = (
         _gradient_spec_from_entry(
             entry, "background_gradient_from", "background_gradient_to", "background_gradient_angle"
@@ -710,11 +868,7 @@ def render_tactile_key_image(
 
     base = _resolve_background(entry, size, bg, animation_frame)
 
-    gap = max(1, min(w, h) // 24)
-    text_band = max(min(int(h * 0.32), max(20, h // 3)), 11)
-    if text_band + gap >= h - 4:
-        text_band = max(10, h // 4)
-    icon_h = max(1, h - text_band - gap)
+    icon_h, _gap, _split_top, _split_bottom = _split_geometry(w, h)
 
     layout_overlay = bool(text and raw_img and _graphic_text_layout_mode(entry) == "overlay")
 
@@ -738,6 +892,11 @@ def render_tactile_key_image(
             inner_w = max(1, w - 2 * pad)
             inner_h = max(8, icon_h - 2 * pad - SPLIT_GRAPHIC_OFFSET_Y)
         paste_xy = (pad, pad)
+        if graphic_scale:
+            side = max(8, round(min(w, h) * graphic_scale))
+            inner_w = inner_h = side
+            region_h = h if (not text or layout_overlay) else _split_top
+            paste_xy = ((w - side) // 2, max(0, (region_h - side) // 2))
         graphic = _load_graphic_rgba(
             rs,
             config_dir,
@@ -769,11 +928,8 @@ def render_tactile_key_image(
             if top_graphic.size != (inner_w, inner_h):
                 top_graphic = ImageOps.fit(top_graphic, (inner_w, inner_h), method=Image.Resampling.LANCZOS)
             gx, gy = paste_xy
-            base.paste(top_graphic, (gx, gy + SPLIT_GRAPHIC_OFFSET_Y), top_graphic)
-            ty_top = icon_h + gap + SPLIT_TEXT_BAND_OFFSET_Y
-            ty_bottom = h + SPLIT_TEXT_BAND_OFFSET_Y
-            ty_top = max(0, min(ty_top, h - 6))
-            ty_bottom = max(ty_top + 4, min(ty_bottom, h))
+            base.paste(top_graphic, (gx, gy + (0 if graphic_scale else SPLIT_GRAPHIC_OFFSET_Y)), top_graphic)
+            ty_top, ty_bottom = _split_top, _split_bottom
             _draw_multiline_bottom_band(
                 base,
                 text,
@@ -801,9 +957,174 @@ def render_tactile_key_image(
             gradient=text_gradient,
             offset=text_offset,
             alpha_scale=text_alpha_scale,
+            autosize=text_autosize,
         )
 
     return _apply_whole_key_press_effect(base, entry, press_elapsed_frames)
+
+
+OFFLINE_BG_DIM = 0.45
+OFFLINE_FG_DIM = 0.55
+_OFFLINE_BG_KEYS = ("background", "background_gradient_from", "background_gradient_to")
+_OFFLINE_FG_KEYS = ("text_color", "text_gradient_from", "text_gradient_to")
+
+
+def _dim_color_hex(raw: Any, fallback: tuple[int, int, int, int], factor: float) -> str:
+    r, g, b, _a = _parse_color(raw, fallback)
+    return f"#{round(r * factor):02x}{round(g * factor):02x}{round(b * factor):02x}"
+
+
+def offline_look(entry: dict[str, Any]) -> dict[str, Any]:
+    """Copy of ``entry`` with background/foreground colours dimmed (the "offline" look of a live key)."""
+
+    out = dict(entry)
+    for k in _OFFLINE_BG_KEYS:
+        if k == "background" or out.get(k):
+            out[k] = _dim_color_hex(out.get(k), (26, 26, 46, 255), OFFLINE_BG_DIM)
+    for k in _OFFLINE_FG_KEYS:
+        if k == "text_color" or out.get(k):
+            out[k] = _dim_color_hex(out.get(k), (255, 255, 255, 255), OFFLINE_FG_DIM)
+    return out
+
+
+def normalize_preview_mode(mode: Any, entry: dict[str, Any]) -> str | None:
+    """``text`` / ``icon`` / ``both`` as given, or None (= keep the entry's own device behaviour)."""
+
+    m = str(mode or "").strip().lower()
+    return m if m in KEY_PREVIEW_MODES else None
+
+
+def render_key_preview(
+    entry: dict[str, Any],
+    config_dir: Path,
+    size: tuple[int, int] = DEFAULT_KEY_SIZE,
+    *,
+    mode: str | None = None,
+    offline: bool = False,
+    animation_frame: int | None = None,
+    press_elapsed_frames: int | None = None,
+) -> tuple[Image.Image | None, dict[str, Any]]:
+    """Render a key for the editor and measure its label.  Returns ``(image, measurement)``.
+
+    ``mode`` maps onto the existing render options (no second layout engine):
+
+    - ``None``: exactly :func:`render_tactile_key_image` (device behaviour, incl.
+      ``graphic_text_layout``).
+    - ``text``: graphic ignored; text centred, bold, auto-sized as large as fits (<= 3 lines).
+    - ``icon``: text ignored; graphic fills ~66% of the key (``graphic_scale=0.66``).
+    - ``both``: the existing ``split`` layout (graphic top, label in the bottom band) with the
+      graphic at ~40% of the key (``graphic_scale=0.4``); ``graphic_text_layout`` is overridden.
+
+    ``offline`` dims background/text colours (:func:`offline_look`).  With an explicit ``mode`` but
+    no content the key is a plain background rectangle; without ``mode``, nothing to render gives
+    ``None`` (the endpoint's 404, as before).
+    """
+
+    m = normalize_preview_mode(mode, entry)
+    ent = offline_look(entry) if offline else dict(entry)
+    kwargs: dict[str, Any] = {"animation_frame": animation_frame, "press_elapsed_frames": press_elapsed_frames}
+    if m == "text":
+        kwargs.update(suppress_graphic=True, text_autosize=True)
+    elif m == "icon":
+        kwargs.update(suppress_text=True, graphic_scale=0.66)
+    elif m == "both":
+        ent["graphic_text_layout"] = "split"
+        kwargs.update(graphic_scale=0.4)
+    img = render_tactile_key_image(ent, config_dir, size=size, **kwargs)
+    if img is None and m is not None:
+        img = Image.new("RGBA", size, _parse_color(ent.get("background"), (26, 26, 46, 255)))
+    text = "" if m == "icon" else str(entry.get("text") or entry.get("label") or "").strip()
+    has_graphic = effective_graphic_source(entry) is not None
+    split = _graphic_text_layout_mode(entry) == "split"
+    eff_mode = m or ("both" if text and has_graphic and split else "plain")
+    measure = measure_label(
+        text,
+        eff_mode,
+        size,
+        _resolve_font_path(entry.get("font_file"), config_dir),
+        None if m == "text" else _int_or_none(entry.get("font_size")),
+    )
+    return img, measure
+
+
+def _int_or_none(v: Any) -> int | None:
+    try:
+        return int(v) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+class PreviewCache:
+    """Small thread-safe LRU of rendered previews (``key -> (png_bytes, measurement)``)."""
+
+    def __init__(self, maxsize: int = 256) -> None:
+        self.maxsize = maxsize
+        self._data: OrderedDict[str, tuple[bytes, dict[str, Any]]] = OrderedDict()
+        self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, key: str) -> tuple[bytes, dict[str, Any]] | None:
+        with self._lock:
+            hit = self._data.get(key)
+            if hit is None:
+                self.misses += 1
+                return None
+            self._data.move_to_end(key)
+            self.hits += 1
+            return hit
+
+    def put(self, key: str, value: tuple[bytes, dict[str, Any]]) -> None:
+        with self._lock:
+            self._data[key] = value
+            self._data.move_to_end(key)
+            while len(self._data) > self.maxsize:
+                self._data.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+
+def _file_stamp(raw: Any, config_dir: Path) -> list[Any]:
+    """``[raw, mtime_ns]`` for a path-like value so edits to the file invalidate cached previews."""
+
+    if raw is None or not str(raw).strip():
+        return []
+    rs = str(raw).strip()
+    p = None if looks_like_icon_uri(rs) else resolve_graphic_load_path(rs, config_dir)
+    if p is None:
+        p = Path(rs).expanduser() if not looks_like_icon_uri(rs) else None
+    try:
+        return [rs, p.stat().st_mtime_ns] if p is not None and p.is_file() else [rs]
+    except OSError:
+        return [rs]
+
+
+def preview_cache_key(
+    entry: dict[str, Any],
+    config_dir: Path,
+    size: tuple[int, int],
+    mode: str | None,
+    offline: bool,
+) -> str:
+    """Normalized, order-independent key for a (static) preview request."""
+
+    stamps = [
+        _file_stamp(effective_graphic_source(entry), config_dir),
+        _file_stamp(entry.get("font_file"), config_dir),
+    ]
+    payload = {
+        "e": entry,
+        "s": list(size),
+        "m": normalize_preview_mode(mode, entry),
+        "o": bool(offline),
+        "f": stamps,
+    }
+    return json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
 
 
 def key_size_for_control(control_id: str) -> tuple[int, int]:
