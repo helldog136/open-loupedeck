@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open-Loupedeck components</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="/assets/ui/tokens.css" />
+    <link rel="stylesheet" href="/assets/ui/components.css" />
+    <style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--font); padding: 0 var(--sp-4) var(--sp-6); }
+      .wrap { max-width: 960px; margin: 0 auto; }
+      h1 { font-size: 22px; margin: var(--sp-5) 0 var(--sp-2); }
+      h2 { font: 500 11px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: var(--sp-5) 0 var(--sp-2); }
+      .row { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; padding: var(--sp-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); }
+      .col { display: grid; gap: var(--sp-2); width: 100%; max-width: 360px; }
+      .lbl { font: 500 11px var(--mono); color: var(--muted); }
+      .tok { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+      .tok div { width: 96px; font: 500 10px var(--mono); color: var(--muted); }
+      .tok b { display: block; height: 36px; border-radius: var(--r-md); border: 1px solid var(--line); margin-bottom: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Components</h1>
+      <p class="hint">Every reusable component in every state. Served at /assets/ui/components.html.</p>
+
+      <h2>Tokens</h2>
+      <div class="row tok">
+        <div><b style="background: var(--bg)"></b>--bg</div>
+        <div><b style="background: var(--surface)"></b>--surface</div>
+        <div><b style="background: var(--surface-2)"></b>--surface-2</div>
+        <div><b style="background: var(--line)"></b>--line</div>
+        <div><b style="background: var(--fg)"></b>--fg</div>
+        <div><b style="background: var(--muted)"></b>--muted</div>
+        <div><b style="background: var(--accent)"></b>--accent</div>
+        <div><b style="background: var(--ok)"></b>--ok</div>
+        <div><b style="background: var(--bad)"></b>--bad</div>
+      </div>
+
+      <h2>Buttons</h2>
+      <div class="row">
+        <button class="btn btn-primary">Primary</button>
+        <button class="btn btn-secondary">Secondary</button>
+        <button class="btn btn-danger">Danger</button>
+        <button class="btn btn-ghost">Ghost</button>
+        <button class="btn btn-link">Link</button>
+        <button class="btn btn-sm">Small</button>
+      </div>
+      <div class="row" style="margin-top: 8px">
+        <button class="btn btn-primary" disabled>Primary disabled</button>
+        <button class="btn btn-secondary" disabled>Secondary disabled</button>
+        <button class="btn btn-danger" disabled>Danger disabled</button>
+        <button class="btn btn-ghost" disabled>Ghost disabled</button>
+        <button class="btn btn-secondary" id="focusDemo">Focus me (Tab)</button>
+      </div>
+
+      <h2>Text input, textarea, select</h2>
+      <div class="row">
+        <div class="col"><span class="lbl">default</span><input type="text" placeholder="Placeholder" /></div>
+        <div class="col"><span class="lbl">filled</span><input type="text" value="Mute microphone" /></div>
+        <div class="col"><span class="lbl">invalid</span><input type="text" class="is-invalid" value="not-a-colour" /></div>
+        <div class="col"><span class="lbl">disabled</span><input type="text" value="Locked" disabled /></div>
+        <div class="col"><span class="lbl">textarea</span><textarea rows="2">Multi-line text</textarea></div>
+        <div class="col">
+          <span class="lbl">select</span>
+          <select>
+            <option>Auto (USB PID if available)</option>
+            <option>Loupedeck Live S</option>
+            <option>Loupedeck Live (original)</option>
+          </select>
+        </div>
+        <div class="col"><span class="lbl">select disabled</span><select disabled><option>Disabled</option></select></div>
+      </div>
+
+      <h2>Checkbox, radio, toggle</h2>
+      <div class="row">
+        <label><input type="checkbox" /> Unchecked</label>
+        <label><input type="checkbox" checked /> Checked</label>
+        <label><input type="checkbox" disabled /> Disabled</label>
+        <label><input type="radio" name="r" /> Radio</label>
+        <label><input type="radio" name="r" checked /> Radio on</label>
+        <label class="toggle"><input type="checkbox" aria-label="Toggle off" /><span></span></label>
+        <label class="toggle"><input type="checkbox" checked aria-label="Toggle on" /><span></span></label>
+        <label class="toggle"><input type="checkbox" disabled aria-label="Toggle disabled" /><span></span></label>
+      </div>
+
+      <h2>Colour swatches</h2>
+      <div class="row">
+        <div class="swatches" id="swatches">
+          <button class="sw" style="background: #ffb020" aria-pressed="true" aria-label="Amber"></button>
+          <button class="sw" style="background: #3b6bff" aria-pressed="false" aria-label="Blue"></button>
+          <button class="sw" style="background: #e040c8" aria-pressed="false" aria-label="Magenta"></button>
+          <button class="sw" style="background: #2de0c0" aria-pressed="false" aria-label="Teal"></button>
+          <button class="sw" style="background: #ff6b6b" aria-pressed="false" aria-label="Red"></button>
+          <button class="sw" style="background: #ffffff" aria-pressed="false" aria-label="White"></button>
+          <button class="sw" style="background: #000000" aria-pressed="false" aria-label="Black"></button>
+        </div>
+      </div>
+
+      <h2>Segmented control</h2>
+      <div class="row">
+        <div class="seg" role="tablist">
+          <button role="tab" aria-selected="true">Buttons</button>
+          <button role="tab" aria-selected="false">Services</button>
+        </div>
+        <div class="seg">
+          <button aria-pressed="false">Text</button>
+          <button aria-pressed="true">Icon</button>
+          <button aria-pressed="false">Both</button>
+        </div>
+      </div>
+
+      <h2>Chips</h2>
+      <div class="row">
+        <div class="chips">
+          <button aria-pressed="true">Selected</button>
+          <button aria-pressed="false">Idle</button>
+          <button aria-pressed="false">Another</button>
+          <button class="add">+ Add</button>
+        </div>
+      </div>
+
+      <h2>Status pill</h2>
+      <div class="row">
+        <button class="pill ok"><i></i>Loupedeck Live S</button>
+        <button class="pill bad"><i></i>OBS <em>Connect</em></button>
+        <button class="pill"><i></i>Home Assistant <em>Set up</em></button>
+        <span class="pill ok"><i></i>Static ok</span>
+      </div>
+
+      <h2>Card and accordion</h2>
+      <div class="row">
+        <div class="card col" style="max-width: 420px">
+          <h3>Card title</h3>
+          <p class="hint" style="margin: 0">Panels group a step or a settings block.</p>
+        </div>
+        <div class="col" style="max-width: 420px">
+          <details class="acc" open>
+            <summary>Advanced (open)</summary>
+            <div class="acc-body"><span class="hint">Content of the accordion.</span><input type="text" value="Field" /></div>
+          </details>
+          <details class="acc">
+            <summary>Advanced (closed)</summary>
+            <div class="acc-body">Hidden content.</div>
+          </details>
+        </div>
+      </div>
+
+      <h2>Tags and hints</h2>
+      <div class="row">
+        <span class="tag proposed">proposed</span>
+        <span class="tag modified">modified <button type="button">reset</button></span>
+        <span class="hint">Hint text sits below a field.</span>
+        <span class="msg-warn">Warning: text may overflow the key.</span>
+        <span class="msg-error">Error: could not save.</span>
+        <span class="mono">mono label</span>
+      </div>
+    </div>
+    <script>
+      /* trivial toggles for the gallery only */
+      document.querySelectorAll(".swatches").forEach(function (g) {
+        g.addEventListener("click", function (e) {
+          var b = e.target.closest(".sw");
+          if (!b) return;
+          g.querySelectorAll(".sw").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+        });
+      });
+      document.querySelectorAll(".seg, .chips").forEach(function (g) {
+        g.addEventListener("click", function (e) {
+          var b = e.target.closest("button");
+          if (!b || b.classList.contains("add")) return;
+          var attr = b.hasAttribute("aria-selected") ? "aria-selected" : "aria-pressed";
+          g.querySelectorAll("button").forEach(function (x) { if (x.hasAttribute(attr)) x.setAttribute(attr, String(x === b)); });
+        });
+      });
+    </script>
+  </body>
+</html>
