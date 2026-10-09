@@ -24,7 +24,12 @@ from fastapi.staticfiles import StaticFiles
 
 from . import autostart
 from .action_catalog import merged_catalog
-from .button_render import key_size_for_control, render_tactile_key_image
+from .button_render import (
+    PreviewCache,
+    key_size_for_control,
+    preview_cache_key,
+    render_key_preview,
+)
 from .config_backup import create_rotating_backup, list_backups, restore_backup, wipe_backups
 from .config_io import default_raw_config, ensure_minimal_structure, save_raw_config
 from .config_paths import ensure_application_dirs
@@ -40,6 +45,8 @@ from .live_message import (
     live_message_params_from_entry,
     obs_scene_params_from_entry,
     obs_stream_params_from_entry,
+    offline_fallback_mode,
+    offline_fallback_text,
     preview_storage_key,
     prune_stale_live_message_keys,
     twitch_live_params_from_entry,
@@ -701,6 +708,8 @@ def create_web_app(
         mime, _ = mimetypes.guess_type(str(p))
         return FileResponse(p, media_type=mime or "application/octet-stream")
 
+    preview_cache = PreviewCache()
+
     @app.post("/api/preview_key")
     async def preview_key(
         body: dict[str, Any] = Body(...),
@@ -728,6 +737,12 @@ def create_web_app(
 
         animation_frame = _as_optional_int(body.get("animation_frame"))
         press_elapsed_frames = _as_optional_int(body.get("press_elapsed_frames"))
+        mode = str(body.get("mode") or "").strip().lower() or None
+        if mode is not None and mode not in ("text", "icon", "both"):
+            raise HTTPException(400, "body.mode must be one of text, icon, both")
+        offline = body.get("offline") is True
+        live_value = body.get("live_value")
+        live_value = None if live_value is None else str(live_value)
 
         async with lock:
             ent = dict(entry)
@@ -779,22 +794,63 @@ def create_web_app(
                 cparams = clock_params_from_entry(ent)
                 if cparams is not None:
                     ent["text"] = format_clock_overlay_text(cparams)
+            is_live = any(
+                f(entry)
+                for f in (
+                    live_message_params_from_entry,
+                    twitch_live_params_from_entry,
+                    obs_stream_params_from_entry,
+                    obs_scene_params_from_entry,
+                    battery_params_from_entry,
+                    ha_sensor_params_from_entry,
+                    ha_weather_params_from_entry,
+                    clock_params_from_entry,
+                )
+            )
+            if is_live:
+                if live_value is not None:
+                    ent["text"] = live_value
+                if offline:
+                    act = ent.get("action")
+                    fb = offline_fallback_mode(act if isinstance(act, dict) else ent)
+                    ent["text"] = offline_fallback_text(fb, live_value or str(ent.get("text") or ""))
             entry = ent
 
-        def _render():
-            return render_tactile_key_image(
+        def _render() -> tuple[bytes, dict[str, Any]]:
+            img, measure = render_key_preview(
                 entry,
                 config_dir,
                 size=size,
+                mode=mode,
+                offline=offline,
                 animation_frame=animation_frame,
                 press_elapsed_frames=press_elapsed_frames,
             )
+            if img is None:
+                return b"", measure
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue(), measure
 
-        img = await asyncio.to_thread(_render)
-        if img is None:
+        # Animated previews (idle/press frames) are never cached: every frame is different.
+        cacheable = animation_frame is None and press_elapsed_frames is None
+        ckey = preview_cache_key(entry, config_dir, size, mode, offline) if cacheable else ""
+        cached = preview_cache.get(ckey) if cacheable else None
+        if cached is None:
+            cached = await asyncio.to_thread(_render)
+            if cacheable:
+                preview_cache.put(ckey, cached)
+        png, measure = cached
+        if not png:
             raise HTTPException(404, "Nothing to render for this entry")
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return Response(content=buf.getvalue(), media_type="image/png")
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={
+                "X-Key-Overflow": "0" if measure["fits"] else "1",
+                "X-Key-Lines": str(measure["lines"]),
+                "Access-Control-Expose-Headers": "X-Key-Overflow, X-Key-Lines",
+            },
+        )
 
     return app
