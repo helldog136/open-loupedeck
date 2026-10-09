@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "open-loupedeck"
-version = "0.1.0"
+version = "0.2.0"
 description = "Loupedeck daemon for Windows, macOS, Linux: OBS, HTTP, sounds, web UI, shell commands"
 readme = "README.md"
 requires-python = ">=3.10"
