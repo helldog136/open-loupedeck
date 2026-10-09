@@ -72,6 +72,7 @@ Then `run_actions` executes the list (OBS, Home Assistant, HTTP, sound, …) in 
 
 | Key | Purpose |
 |---|---|
+| `language` | UI language: `auto` (OS language, default) or a code from `src/open_loupedeck/locales/` such as `en`, `fr`. |
 | `logging` | Console + rotating file logs. |
 | `obs` | OBS WebSocket host, port, password. |
 | `ha` | Home Assistant base URL + long-lived access token. |

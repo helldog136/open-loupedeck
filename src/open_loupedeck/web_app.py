@@ -31,6 +31,7 @@ from .config_paths import ensure_application_dirs
 from .config_state import ConfigState
 from .control_ids import is_page_scoped_control
 from .hardware.live_s_device import LoupedeckLiveS
+from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
 from .live_message import (
     battery_params_from_entry,
     clock_params_from_entry,
@@ -129,6 +130,40 @@ def create_web_app(
             await ws.close(code=1011)
             return
         await hub.handle_connection(ws)
+
+    @app.get("/api/locales")
+    async def api_locales() -> JSONResponse:
+        async with lock:
+            setting = str(state.raw.get("language") or "auto")
+        return JSONResponse(
+            {
+                "languages": available_languages(),
+                "current": get_language(),
+                "setting": setting,
+                "detected": resolve_language("auto"),
+            }
+        )
+
+    @app.put("/api/language")
+    async def put_language(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        value = str(body.get("language") or "").strip()
+        known = {d["code"] for d in available_languages()}
+        if value != "auto" and value not in known:
+            raise HTTPException(400, t("error.unknown_language"))
+        async with lock:
+            raw = ensure_minimal_structure(dict(state.raw))
+            raw["language"] = value
+            save_raw_config(config_path, raw)
+            state.replace_raw(raw)
+        current = set_language_from_raw(raw)
+        return JSONResponse({"ok": True, "setting": value, "current": current})
+
+    @app.get("/api/locale/{code}")
+    async def api_locale(code: str) -> JSONResponse:
+        known = {d["code"] for d in available_languages()}
+        if code not in known:
+            raise HTTPException(404, t("error.not_found"))
+        return JSONResponse(messages_for(code))
 
     @app.get("/api/status")
     async def api_status() -> JSONResponse:
@@ -261,7 +296,7 @@ def create_web_app(
         try:
             await asyncio.to_thread(_open)
         except Exception as exc:
-            raise HTTPException(500, f"Could not open folder: {exc}") from exc
+            raise HTTPException(500, t("error.open_folder", error=exc)) from exc
         return JSONResponse({"ok": True, "path": str(folder)})
 
     @app.get("/api/autostart")
@@ -281,15 +316,15 @@ def create_web_app(
 
         raw = body.get("index")
         if raw is None:
-            raise HTTPException(400, "index required")
+            raise HTTPException(400, t("error.index_required"))
         try:
             ix = int(raw)
         except (TypeError, ValueError):
-            raise HTTPException(400, "index must be an integer") from None
+            raise HTTPException(400, t("error.index_integer")) from None
         async with lock:
             pages_list = state.raw.get("pages") or []
             if not isinstance(pages_list, list) or len(pages_list) == 0:
-                raise HTTPException(400, "no pages in config")
+                raise HTTPException(400, t("error.no_pages"))
             state.page_index = ix % len(pages_list)
             out_idx = state.page_index
         if on_refresh:
@@ -297,7 +332,7 @@ def create_web_app(
                 await on_refresh()
             except Exception:
                 logger.exception("on_refresh failed after page_index change")
-                raise HTTPException(500, "refresh failed") from None
+                raise HTTPException(500, t("error.refresh_failed")) from None
         return JSONResponse({"ok": True, "page_index": out_idx})
 
     @app.post("/api/simulate_press")
@@ -306,7 +341,7 @@ def create_web_app(
 
         sim = rt.simulate_raw_message
         if sim is None:
-            raise HTTPException(503, "Simulate not available (agent not ready)")
+            raise HTTPException(503, t("error.simulate_unavailable"))
         cid = str(body.get("control_id") or "").strip()
         raw_dir = body.get("direction")
         direction: str | None = None
@@ -318,7 +353,7 @@ def create_web_app(
         if msg is None:
             raise HTTPException(
                 400,
-                "Unsupported control_id (side strips cannot be simulated from the UI)",
+                t("error.unsupported_control"),
             )
         try:
             await sim(msg)
@@ -375,7 +410,7 @@ def create_web_app(
         if not sp.is_configured():
             raise HTTPException(
                 status_code=400,
-                detail="Set spotify.client_id and spotify.redirect_uri (use the form in the UI or YAML)",
+                detail=t("error.spotify_not_configured"),
             )
         try:
             url, _state = sp.build_authorize_url()
@@ -420,13 +455,13 @@ def create_web_app(
         try:
             i = int(ix)
         except (TypeError, ValueError):
-            raise HTTPException(400, "account index required") from None
+            raise HTTPException(400, t("error.account_index_required")) from None
         if accounts:
             if not 0 <= i < len(accounts):
-                raise HTTPException(400, "unknown Twitch account")
+                raise HTTPException(400, t("error.unknown_twitch_account"))
             return accounts[i]
         if i != 0:
-            raise HTTPException(400, "unknown Twitch account")
+            raise HTTPException(400, t("error.unknown_twitch_account"))
         return {}
 
     @app.get("/api/twitch/status")
@@ -476,12 +511,15 @@ def create_web_app(
     @app.put("/api/config")
     async def put_config(body: dict[str, Any]) -> JSONResponse:
         if not isinstance(body, dict):
-            raise HTTPException(400, "JSON object required")
+            raise HTTPException(400, t("error.json_object_required"))
         merged = ensure_minimal_structure(body)
         merged, _ = materialize_external_media(merged, config_dir)
         n_pages = len(merged.get("pages") or []) if isinstance(merged.get("pages"), list) else 0
         logger.debug("PUT /api/config pages=%s path=%s", n_pages, config_path)
         async with lock:
+            # The UI language is owned by PUT /api/language; a stale full-config autosave from
+            # another tab/module must not silently revert it.
+            merged["language"] = state.raw.get("language") or "auto"
             save_raw_config(config_path, merged)
             state.replace_raw(merged)
             prune_stale_live_message_keys(dict(state.raw), rt)
@@ -495,6 +533,7 @@ def create_web_app(
                 await rt.obs.update_credentials(new_settings.obs.host, new_settings.obs.port, new_settings.obs.password)
             if rt.ha is not None and new_settings.ha is not None:
                 rt.ha.update_credentials(new_settings.ha.base_url, new_settings.ha.token)
+        set_language_from_raw(merged)
         try:
             reapply_logging_from_config(
                 merged,
@@ -530,7 +569,7 @@ def create_web_app(
 
         name = str(body.get("name") or "").strip()
         if not name:
-            raise HTTPException(400, "name required")
+            raise HTTPException(400, t("error.name_required"))
 
         async with lock:
 
@@ -545,6 +584,7 @@ def create_web_app(
             prune_stale_live_message_keys(dict(state.raw), rt)
             fresh = dict(state.raw)
 
+        set_language_from_raw(fresh)
         try:
             reapply_logging_from_config(
                 fresh,
@@ -559,7 +599,7 @@ def create_web_app(
                 await on_refresh()
             except Exception:
                 logger.exception("on_refresh failed after config restore")
-                raise HTTPException(500, "refresh failed") from None
+                raise HTTPException(500, t("error.refresh_failed")) from None
         return JSONResponse({"ok": True, **result, "config": fresh})
 
     @app.post("/api/config/backups/wipe")
@@ -580,6 +620,7 @@ def create_web_app(
                 return wipe_backups(config_path, max_keep=3)
 
             result = await asyncio.to_thread(_wipe)
+        set_language_from_raw(merged)
         try:
             reapply_logging_from_config(
                 merged,
@@ -596,7 +637,7 @@ def create_web_app(
         """Reset deck layout (touch pages) to defaults; preserve other config (e.g. Spotify)."""
 
         if not isinstance(body, dict) or not body.get("confirm"):
-            raise HTTPException(400, "confirm=true required")
+            raise HTTPException(400, t("error.confirm_required"))
 
         async with lock:
             current = ensure_minimal_structure(dict(state.raw))
@@ -621,7 +662,7 @@ def create_web_app(
                 await on_refresh()
             except Exception:
                 logger.exception("on_refresh failed after config reset")
-                raise HTTPException(500, "refresh failed") from None
+                raise HTTPException(500, t("error.refresh_failed")) from None
         return JSONResponse({"ok": True, **result})
 
     @app.post("/api/refresh_skin")
@@ -632,7 +673,7 @@ def create_web_app(
                 await on_refresh()
             except Exception as e:
                 logger.exception("refresh_skin failed")
-                raise HTTPException(500, "refresh failed") from e
+                raise HTTPException(500, t("error.refresh_failed")) from e
         return JSONResponse({"ok": True})
 
     @app.post("/api/upload")
@@ -653,7 +694,7 @@ def create_web_app(
         elif lib in ("font", "fonts"):
             sub = "fonts"
         else:
-            raise HTTPException(400, "library= must be images, videos, sounds, or fonts")
+            raise HTTPException(400, t("error.bad_library"))
         if sub == "fonts":
             name = file.filename or "font.ttf"
             name = SAFE_NAME.sub("_", Path(name).name)
@@ -663,7 +704,7 @@ def create_web_app(
             if suf not in FONT_FILE_EXT:
                 raise HTTPException(
                     400,
-                    f"Font uploads must be {', '.join(sorted(FONT_FILE_EXT))}",
+                    t("error.font_extensions", extensions=", ".join(sorted(FONT_FILE_EXT))),
                 )
         else:
             name = file.filename or "image.png"
@@ -678,7 +719,7 @@ def create_web_app(
         max_bytes = 512 * 1024 * 1024 if sub == "videos" else 12 * 1024 * 1024
         if len(data) > max_bytes:
             cap = "512MB" if sub == "videos" else "12MB"
-            raise HTTPException(413, f"File too large (max {cap})")
+            raise HTTPException(413, t("error.file_too_large", max=cap))
         dest.write_bytes(data)
         rel = f"library/{sub}/{unique}"
         return JSONResponse({"path": rel, "name": unique})
@@ -690,14 +731,14 @@ def create_web_app(
         logger.debug("GET /api/local-file path=%s", path)
         raw = path.strip().replace("\\", "/")
         if not raw or raw.startswith("/") or ".." in raw.split("/"):
-            raise HTTPException(403, "Invalid path")
+            raise HTTPException(403, t("error.invalid_path"))
         p = (config_dir / raw).resolve()
         try:
             p.relative_to(config_dir)
         except ValueError as e:
-            raise HTTPException(403, "Invalid path") from e
+            raise HTTPException(403, t("error.invalid_path")) from e
         if not p.is_file():
-            raise HTTPException(404, "Not found")
+            raise HTTPException(404, t("error.not_found"))
         mime, _ = mimetypes.guess_type(str(p))
         return FileResponse(p, media_type=mime or "application/octet-stream")
 
@@ -715,7 +756,7 @@ def create_web_app(
 
         entry = body.get("entry")
         if not isinstance(entry, dict):
-            raise HTTPException(400, "body.entry must be an object")
+            raise HTTPException(400, t("error.entry_object"))
         cid = str(body.get("control_id") or "touch_0")
         size = key_size_for_control(cid)
 
@@ -792,7 +833,7 @@ def create_web_app(
 
         img = await asyncio.to_thread(_render)
         if img is None:
-            raise HTTPException(404, "Nothing to render for this entry")
+            raise HTTPException(404, t("error.nothing_to_render"))
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return Response(content=buf.getvalue(), media_type="image/png")
