@@ -5,8 +5,8 @@
  *   p.setValue(type)   p.focus()   p.destroy()
  *
  * `catalog` is the `actions` array of GET /api/action_catalog. `onChange(type, action)` fires only on user picks.
- * Labels / categories use the translation keys `catalog.action.<type>` and `catalog.category.<slug>` when they
- * exist (falling back to the catalog text), so the list follows the app language. Recent picks (5) and
+ * Labels arrive already translated from the server (`?lang=`); categories are slugs shown through `category.<slug>` when
+ * translated (falling back to the slug). Re-feed the catalog with setCatalog() on language change. Recent picks (5) and
  * favourites live in localStorage; both are optional and silently skipped when storage is unavailable.
  */
 
@@ -46,8 +46,8 @@ export function createActionPicker(container, opts = {}) {
   const root = el("div", { class: "pk-ap" }, el("div", { class: "pk-search-wrap" }, search, hint), list);
   container.append(root);
 
-  const labelOf = (a) => (lang && a.labels && a.labels[lang]) || tr(`catalog.action.${a.type}`, a.label || a.type);
-  const categoryOf = (a) => tr(`catalog.category.${slug(a.category)}`, a.category || "");
+  const labelOf = (a) => (lang && a.labels && a.labels[lang]) || a.label || a.type;
+  const categoryOf = (a) => tr(`category.${a.category}`, a.category || "");
   const lookOf = (a) => a.default_look || {};
   const byType = (type) => catalog.find((a) => a.type === type);
   const fieldsOf = (a) => ({

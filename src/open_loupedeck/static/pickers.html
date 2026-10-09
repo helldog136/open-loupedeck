@@ -67,7 +67,7 @@
       const bgPicker = createColorPicker(document.getElementById("bgHost"), { value: sel.bg, against: sel.fg, onChange: (c) => { sel.bg = c; fgPicker.setAgainst(c); show(); } });
       const fgPicker = createColorPicker(document.getElementById("fgHost"), { value: sel.fg, against: sel.bg, onChange: (c) => { sel.fg = c; bgPicker.setAgainst(c); show(); } });
       const gallery = createIconGallery(document.getElementById("iconHost"), { value: sel.icon, onChange: (v) => { sel.icon = v; show(); } });
-      createActionPicker(document.getElementById("actionHost"), {
+      const actionPicker = createActionPicker(document.getElementById("actionHost"), {
         catalog,
         value: sel.action,
         lang: document.documentElement.lang,
@@ -81,6 +81,7 @@
         },
       });
       show();
+      document.addEventListener("i18n:change", async () => actionPicker.setCatalog((await (await fetch("/api/action_catalog")).json()).actions));
       window.__pickersReady = true;
     </script>
   </body>
