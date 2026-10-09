@@ -1,0 +1,49 @@
+/* Design tokens. Dark theme only. Shared by style.css, components.css and components.html. */
+:root {
+  /* colour */
+  --bg: #0c0f14;
+  --surface: #141922;
+  --surface-2: #1b2230;
+  --line: #262e3d;
+  --line-strong: #3a4458;
+  --fg: #e8ecf4;
+  --muted: #8b95a8;
+  --accent: #ffb020;
+  --accent-ink: #1a1203;
+  --accent-soft: #3a2c08;
+  --ok: #3ddc97;
+  --bad: #ff6b6b;
+  --bad-soft: #3a1717;
+  --device-bg: #07090d;
+  --screen-bg: #000;
+
+  /* typography */
+  --font: "Hanken Grotesk", system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-lg: 17px;
+
+  /* spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 40px;
+
+  /* radius */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 26px;
+  --r-pill: 999px;
+
+  /* depth */
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+
+  --knob-face: radial-gradient(circle at 35% 30%, #2f394d, #10141c);
+
+  color-scheme: dark;
+}

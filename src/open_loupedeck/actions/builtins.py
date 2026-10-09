@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import shutil
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +16,7 @@ from ..platform_volume import (
     mute_output,
     set_output_volume_percent,
 )
+from ..sound_player import get_player, normalize_mode
 from .registry import ActionContext, register_action
 
 logger = logging.getLogger(__name__)
@@ -38,6 +37,43 @@ class ObsSetScene:
         cur = await obs.get_current_program_scene()
         if cur and cur != target:
             raise RuntimeError(f"OBS did not switch scene (current={cur!r}, target={target!r})")
+
+
+def next_scene_name(names: list[str], current: str, step: int, wrap: bool = True) -> str | None:
+    """Scene ``step`` positions away from ``current`` in ``names`` (OBS dock order); ``None`` = stay."""
+
+    if not names or step == 0:
+        return None
+    try:
+        i = names.index(current)
+    except ValueError:
+        return names[0] if step > 0 else names[-1]
+    j = i + step
+    if wrap:
+        j %= len(names)
+    elif j < 0 or j >= len(names):
+        return None
+    return names[j] if names[j] != current else None
+
+
+@register_action("obs.scene_step")
+class ObsSceneStep:
+    """Switch to the previous (``step: -1``) or next (``step: 1``) scene of the OBS Scenes dock.
+
+    Used by the "OBS scene" knob duo; wraps around at the ends unless ``wrap: false``.
+    """
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        step = int(float(params.get("step", 1) or 0))
+        obs = ctx.obs
+        if obs is None:
+            raise RuntimeError("OBS is not configured (obs section missing in config)")
+        names = await obs.get_scene_names()
+        current = await obs.get_current_program_scene()
+        wrap = params.get("wrap", True) not in (False, "false", "0", 0)
+        target = next_scene_name(names, current, step, wrap)
+        if target:
+            await obs.set_current_program_scene(target)
 
 
 @register_action("obs.toggle_mute")
@@ -266,42 +302,35 @@ class SoundMuteToggle:
 
 @register_action("sound.play")
 class SoundPlay:
+    """Fire-and-forget playback (overlaps allowed); ``mode`` play | toggle | restart; ``volume`` 0-100."""
+
     async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
         path = params.get("file") or params.get("path")
         if not path:
             raise ValueError("sound.play requires file")
         resolved = _resolve_sound_file(str(path), ctx.config_dir)
-        player = str(params.get("player", "auto"))
-        cmd = _resolve_player_command(player, resolved)
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
+        if not Path(resolved).is_file():
+            raise FileNotFoundError(f"sound file not found: {resolved}")
+        mode = normalize_mode(params.get("mode"))
+        volume = params.get("volume")
+        owner = ctx.source_storage_key or ctx.source_control_id
+        key = f"{owner}|{resolved}" if owner else resolved
+        await asyncio.to_thread(
+            get_player().play,
+            resolved,
+            100 if volume in (None, "") else volume,
+            mode,
+            key,
+            str(params.get("player") or "auto"),
         )
-        _, err = await proc.communicate()
-        if proc.returncode != 0:
-            msg = err.decode(errors="replace") if err else ""
-            raise RuntimeError(f"sound player exited {proc.returncode}: {msg}")
 
 
-def _resolve_player_command(player: str, path: str) -> list[str]:
-    if player == "auto":
-        names: list[str] = []
-        if sys.platform == "darwin":
-            names.append("afplay")
-        names.extend(["mpv", "paplay", "aplay", "ffplay"])
-        for name in names:
-            p = shutil.which(name)
-            if p:
-                if name == "mpv":
-                    return [p, "--no-video", "--really-quiet", path]
-                if name == "ffplay":
-                    return [p, "-nodisp", "-autoexit", "-loglevel", "quiet", path]
-                return [p, path]
-        extra = " On Windows/macOS install mpv or FFmpeg (ffplay), or on macOS rely on afplay."
-        raise RuntimeError("No supported player found (mpv, ffplay, paplay, aplay, afplay)." + extra)
-    exe = shutil.which(player) or player
-    return [exe, path]
+@register_action("sound.stop_all")
+class SoundStopAll:
+    """Stop every sound started by ``sound.play`` or the library preview."""
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        await asyncio.to_thread(get_player().stop_all)
 
 
 @register_action("display.live_message")

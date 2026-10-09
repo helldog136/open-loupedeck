@@ -1,0 +1,133 @@
+/* Key inspector (static/js/inspector/*): header, three step cards, appearance fields, Advanced.
+   Depends on tokens.css + components.css (+ pickers.css for the pickers it hosts). */
+
+#mount-inspector.insp-host {
+  position: sticky;
+  top: 0.5rem;
+  max-height: calc(100vh - 1rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-width: 0;
+  padding: 2px;
+}
+@media (max-width: 960px) {
+  #mount-inspector.insp-host { position: static; max-height: none; overflow: visible; }
+}
+
+.insp { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.insp[hidden] { display: none; }
+.insp-view { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* header */
+.insp-head { display: flex; align-items: center; gap: var(--sp-3); padding: 2px 4px 0; }
+.insp-head-text { display: grid; min-width: 0; flex: 1; }
+.insp-title { margin: 0; font-size: var(--fs-lg); font-weight: 700; overflow-wrap: anywhere; }
+.insp-scope { font-size: var(--fs-xs); color: var(--muted); }
+.insp-tools { display: flex; gap: 2px; flex: none; }
+.insp-tool { width: 34px; height: 34px; padding: 0; border-radius: var(--r-md); }
+.insp-svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.btn .insp-svg, .btn-sm .insp-svg { width: 15px; height: 15px; }
+
+/* step cards */
+.insp-step { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--sp-4); display: grid; gap: var(--sp-3); min-width: 0; }
+.insp-step > h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 10px; line-height: 1.3; }
+.insp-step > h3 b, .insp-num {
+  width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line);
+  display: inline-grid; place-items: center; font: 500 11px var(--mono); color: var(--accent);
+}
+.insp-step.is-dim > :not(h3) { opacity: 0.6; }
+.insp-step.is-dim > h3 { opacity: 0.55; }
+.insp-empty, .insp-empty-state { display: grid; gap: 4px; justify-items: center; text-align: center; color: var(--muted); padding: 22px 8px; font-size: var(--fs-sm); }
+.insp-empty strong, .insp-empty-state strong { color: var(--fg); font-size: var(--fs-md); }
+.insp-empty-state { padding: 36px 16px; }
+.insp-empty-deck { display: grid; grid-template-columns: repeat(3, 22px); gap: 5px; margin-bottom: 10px; }
+.insp-empty-deck span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--bg); }
+.insp-empty-deck span:nth-child(5) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.insp-help, .insp-step > p { margin: 0; }
+.insp-note { margin: 0; padding: 0 4px; }
+
+/* step 1: parameter fields (catalog-driven, see action-fields.js) */
+.insp-params:empty { display: none; }
+.insp-params.action-fields { margin: 0; gap: var(--sp-3); }
+.insp-params .field-label { font-size: 12px; gap: 6px; }
+.insp-params .field-label input, .insp-params .field-label select, .insp-params .field-label textarea,
+.insp-params .path-with-browse input[type="text"] { font-size: var(--fs-sm); border-radius: var(--r-md); padding: 8px 12px; }
+.insp-params .field-help { margin: 4px 0 0; }
+.insp-params .btn-browse { padding: 6px 12px; }
+
+/* step 2: summary */
+.insp-look { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.insp-big { margin: 0; width: 92px; height: 92px; flex: none; border-radius: 10px; overflow: hidden; background: var(--screen-bg); border: 1px solid #00000066; display: grid; place-items: center; position: relative; }
+.insp-big img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.insp-big.is-strip { width: 52px; height: 200px; }
+.insp-big-empty { position: absolute; inset: 0; background: repeating-linear-gradient(45deg, var(--surface-2) 0 6px, var(--bg) 6px 12px); opacity: 0.5; }
+.insp-big-empty[hidden] { display: none; }
+.insp-look-text { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-sm); color: var(--muted); }
+.insp-look-title { color: var(--fg); font-size: 14px; }
+.insp-look-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; }
+.insp-look-actions .btn-link { font-size: var(--fs-sm); }
+.insp-sep { color: var(--muted); }
+.insp-sep[hidden], .insp-look-actions [hidden] { display: none; }
+
+.insp-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.insp-pair[hidden] { display: none; }
+.insp-pair figure { margin: 0; display: grid; gap: 4px; justify-items: center; font-size: var(--fs-xs); color: var(--muted); }
+.insp-pair img { width: 64px; height: 64px; border-radius: 8px; background: var(--screen-bg); object-fit: contain; }
+.insp-pair .hint { max-width: 18ch; }
+
+.insp-warn { display: grid; gap: 8px; margin: 0; }
+.insp-warn[hidden] { display: none; }
+.insp-warn-fixes { display: flex; flex-wrap: wrap; gap: 6px; }
+.insp-warn-fixes [hidden] { display: none; }
+
+/* step 2: fields */
+.insp-custom { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 14px; }
+.insp-custom[hidden], .insp-row[hidden], .insp-step [hidden] { display: none; }
+.insp-row { display: grid; gap: 6px; min-width: 0; }
+.insp-row-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); }
+.insp-row-label { font-size: 12px; color: var(--muted); }
+.insp-reset { font-size: 10px; cursor: pointer; }
+.insp-seg { max-width: 100%; flex-wrap: wrap; justify-self: start; }
+.insp-seg button { padding: 5px 14px; font-size: var(--fs-sm); }
+.insp-pick { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.insp-tile { width: 34px; height: 34px; flex: none; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); display: inline-grid; place-items: center; color: var(--fg); }
+.insp-tile .pk-ico-mask, .insp-tile img { width: 20px; height: 20px; }
+.insp-tile.is-empty { border-style: dashed; }
+.insp-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.insp-pop { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--sp-3); min-width: 0; }
+
+/* step 3: Advanced */
+.insp-adv > summary > span { display: inline-flex; align-items: center; gap: 10px; }
+.insp-adv-body { gap: var(--sp-4); }
+.insp-group { border: 0; margin: 0; padding: 0; display: grid; gap: var(--sp-2); min-width: 0; }
+.insp-group + .insp-group { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.insp-group > h4 { margin: 0; font-size: var(--fs-sm); font-weight: 600; color: var(--fg); }
+.insp-group > .btn, .insp-group > button { justify-self: start; }
+.insp-field { display: grid; gap: 4px; min-width: 0; }
+.insp-field > label { font-size: 12px; color: var(--muted); }
+.insp-field[hidden] { display: none; }
+.insp-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-2) var(--sp-3); }
+.insp-grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-2) var(--sp-3); align-items: end; }
+.insp-subgroup { display: grid; gap: 6px; }
+.insp-subhead { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--fg); min-height: 26px; }
+.insp-stop-row { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.insp-well { width: 34px; height: 34px; flex: none; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); cursor: pointer; }
+.insp-hex { min-width: 0; }
+.insp-browse { display: flex; gap: 6px; align-items: center; min-width: 0; }
+.insp-browse input[type="text"] { flex: 1; }
+.insp-json { min-height: 120px; font-size: 12px; }
+.insp-json-msg { margin: 0; }
+.insp-json-msg.is-error { color: var(--bad); }
+.insp-group .hint, .insp-group p { margin: 0; }
+
+/* page buttons: light colour */
+.insp-led-wrap { display: inline-flex; align-items: center; gap: 10px; }
+.insp-led { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--led, var(--muted)); background: #0b0e14; box-shadow: 0 0 10px var(--led, transparent); flex: none; }
+
+@media (max-width: 480px) {
+  .insp-step { padding: var(--sp-3); }
+  .insp-look { gap: 10px; }
+  .insp-big { width: 80px; height: 80px; }
+}
+.insp-picker .pk-list { max-height: 248px; }

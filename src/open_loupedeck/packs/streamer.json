@@ -1,0 +1,27 @@
+{
+  "id": "streamer",
+  "name_key": "pack.streamer.name",
+  "description_key": "pack.streamer.desc",
+  "icon": "lucide:radio",
+  "services": ["obs", "twitch"],
+  "pages": [
+    {
+      "keys": {
+        "1": {"action": {"type": "obs.set_scene", "scene": "Game"}, "background": "#1f6fe0", "text_color": "#ffffff"},
+        "2": {"action": {"type": "obs.set_scene", "scene": "Chat"}, "background": "#0e8fa3", "text_color": "#ffffff"},
+        "3": {"action": {"type": "obs.set_scene", "scene": "Cam"}, "background": "#2e9b47", "text_color": "#ffffff"},
+        "4": {"action": {"type": "obs.set_scene", "scene": "Desk"}, "background": "#b8941a", "text_color": "#ffffff"},
+        "6": {"action": {"type": "obs.set_scene", "scene": "BRB"}, "background": "#d9822b", "text_color": "#ffffff"},
+        "7": {"action": {"type": "obs.set_scene", "scene": "Ending"}, "text_key": "pack.streamer.key.end", "background": "#c2562a", "text_color": "#ffffff"},
+        "8": {"action": {"type": "obs.toggle_mute", "input_name": "Mic/Aux"}, "text_key": "pack.streamer.key.mic"},
+        "9": {"action": {"type": "display.twitch_live", "login": ""}},
+        "10": {"action": {"type": "display.obs_scene"}},
+        "14": {"action": {"type": "display.clock", "time_format": "%H:%M", "date_format": "%a %d %b"}}
+      },
+      "knobs": {
+        "knobTL": {"rotate": {"duo": "system_volume", "params": {"step": 5}}, "press": {"type": "sound.mute_toggle"}},
+        "knobCL": {"rotate": {"duo": "obs_scene"}}
+      }
+    }
+  ]
+}

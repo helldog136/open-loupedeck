@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from .config import DeviceConfig, HaConfig, ObsConfig, Settings
+from .knob_roles import migrate_legacy_knob_pages
 
 
 def load_raw_config(path: Path) -> dict[str, Any]:
@@ -91,6 +92,8 @@ def raw_to_settings(raw: dict[str, Any]) -> Settings:
 
 def default_raw_config() -> dict[str, Any]:
     return {
+        "language": "auto",
+        "onboarding_done": False,
         "logging": {
             "dir": "",
             "level": "INFO",
@@ -102,7 +105,6 @@ def default_raw_config() -> dict[str, Any]:
         "device": {"path": "", "baudrate": None, "model": "auto"},
         "plugin_modules": [],
         "global_buttons": {},
-        "knob_pages": {},
         "pages": [
             {
                 "id": 0,
@@ -202,6 +204,9 @@ def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
         out["obs"] = {"host": "127.0.0.1", "port": 4455, "password": ""}
     if "ha" not in out or not isinstance(out["ha"], dict):
         out["ha"] = {"base_url": "", "token": ""}
+    if not isinstance(out.get("language"), str) or not out["language"].strip():
+        out["language"] = "auto"
+    out["onboarding_done"] = out.get("onboarding_done") is True
     if "logging" not in out:
         out["logging"] = {
             "dir": "",
@@ -211,13 +216,13 @@ def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
         }
     if "global_buttons" not in out or not isinstance(out["global_buttons"], dict):
         out["global_buttons"] = {}
-    if "knob_pages" not in out or not isinstance(out["knob_pages"], dict):
-        out["knob_pages"] = {}
     if "spotify" not in out or not isinstance(out["spotify"], dict):
         out["spotify"] = {}
     if "twitch" not in out or not isinstance(out["twitch"], (dict, list)):
         out["twitch"] = {}
     _normalize_live_s_pages_and_page_buttons(out)
+    # Legacy per-knob page stacks -> per-deck-page knob roles (idempotent; keeps the old data).
+    migrate_legacy_knob_pages(out)
     return out
 
 

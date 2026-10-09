@@ -1,0 +1,21 @@
+{
+  "id": "smart_home",
+  "name_key": "pack.smart_home.name",
+  "description_key": "pack.smart_home.desc",
+  "icon": "lucide:lightbulb",
+  "services": ["ha"],
+  "pages": [
+    {
+      "keys": {
+        "1": {"action": {"type": "ha.toggle", "entity_id": "light.living_room"}, "text_key": "pack.smart_home.key.living_room"},
+        "2": {"action": {"type": "ha.toggle", "entity_id": "light.bedroom"}, "text_key": "pack.smart_home.key.bedroom"},
+        "3": {"action": {"type": "ha.toggle", "entity_id": "light.kitchen"}, "text_key": "pack.smart_home.key.kitchen"},
+        "4": {"action": {"type": "ha.toggle", "entity_id": "light.office"}, "text_key": "pack.smart_home.key.office"},
+        "14": {"action": {"type": "display.clock", "time_format": "%H:%M", "date_format": "%a %d %b"}}
+      },
+      "knobs": {
+        "knobTL": {"rotate": {"duo": "ha_light_brightness", "params": {"entity_id": "light.living_room", "step": 10}}}
+      }
+    }
+  ]
+}

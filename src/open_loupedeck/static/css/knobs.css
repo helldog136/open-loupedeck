@@ -1,0 +1,49 @@
+/* Knob inspector (static/js/inspector/knob-view.js): role chips per page, the three zones under the
+   knob, the duo list, test buttons. Reuses the inspector's cards (inspector.css) and tokens.css. */
+
+.kn-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.kn-chips button { display: grid; gap: 1px; text-align: left; padding: 6px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; max-width: 100%; }
+.kn-chips button[aria-pressed="true"] { border-color: var(--accent); background: var(--surface-2); }
+.kn-chip-name { font-size: var(--fs-sm); font-weight: 600; overflow-wrap: anywhere; }
+.kn-chip-role { font: 500 10px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+
+.kn-dial-wrap { display: grid; gap: 10px; justify-items: center; margin: 4px 0 0; }
+.kn-knob { position: relative; width: 104px; height: 104px; border-radius: 50%; border: 2px solid var(--line-strong); background: var(--knob-face); display: grid; place-items: center; padding: 14px 10px 8px; text-align: center; }
+.kn-notch { position: absolute; top: 6px; left: 50%; width: 4px; height: 11px; margin-left: -2px; border-radius: 2px; background: var(--accent); }
+.kn-knob-role { font-size: 12px; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+
+.kn-zones { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; align-items: end; }
+.kn-zone { display: grid; gap: 2px; justify-items: center; text-align: center; background: var(--bg); border: 1.5px dashed var(--line); border-radius: 14px; padding: 10px 6px; color: var(--fg); cursor: pointer; min-width: 0; }
+.kn-zone .kn-glyph { font-size: 24px; line-height: 1; color: var(--muted); }
+.kn-z-press { border-style: solid; border-radius: 18px; }
+.kn-zt { font-size: 12px; color: var(--muted); }
+.kn-za { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.kn-zone[aria-pressed="true"] { border-color: var(--accent); border-style: solid; }
+.kn-zone[aria-pressed="true"] .kn-glyph { color: var(--accent); }
+.kn-link { font: 500 11px var(--mono); color: var(--muted); letter-spacing: 0.04em; border-top: 2px solid var(--line); padding-top: 4px; width: calc(100% - 12px); text-align: center; }
+.kn-link.on { border-color: var(--accent); color: var(--accent); }
+
+.kn-panel { display: grid; gap: var(--sp-3); min-width: 0; }
+.kn-panel:empty { display: none; }
+.kn-label { font-size: 12px; color: var(--muted); }
+.kn-duos { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow: auto; }
+.kn-duo { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: var(--r-md); padding: 8px 10px; color: var(--fg); cursor: pointer; }
+.kn-duo:hover { background: var(--surface-2); }
+.kn-duo[aria-pressed="true"] { border-color: var(--accent); background: var(--surface-2); }
+.kn-duo-name { font-size: var(--fs-sm); font-weight: 600; }
+.kn-duo small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.kn-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-2) var(--sp-3); }
+.kn-action { display: grid; gap: var(--sp-3); min-width: 0; }
+.kn-clear { justify-self: start; font-size: var(--fs-sm); }
+.kn-clear[hidden] { display: none; }
+.kn-apply { margin: 0; }
+.kn-apply .btn-link { font-size: var(--fs-sm); }
+
+.kn-tests { display: flex; gap: 8px; }
+.kn-test { flex: 1; min-width: 0; }
+.kn-view input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+@media (max-width: 480px) {
+  .kn-zones { gap: 4px; }
+  .kn-zone { padding: 8px 3px; }
+}

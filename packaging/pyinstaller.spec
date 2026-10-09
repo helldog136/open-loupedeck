@@ -30,6 +30,8 @@ DEBUG_CONSOLE = False
 datas = [
     (str(SRC_PKG / "static"), "open_loupedeck/static"),
     (str(SRC_PKG / "icons"), "open_loupedeck/icons"),
+    (str(SRC_PKG / "locales"), "open_loupedeck/locales"),
+    (str(SRC_PKG / "packs"), "open_loupedeck/packs"),
 ]
 # Needed for importlib.metadata.version("open-loupedeck") (used by the auto-updater) to work
 # once frozen -- without this, dist-info isn't bundled and the app can't read its own version.

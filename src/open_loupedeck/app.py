@@ -31,7 +31,8 @@ from .device_discovery import list_loupedeck_usb_ports, usb_hint_for_port
 from .events import NormalizedEvent, normalize_loupedeck_message
 from .ha_client import HaClient
 from .hardware.live_s_device import LoupedeckLiveS
-from .knob_flash import flash_knob_page_name
+from .i18n import set_language_from_raw, t
+from .knob_flash import flash_knob_feedback, flash_knob_page_name
 from .knob_pages import (
     KNOB_ENCODER_IDS,
     actions_for_knob_rotation,
@@ -39,6 +40,7 @@ from .knob_pages import (
     knob_page_feedback_label,
     pages_list_for_knob,
 )
+from .knob_roles import effective_model, resolve_knob_event
 from .live_message import preview_storage_key, refresh_live_messages
 from .logging_setup import bootstrap_logging, load_raw_for_logging
 from .loupedeck_patch import set_serial_fatal_callback
@@ -316,14 +318,58 @@ async def run_agent(
 
         set_serial_fatal_callback(on_serial_fatal)
 
+        knob_flash_tasks: set[asyncio.Task[Any]] = set()
+
+        async def run_knob_role(kid: str, event: str) -> bool:
+            """Knob role on the current deck page (``pages[].knobs``). False = not handled here."""
+
+            async with lock:
+                pages_now = state.raw.get("pages")
+                if not isinstance(pages_now, list) or not pages_now:
+                    return False  # no deck pages: legacy knob_pages path
+                res = resolve_knob_event(state.raw, int(state.page_index), kid, event)
+                raw_snap = dict(state.raw)
+                model = effective_model(state.settings().device.model, runtime.deck)
+            if res is None:
+                logger.debug("Knob %s %s: no role on this page", kid, event)
+                return True
+            failed: list[str] = []
+            if res.actions:
+                ctx.source_control_id = kid
+                ctx.source_storage_key = None
+                ctx.on_action_success = None
+                ctx.on_action_error = lambda kind, _p, _e: failed.append(kind)
+                ctx.obs = obs
+                ctx.pages = navigator
+                try:
+                    await run_actions(ctx, res.actions)
+                finally:
+                    ctx.on_action_error = None
+            text = res.feedback
+            if failed and text:
+                text = t("knob.feedback.failed", text=text)
+            if text and runtime.deck is not None:
+                # In the background: the event (and a UI test press) completes without waiting for
+                # the feedback to be restored.
+                task = asyncio.create_task(
+                    flash_knob_feedback(
+                        runtime.deck, config_dir, raw_snap, model, kid, text, redraw_skin, res.feedback_sec
+                    )
+                )
+                knob_flash_tasks.add(task)
+                task.add_done_callback(knob_flash_tasks.discard)
+            return True
+
         async def handle_raw_message(msg: dict[str, Any]) -> None:
-            # Encoder push: only cycles knob_pages (no YAML binding). Ignored if knob has no pages.
             if (
                 msg.get("action") == "push"
                 and msg.get("state") == "down"
                 and str(msg.get("id", "")) in KNOB_ENCODER_IDS
             ):
                 kid = str(msg.get("id", ""))
+                if await run_knob_role(kid, "press"):
+                    return
+                # Legacy (no deck pages): push cycles knob_pages; ignored if the knob has no pages.
                 did_cycle = False
                 label = ""
                 raw_snap: dict[str, Any] = {}
@@ -336,7 +382,7 @@ async def run_agent(
                         pg = plist[ix]
                         label = knob_page_feedback_label(pg)
                         raw_snap = dict(state.raw)
-                        model = state.settings().device.model
+                        model = effective_model(state.settings().device.model, runtime.deck)
                         did_cycle = True
                 if did_cycle and runtime.deck is not None:
                     await flash_knob_page_name(runtime.deck, config_dir, raw_snap, model, kid, label, redraw_skin)
@@ -371,6 +417,8 @@ async def run_agent(
                 return
 
             if ev.kind == "knob":
+                if await run_knob_role(str(ev.id), str(ev.edge)):
+                    return
                 async with lock:
                     k_acts = actions_for_knob_rotation(
                         state.raw,
@@ -593,6 +641,7 @@ async def _async_main(
             loop.add_signal_handler(sig, _request_shutdown)
 
     raw = load_raw_for_logging(config_path)
+    set_language_from_raw(raw)
     bootstrap_logging(
         verbose=verbose,
         log_dir_override=log_dir,

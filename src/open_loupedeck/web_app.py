@@ -22,15 +22,23 @@ from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile, WebSo
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import autostart
+from . import autostart, sound_library, sound_player
 from .action_catalog import merged_catalog
-from .button_render import key_size_for_control, render_tactile_key_image
+from .button_render import (
+    PreviewCache,
+    key_size_for_control,
+    preview_cache_key,
+    render_key_preview,
+)
 from .config_backup import create_rotating_backup, list_backups, restore_backup, wipe_backups
 from .config_io import default_raw_config, ensure_minimal_structure, save_raw_config
 from .config_paths import ensure_application_dirs
 from .config_state import ConfigState
 from .control_ids import is_page_scoped_control
 from .hardware.live_s_device import LoupedeckLiveS
+from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
+from .knob_duos import list_duos
+from .knob_roles import validate_knobs_config
 from .live_message import (
     battery_params_from_entry,
     clock_params_from_entry,
@@ -40,13 +48,17 @@ from .live_message import (
     live_message_params_from_entry,
     obs_scene_params_from_entry,
     obs_stream_params_from_entry,
+    offline_fallback_mode,
+    offline_fallback_text,
     preview_storage_key,
     prune_stale_live_message_keys,
     twitch_live_params_from_entry,
 )
 from .logging_setup import reapply_logging_from_config
+from .look_defaults import proposed_entry, resolve_look
 from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unused_library_media
 from .package_paths import package_root
+from .packs import list_packs
 from .runtime_refs import AgentRuntimeRefs
 from .simulate_input import build_synthetic_loupedeck_message
 from .spotify_client import SpotifyManager
@@ -55,6 +67,11 @@ from .twitch_api import DEFAULT_CLIENT_ID, TwitchManager
 logger = logging.getLogger(__name__)
 
 SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
+
+# The config UI is native ES modules (static/js/*.js), which browsers only execute when served with a
+# JavaScript MIME type. On Windows, mimetypes reads the registry, where some installers map .js to
+# text/plain -- that would leave the UI blank. Pin the standard type.
+mimetypes.add_type("text/javascript", ".js")
 
 
 def _static_dir() -> Path:
@@ -95,7 +112,7 @@ def create_web_app(
     async def _no_cache(request: Any, call_next: Any) -> Any:
         """This is a local single-user config UI, never a public site: correctness after an app
         update matters far more than caching a few KB of static assets. Without this, a webview's
-        disk cache serving a stale index.html/app.js/style.css after an install can look exactly
+        disk cache serving a stale index.html, JS module or style.css after an install can look exactly
         like "the fix didn't take" even though the new file is right there on disk."""
 
         response = await call_next(request)
@@ -129,6 +146,40 @@ def create_web_app(
             await ws.close(code=1011)
             return
         await hub.handle_connection(ws)
+
+    @app.get("/api/locales")
+    async def api_locales() -> JSONResponse:
+        async with lock:
+            setting = str(state.raw.get("language") or "auto")
+        return JSONResponse(
+            {
+                "languages": available_languages(),
+                "current": get_language(),
+                "setting": setting,
+                "detected": resolve_language("auto"),
+            }
+        )
+
+    @app.put("/api/language")
+    async def put_language(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        value = str(body.get("language") or "").strip()
+        known = {d["code"] for d in available_languages()}
+        if value != "auto" and value not in known:
+            raise HTTPException(400, t("error.unknown_language"))
+        async with lock:
+            raw = ensure_minimal_structure(dict(state.raw))
+            raw["language"] = value
+            save_raw_config(config_path, raw)
+            state.replace_raw(raw)
+        current = set_language_from_raw(raw)
+        return JSONResponse({"ok": True, "setting": value, "current": current})
+
+    @app.get("/api/locale/{code}")
+    async def api_locale(code: str) -> JSONResponse:
+        known = {d["code"] for d in available_languages()}
+        if code not in known:
+            raise HTTPException(404, t("error.not_found"))
+        return JSONResponse(messages_for(code))
 
     @app.get("/api/status")
     async def api_status() -> JSONResponse:
@@ -261,7 +312,7 @@ def create_web_app(
         try:
             await asyncio.to_thread(_open)
         except Exception as exc:
-            raise HTTPException(500, f"Could not open folder: {exc}") from exc
+            raise HTTPException(500, t("error.open_folder", error=exc)) from exc
         return JSONResponse({"ok": True, "path": str(folder)})
 
     @app.get("/api/autostart")
@@ -281,15 +332,15 @@ def create_web_app(
 
         raw = body.get("index")
         if raw is None:
-            raise HTTPException(400, "index required")
+            raise HTTPException(400, t("error.index_required"))
         try:
             ix = int(raw)
         except (TypeError, ValueError):
-            raise HTTPException(400, "index must be an integer") from None
+            raise HTTPException(400, t("error.index_integer")) from None
         async with lock:
             pages_list = state.raw.get("pages") or []
             if not isinstance(pages_list, list) or len(pages_list) == 0:
-                raise HTTPException(400, "no pages in config")
+                raise HTTPException(400, t("error.no_pages"))
             state.page_index = ix % len(pages_list)
             out_idx = state.page_index
         if on_refresh:
@@ -297,7 +348,7 @@ def create_web_app(
                 await on_refresh()
             except Exception:
                 logger.exception("on_refresh failed after page_index change")
-                raise HTTPException(500, "refresh failed") from None
+                raise HTTPException(500, t("error.refresh_failed")) from None
         return JSONResponse({"ok": True, "page_index": out_idx})
 
     @app.post("/api/simulate_press")
@@ -306,7 +357,7 @@ def create_web_app(
 
         sim = rt.simulate_raw_message
         if sim is None:
-            raise HTTPException(503, "Simulate not available (agent not ready)")
+            raise HTTPException(503, t("error.simulate_unavailable"))
         cid = str(body.get("control_id") or "").strip()
         raw_dir = body.get("direction")
         direction: str | None = None
@@ -318,7 +369,7 @@ def create_web_app(
         if msg is None:
             raise HTTPException(
                 400,
-                "Unsupported control_id (side strips cannot be simulated from the UI)",
+                t("error.unsupported_control"),
             )
         try:
             await sim(msg)
@@ -328,8 +379,35 @@ def create_web_app(
         return JSONResponse({"ok": True})
 
     @app.get("/api/action_catalog")
-    async def action_catalog() -> JSONResponse:
-        return JSONResponse({"actions": merged_catalog()})
+    async def action_catalog(
+        lang: str | None = Query(None, description="Language code; default = the app's current language"),
+    ) -> JSONResponse:
+        code = resolve_language(lang) if lang else get_language()
+        return JSONResponse({"lang": code, "actions": merged_catalog(code)})
+
+    @app.get("/api/packs")
+    async def starter_packs(
+        lang: str | None = Query(None, description="Language code; default = the app's current language"),
+    ) -> JSONResponse:
+        code = resolve_language(lang) if lang else get_language()
+        return JSONResponse({"lang": code, "packs": list_packs(code)})
+
+    @app.get("/api/knob_duos")
+    async def knob_duos(
+        lang: str | None = Query(None, description="Language code; default = the app's current language"),
+    ) -> JSONResponse:
+        code = resolve_language(lang) if lang else get_language()
+        return JSONResponse({"lang": code, "duos": list_duos(code)})
+
+    @app.post("/api/resolve_look")
+    async def post_resolve_look(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        """Final look (label/icon/colours/mode + proposed|modified source) of a key entry."""
+
+        entry = body.get("entry")
+        if not isinstance(entry, dict):
+            raise HTTPException(400, "body.entry must be an object")
+        lang = body.get("lang")
+        return JSONResponse(resolve_look(entry, str(lang) if lang else None))
 
     @app.get("/api/spotify/status")
     async def spotify_status() -> JSONResponse:
@@ -375,7 +453,7 @@ def create_web_app(
         if not sp.is_configured():
             raise HTTPException(
                 status_code=400,
-                detail="Set spotify.client_id and spotify.redirect_uri (use the form in the UI or YAML)",
+                detail=t("error.spotify_not_configured"),
             )
         try:
             url, _state = sp.build_authorize_url()
@@ -420,13 +498,13 @@ def create_web_app(
         try:
             i = int(ix)
         except (TypeError, ValueError):
-            raise HTTPException(400, "account index required") from None
+            raise HTTPException(400, t("error.account_index_required")) from None
         if accounts:
             if not 0 <= i < len(accounts):
-                raise HTTPException(400, "unknown Twitch account")
+                raise HTTPException(400, t("error.unknown_twitch_account"))
             return accounts[i]
         if i != 0:
-            raise HTTPException(400, "unknown Twitch account")
+            raise HTTPException(400, t("error.unknown_twitch_account"))
         return {}
 
     @app.get("/api/twitch/status")
@@ -476,12 +554,20 @@ def create_web_app(
     @app.put("/api/config")
     async def put_config(body: dict[str, Any]) -> JSONResponse:
         if not isinstance(body, dict):
-            raise HTTPException(400, "JSON object required")
+            raise HTTPException(400, t("error.json_object_required"))
         merged = ensure_minimal_structure(body)
+        knob_errors = validate_knobs_config(merged)
+        if knob_errors:
+            raise HTTPException(400, t("error.invalid_knobs", details="; ".join(knob_errors[:10])))
         merged, _ = materialize_external_media(merged, config_dir)
         n_pages = len(merged.get("pages") or []) if isinstance(merged.get("pages"), list) else 0
         logger.debug("PUT /api/config pages=%s path=%s", n_pages, config_path)
         async with lock:
+            # The UI language is owned by PUT /api/language; a stale full-config autosave from
+            # another tab/module must not silently revert it.
+            merged["language"] = state.raw.get("language") or "auto"
+            # Same for the dismissed onboarding: once done it stays done.
+            merged["onboarding_done"] = bool(state.raw.get("onboarding_done")) or bool(merged.get("onboarding_done"))
             save_raw_config(config_path, merged)
             state.replace_raw(merged)
             prune_stale_live_message_keys(dict(state.raw), rt)
@@ -495,6 +581,7 @@ def create_web_app(
                 await rt.obs.update_credentials(new_settings.obs.host, new_settings.obs.port, new_settings.obs.password)
             if rt.ha is not None and new_settings.ha is not None:
                 rt.ha.update_credentials(new_settings.ha.base_url, new_settings.ha.token)
+        set_language_from_raw(merged)
         try:
             reapply_logging_from_config(
                 merged,
@@ -530,7 +617,7 @@ def create_web_app(
 
         name = str(body.get("name") or "").strip()
         if not name:
-            raise HTTPException(400, "name required")
+            raise HTTPException(400, t("error.name_required"))
 
         async with lock:
 
@@ -545,6 +632,7 @@ def create_web_app(
             prune_stale_live_message_keys(dict(state.raw), rt)
             fresh = dict(state.raw)
 
+        set_language_from_raw(fresh)
         try:
             reapply_logging_from_config(
                 fresh,
@@ -559,7 +647,7 @@ def create_web_app(
                 await on_refresh()
             except Exception:
                 logger.exception("on_refresh failed after config restore")
-                raise HTTPException(500, "refresh failed") from None
+                raise HTTPException(500, t("error.refresh_failed")) from None
         return JSONResponse({"ok": True, **result, "config": fresh})
 
     @app.post("/api/config/backups/wipe")
@@ -580,6 +668,7 @@ def create_web_app(
                 return wipe_backups(config_path, max_keep=3)
 
             result = await asyncio.to_thread(_wipe)
+        set_language_from_raw(merged)
         try:
             reapply_logging_from_config(
                 merged,
@@ -596,7 +685,7 @@ def create_web_app(
         """Reset deck layout (touch pages) to defaults; preserve other config (e.g. Spotify)."""
 
         if not isinstance(body, dict) or not body.get("confirm"):
-            raise HTTPException(400, "confirm=true required")
+            raise HTTPException(400, t("error.confirm_required"))
 
         async with lock:
             current = ensure_minimal_structure(dict(state.raw))
@@ -621,7 +710,7 @@ def create_web_app(
                 await on_refresh()
             except Exception:
                 logger.exception("on_refresh failed after config reset")
-                raise HTTPException(500, "refresh failed") from None
+                raise HTTPException(500, t("error.refresh_failed")) from None
         return JSONResponse({"ok": True, **result})
 
     @app.post("/api/refresh_skin")
@@ -632,7 +721,7 @@ def create_web_app(
                 await on_refresh()
             except Exception as e:
                 logger.exception("refresh_skin failed")
-                raise HTTPException(500, "refresh failed") from e
+                raise HTTPException(500, t("error.refresh_failed")) from e
         return JSONResponse({"ok": True})
 
     @app.post("/api/upload")
@@ -653,7 +742,7 @@ def create_web_app(
         elif lib in ("font", "fonts"):
             sub = "fonts"
         else:
-            raise HTTPException(400, "library= must be images, videos, sounds, or fonts")
+            raise HTTPException(400, t("error.bad_library"))
         if sub == "fonts":
             name = file.filename or "font.ttf"
             name = SAFE_NAME.sub("_", Path(name).name)
@@ -663,7 +752,7 @@ def create_web_app(
             if suf not in FONT_FILE_EXT:
                 raise HTTPException(
                     400,
-                    f"Font uploads must be {', '.join(sorted(FONT_FILE_EXT))}",
+                    t("error.font_extensions", extensions=", ".join(sorted(FONT_FILE_EXT))),
                 )
         else:
             name = file.filename or "image.png"
@@ -678,10 +767,69 @@ def create_web_app(
         max_bytes = 512 * 1024 * 1024 if sub == "videos" else 12 * 1024 * 1024
         if len(data) > max_bytes:
             cap = "512MB" if sub == "videos" else "12MB"
-            raise HTTPException(413, f"File too large (max {cap})")
+            raise HTTPException(413, t("error.file_too_large", max=cap))
         dest.write_bytes(data)
         rel = f"library/{sub}/{unique}"
         return JSONResponse({"path": rel, "name": unique})
+
+    # ---- sound library (library/sounds): list / preview on this PC / stop / rename / delete ----
+
+    def _sound_file(name: Any) -> Path:
+        try:
+            return sound_library.resolve_library_file(config_dir, name)
+        except sound_library.SoundPathError:
+            raise HTTPException(400, t("error.invalid_path")) from None
+        except FileNotFoundError:
+            raise HTTPException(404, t("error.not_found")) from None
+
+    @app.get("/api/sounds")
+    async def list_sounds() -> JSONResponse:
+        items = await asyncio.to_thread(sound_library.list_sounds, config_dir)
+        return JSONResponse(
+            {
+                "sounds": items,
+                "platform": sys.platform,
+                "windows_extensions": sorted(sound_player.WINDOWS_EXTENSIONS),
+            }
+        )
+
+    @app.post("/api/sounds/preview")
+    async def preview_sound(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        p = _sound_file(body.get("file"))
+        try:
+            await asyncio.to_thread(
+                sound_player.get_player().play,
+                str(p),
+                body.get("volume", 100),
+                "restart",
+                "__preview__",
+            )
+        except Exception as e:
+            logger.warning("sound preview failed: %s", e)
+            raise HTTPException(500, str(e)) from e
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/sounds/stop")
+    async def stop_sounds() -> JSONResponse:
+        n = await asyncio.to_thread(sound_player.get_player().stop_all)
+        return JSONResponse({"ok": True, "stopped": n})
+
+    @app.post("/api/sounds/rename")
+    async def rename_sound(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        _sound_file(body.get("file"))
+        try:
+            dest = sound_library.rename_sound(config_dir, body.get("file"), body.get("name"))
+        except sound_library.SoundPathError:
+            raise HTTPException(400, t("error.invalid_path")) from None
+        except FileExistsError:
+            raise HTTPException(409, t("error.sound_exists")) from None
+        return JSONResponse({"ok": True, "file": f"{sound_library.LIBRARY_REL}/{dest.name}"})
+
+    @app.post("/api/sounds/delete")
+    async def delete_sound(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        _sound_file(body.get("file"))
+        sound_library.delete_sound(config_dir, body.get("file"))
+        return JSONResponse({"ok": True})
 
     @app.get("/api/local-file")
     async def local_file(
@@ -690,16 +838,18 @@ def create_web_app(
         logger.debug("GET /api/local-file path=%s", path)
         raw = path.strip().replace("\\", "/")
         if not raw or raw.startswith("/") or ".." in raw.split("/"):
-            raise HTTPException(403, "Invalid path")
+            raise HTTPException(403, t("error.invalid_path"))
         p = (config_dir / raw).resolve()
         try:
             p.relative_to(config_dir)
         except ValueError as e:
-            raise HTTPException(403, "Invalid path") from e
+            raise HTTPException(403, t("error.invalid_path")) from e
         if not p.is_file():
-            raise HTTPException(404, "Not found")
+            raise HTTPException(404, t("error.not_found"))
         mime, _ = mimetypes.guess_type(str(p))
         return FileResponse(p, media_type=mime or "application/octet-stream")
+
+    preview_cache = PreviewCache()
 
     @app.post("/api/preview_key")
     async def preview_key(
@@ -715,7 +865,7 @@ def create_web_app(
 
         entry = body.get("entry")
         if not isinstance(entry, dict):
-            raise HTTPException(400, "body.entry must be an object")
+            raise HTTPException(400, t("error.entry_object"))
         cid = str(body.get("control_id") or "touch_0")
         size = key_size_for_control(cid)
 
@@ -728,6 +878,13 @@ def create_web_app(
 
         animation_frame = _as_optional_int(body.get("animation_frame"))
         press_elapsed_frames = _as_optional_int(body.get("press_elapsed_frames"))
+        mode = str(body.get("mode") or "").strip().lower() or None
+        if mode is not None and mode not in ("text", "icon", "both"):
+            raise HTTPException(400, "body.mode must be one of text, icon, both")
+        offline = body.get("offline") is True
+        lang = str(body.get("lang") or "").strip() or None
+        live_value = body.get("live_value")
+        live_value = None if live_value is None else str(live_value)
 
         async with lock:
             ent = dict(entry)
@@ -779,22 +936,64 @@ def create_web_app(
                 cparams = clock_params_from_entry(ent)
                 if cparams is not None:
                     ent["text"] = format_clock_overlay_text(cparams)
-            entry = ent
+            is_live = any(
+                f(entry)
+                for f in (
+                    live_message_params_from_entry,
+                    twitch_live_params_from_entry,
+                    obs_stream_params_from_entry,
+                    obs_scene_params_from_entry,
+                    battery_params_from_entry,
+                    ha_sensor_params_from_entry,
+                    ha_weather_params_from_entry,
+                    clock_params_from_entry,
+                )
+            )
+            if is_live:
+                if live_value is not None:
+                    ent["text"] = live_value
+                if offline:
+                    act = ent.get("action")
+                    fb = offline_fallback_mode(act if isinstance(act, dict) else ent)
+                    ent["text"] = offline_fallback_text(fb, live_value or str(ent.get("text") or ""))
+            # Merge the proposed look here so the cache key carries the (language-dependent) label.
+            entry = proposed_entry(ent, lang) or ent
 
-        def _render():
-            return render_tactile_key_image(
+        def _render() -> tuple[bytes, dict[str, Any]]:
+            img, measure = render_key_preview(
                 entry,
                 config_dir,
                 size=size,
+                mode=mode,
+                offline=offline,
                 animation_frame=animation_frame,
                 press_elapsed_frames=press_elapsed_frames,
             )
+            if img is None:
+                return b"", measure
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue(), measure
 
-        img = await asyncio.to_thread(_render)
-        if img is None:
-            raise HTTPException(404, "Nothing to render for this entry")
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return Response(content=buf.getvalue(), media_type="image/png")
+        # Animated previews (idle/press frames) are never cached: every frame is different.
+        cacheable = animation_frame is None and press_elapsed_frames is None
+        ckey = preview_cache_key(entry, config_dir, size, mode, offline) if cacheable else ""
+        cached = preview_cache.get(ckey) if cacheable else None
+        if cached is None:
+            cached = await asyncio.to_thread(_render)
+            if cacheable:
+                preview_cache.put(ckey, cached)
+        png, measure = cached
+        if not png:
+            raise HTTPException(404, t("error.nothing_to_render"))
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={
+                "X-Key-Overflow": "0" if measure["fits"] else "1",
+                "X-Key-Lines": str(measure["lines"]),
+                "Access-Control-Expose-Headers": "X-Key-Overflow, X-Key-Lines",
+            },
+        )
 
     return app

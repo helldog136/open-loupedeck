@@ -190,6 +190,26 @@ def spotify_state_entry(base: dict[str, Any], state: str) -> dict[str, Any]:
     return entry
 
 
+OFFLINE_FALLBACKS = ("dash", "none", "last")
+
+
+def offline_fallback_mode(params: dict[str, Any] | None) -> str:
+    """``offline_fallback`` of a live key's action params: ``dash`` (default) | ``none`` | ``last``."""
+
+    v = str((params or {}).get("offline_fallback") or "dash").strip().lower()
+    return v if v in OFFLINE_FALLBACKS else "dash"
+
+
+def offline_fallback_text(mode: str, last_value: str | None = None) -> str:
+    """Text a live key shows while its source is offline: ``—`` / nothing / the last known value."""
+
+    if mode == "none":
+        return ""
+    if mode == "last":
+        return (last_value or "").strip() or "—"
+    return "—"
+
+
 def twitch_live_params_from_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
     """Params for Twitch stream status overlay (Helix)."""
 
@@ -779,9 +799,18 @@ async def refresh_live_messages(
 
         if kind == "obs_scene":
             tmpl = str(params.get("template") or "{obs_scene}")
-            scene = str(getattr(runtime, "obs_scene_name", "") or "—").strip() or "—"
-            mapping = {**page_ctx, "obs_scene": scene, "scene": scene}
-            text = _substitute_template(tmpl, mapping).strip()
+            scene = str(getattr(runtime, "obs_scene_name", "") or "").strip()
+            if scene:
+                mapping = {**page_ctx, "obs_scene": scene, "scene": scene}
+                text = _substitute_template(tmpl, mapping).strip()
+            else:
+                # OBS offline: ``offline_fallback`` dash (default, the old behaviour) | none | last.
+                fb = offline_fallback_mode(params)
+                if fb == "last" and key in runtime.live_message_text:
+                    continue  # keep showing the last known scene
+                text = _substitute_template(tmpl, {**page_ctx, "obs_scene": "—", "scene": "—"}).strip()
+                if fb != "dash":
+                    text = offline_fallback_text(fb, runtime.live_message_text.get(key))
             if len(text) > 500:
                 text = text[:497] + "…"
             if runtime.live_message_text.get(key) != text:

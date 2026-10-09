@@ -28,6 +28,7 @@ from PIL import Image
 from . import autostart, single_instance, updater
 from .app import DEFAULT_WEB_ADDR, AgentHandle, start_agent_in_background_thread
 from .config_paths import default_config_path
+from .i18n import on_language_change, t
 from .package_paths import package_root
 
 logger = logging.getLogger(__name__)
@@ -155,16 +156,16 @@ class TrayApp:
 
     def _update_menu_text(self, _item: pystray.MenuItem) -> str:
         if self._update_downloading:
-            return "Téléchargement de la mise à jour…"
+            return t("tray.update.downloading")
         if self._update_info is not None:
-            return f"Installer la mise à jour {self._update_info.version}"
-        return "Rechercher une mise à jour"
+            return t("tray.update.install", version=self._update_info.version)
+        return t("tray.update.check")
 
     def _on_update_found(self, info: updater.UpdateInfo) -> None:
         self._update_info = info
         if self._icon is not None:
             with contextlib.suppress(Exception):
-                self._icon.notify(f"open-loupedeck {info.version} est disponible.", "Mise à jour disponible")
+                self._icon.notify(t("updater.available.message", version=info.version), t("updater.available.title"))
             self._icon.update_menu()
 
     def _update_check_loop(self) -> None:
@@ -181,7 +182,7 @@ class TrayApp:
         if self._update_info is None:
             info = updater.check_for_update()
             if info is None:
-                icon.notify("Aucune mise à jour disponible.", "open-loupedeck")
+                icon.notify(t("updater.none"), t("app.name"))
             else:
                 self._on_update_found(info)
             return
@@ -197,10 +198,10 @@ class TrayApp:
         try:
             installer_path = updater.download_update(info)
             updater.apply_windows_update(installer_path)
-            icon.notify("Installation en cours, l'application va redémarrer…", "open-loupedeck")
+            icon.notify(t("updater.installing"), t("app.name"))
         except Exception:
             logger.exception("Update to %s failed", info.version)
-            icon.notify("Échec de la mise à jour.", "open-loupedeck")
+            icon.notify(t("updater.failed"), t("app.name"))
             self._update_downloading = False
             self._update_info = None
             icon.update_menu()
@@ -210,13 +211,13 @@ class TrayApp:
     def _build_menu(self) -> pystray.Menu:
         return pystray.Menu(
             pystray.MenuItem(
-                "Ouvrir la configuration",
+                lambda _item: t("tray.open"),
                 lambda _icon, _item: self.show_window(),
                 default=True,
             ),
             pystray.MenuItem(self._update_menu_text, self._on_update_menu_click),
-            pystray.MenuItem("Redémarrer", self._restart),
-            pystray.MenuItem("Quitter", self._quit),
+            pystray.MenuItem(lambda _item: t("tray.restart"), self._restart),
+            pystray.MenuItem(lambda _item: t("tray.quit"), self._quit),
         )
 
     def run(self) -> None:
@@ -243,10 +244,11 @@ class TrayApp:
         self._icon = pystray.Icon(
             "open-loupedeck",
             Image.open(_ICON_PATH),
-            "open-loupedeck",
+            t("app.name"),
             self._build_menu(),
         )
         self._icon.run_detached()
+        on_language_change(lambda _code: self._icon is not None and self._icon.update_menu())
 
         threading.Thread(target=self._update_check_loop, name="update-check", daemon=True).start()
 
