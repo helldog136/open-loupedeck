@@ -47,3 +47,45 @@ text typed by the user is never translated.
 - Commit messages end with the `Co-Authored-By` line given in the session's attribution reminder.
 - Do not push, do not open PRs, do not touch `master`. Final report: what changed, files, how verified, open
   issues.
+
+## Front-end layout
+The config UI is plain native ES modules under `src/open_loupedeck/static/js/` — no bundler, no npm, no build
+step. `index.html` loads the classic `i18n.js` (defines the global `t()` / `i18n`) and then
+`<script type="module" src="/assets/ui/js/main.js">`; the browser fetches the rest through `import`s. FastAPI serves
+`static/` at `/assets/ui` (with `.js` pinned to `text/javascript`, required for modules) and PyInstaller bundles the
+whole `static/` tree, so a new file needs no registration anywhere. Every module starts with a comment saying what
+it owns.
+
+| File | Owns |
+| --- | --- |
+| `main.js` | Entry point: boot sequence (order matters), reactions to `config:replaced` and the device-model select |
+| `state.js` | The shared `state` object (`state.cfg`, `state.pageIndex`, `state.selectedControl`, …) and `on`/`emit` |
+| `constants.js`, `util.js` | Control ids / file-extension sets; stateless helpers (`$`, escaping, colours, media paths) |
+| `api.js` | Shared fetch wrappers (config GET/PUT, page index, simulate press, upload, skin refresh) |
+| `model.js` | Config model without DOM: layout detection, `ensurePages`, `getButtonEntry` / `setButtonEntry`, … |
+| `save.js`, `undo.js`, `forms.js` | Debounced autosave + save status; undo/redo snapshots; validated "smart" fields |
+| `shell.js`, `status.js` | Tab bar; status pills and the 1.5 s `/api/status` poll |
+| `pages.js` | Page rail and header, page ↔ agent `page_index` sync |
+| `deck.js` | Deck picture (`#deckRoot`), key previews, media backgrounds, drag-swap; a click emits `control:open` |
+| `inspector/editor.js` | Key editor: open a control, build the entry, autosave while typing, Apply / Clear, uploads |
+| `inspector/look-fields.js`, `inspector/preview.js` | Look form I/O (text, colours, gradients, animations); live preview |
+| `inspector/panel.js`, `inspector/clipboard.js` | Editor chrome (which panel, button states); copy / paste |
+| `catalog.js`, `action-fields.js`, `key-sequence.js` | Action-type picker; catalog-driven parameter forms; key recorder |
+| `knobs.js` | Encoder editor (dial pages, rotate actions, test buttons, all-encoders JSON) |
+| `services/*.js` | One per Services section: `backups`, `spotify`, `twitch`, `obs`, `ha`, `logging`, `system` |
+
+Rules: imports only point "down" (no import cycles); when a lower module needs something a higher one owns it
+calls `emit("…")` and `main.js` subscribes with `on("…")` (synchronous). A variable that more than one module
+reassigns goes on `state`; anything else stays module-local. `tests/test_web_static.py` checks every module is
+served as JavaScript and every relative import resolves.
+
+Smoke test (start a scratch instance first; it edits one key and undoes it):
+
+```
+python scripts/ui_smoke.py http://127.0.0.1:8775            # [--chromium PATH] [--ignore-external] [--headed]
+```
+
+It loads the page, fails on any console error, uncaught page error or failed request (the browser's automatic
+`/favicon.ico` request excepted; `--ignore-external` also tolerates other origins such as web fonts when offline),
+clicks both tabs, selects `touch_0`, picks an action type in the picker, presses Ctrl+Z, checks the saved config is
+unchanged and prints `OK` (exit code 0) or `FAILED` with the reasons (exit code 1).

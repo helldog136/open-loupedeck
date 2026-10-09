@@ -65,6 +65,11 @@ logger = logging.getLogger(__name__)
 
 SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
 
+# The config UI is native ES modules (static/js/*.js), which browsers only execute when served with a
+# JavaScript MIME type. On Windows, mimetypes reads the registry, where some installers map .js to
+# text/plain -- that would leave the UI blank. Pin the standard type.
+mimetypes.add_type("text/javascript", ".js")
+
 
 def _static_dir() -> Path:
     return package_root() / "static"
@@ -104,7 +109,7 @@ def create_web_app(
     async def _no_cache(request: Any, call_next: Any) -> Any:
         """This is a local single-user config UI, never a public site: correctness after an app
         update matters far more than caching a few KB of static assets. Without this, a webview's
-        disk cache serving a stale index.html/app.js/style.css after an install can look exactly
+        disk cache serving a stale index.html, JS module or style.css after an install can look exactly
         like "the fix didn't take" even though the new file is right there on disk."""
 
         response = await call_next(request)
