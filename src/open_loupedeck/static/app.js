@@ -76,6 +76,11 @@ function applyCfgSnapshot(json) {
   } finally {
     applyingUndoRedo = false;
   }
+  emit("config:replaced", prevPageIndex);
+}
+
+/** Re-sync every view after `cfg`/`pageIndex` were replaced wholesale (undo/redo, backup restore). */
+function onConfigReplaced(prevPageIndex) {
   ensurePages();
   ensureDevice();
   ensureLogging();
@@ -211,6 +216,18 @@ let autosaveTimer = null;
 
 const $ = (s) => document.querySelector(s);
 
+/** Tiny synchronous event bus: lets a lower-level module ask for work owned by a higher one. */
+const eventListeners = new Map();
+
+function on(name, fn) {
+  if (!eventListeners.has(name)) eventListeners.set(name, []);
+  eventListeners.get(name).push(fn);
+}
+
+function emit(name, ...args) {
+  for (const fn of eventListeners.get(name) || []) fn(...args);
+}
+
 function setSaveStatus(text, isError = false) {
   const el = $("#saveStatus");
   if (!el) return;
@@ -225,6 +242,12 @@ function scheduleAutosave() {
   autosaveTimer = setTimeout(() => {
     void runAutosave();
   }, 500);
+}
+
+/** Drop a pending debounced save (callers then save immediately, or not at all). */
+function cancelPendingAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = null;
 }
 
 async function runAutosave() {
@@ -244,8 +267,7 @@ async function runAutosave() {
 
 async function backupConfig() {
   $("#saveError").textContent = "";
-  clearTimeout(autosaveTimer);
-  autosaveTimer = null;
+  cancelPendingAutosave();
   const saved = await runAutosave();
   if (!saved) return;
   try {
@@ -337,8 +359,7 @@ async function wipeBackupsConfig() {
   ) {
     return;
   }
-  clearTimeout(autosaveTimer);
-  autosaveTimer = null;
+  cancelPendingAutosave();
   const saved = await runAutosave();
   if (!saved) return;
   try {
@@ -363,8 +384,7 @@ async function resetConfigToDefaults() {
   ) {
     return;
   }
-  clearTimeout(autosaveTimer);
-  autosaveTimer = null;
+  cancelPendingAutosave();
   setSaveStatus("Resetting…");
   try {
     const r = await fetch("/api/config/reset", {
@@ -377,25 +397,7 @@ async function resetConfigToDefaults() {
     cfg = await apiGet();
     suppressAutosave = true;
     ensureDevice();
-    try {
-      const sr = await fetch("/api/status");
-      if (sr.ok) {
-        const sj = await sr.json();
-        if (sj.deck_layout === "live" || sj.deck_layout === "live_s") {
-          agentDeckLayout = sj.deck_layout;
-        } else {
-          agentDeckLayout = null;
-        }
-        ensurePages();
-        if (typeof sj.page_index === "number") {
-          syncUiToAgentPage(sj.page_index);
-        }
-      } else {
-        ensurePages();
-      }
-    } catch {
-      ensurePages();
-    }
+    await pullAgentLayoutAndPage();
     updateLiveSPageChrome();
     syncSpotifyFromCfg();
     ensureLogging();
@@ -915,8 +917,7 @@ async function connectTwitchAccount(fs) {
     });
   try {
     // The server reads the account (client_id override, label) from the saved config.
-    clearTimeout(autosaveTimer);
-    autosaveTimer = null;
+    cancelPendingAutosave();
     await runAutosave();
     const r = await post("/api/twitch/device/start");
     if (!r.ok) throw new Error((await r.json()).detail || (await r.text()));
@@ -1140,6 +1141,29 @@ function syncUiToAgentPage(agentIndex) {
     if (sl) sl.textContent = "Select a control";
     syncTestPressButton();
     syncCopyPasteButtons();
+  }
+}
+
+/** One-shot GET /api/status: adopt the agent's resolved deck layout and current page. */
+async function pullAgentLayoutAndPage() {
+  try {
+    const sr = await fetch("/api/status");
+    if (sr.ok) {
+      const sj = await sr.json();
+      if (sj.deck_layout === "live" || sj.deck_layout === "live_s") {
+        agentDeckLayout = sj.deck_layout;
+      } else {
+        agentDeckLayout = null;
+      }
+      ensurePages();
+      if (typeof sj.page_index === "number") {
+        syncUiToAgentPage(sj.page_index);
+      }
+    } else {
+      ensurePages();
+    }
+  } catch {
+    ensurePages();
   }
 }
 
@@ -1445,16 +1469,14 @@ function wireSmartField(el, { validate, onCommit, optional = true }) {
       onCommit(raw);
       scheduleAutosave();
     } else {
-      clearTimeout(autosaveTimer);
-      autosaveTimer = null;
+      cancelPendingAutosave();
     }
   });
   el.addEventListener("blur", () => {
     const raw = el.value;
     if (applyValidity(raw)) {
       onCommit(raw);
-      clearTimeout(autosaveTimer);
-      autosaveTimer = null;
+      cancelPendingAutosave();
       void runAutosave();
     }
   });
@@ -2286,6 +2308,72 @@ function renderKeySequenceField(wrap, f, idPrefix) {
   renderKeySequenceChips(chips, hidden);
 }
 
+/** One "asset" parameter row: path input + Browse… (uploads to the asset library, fills the path). */
+function renderAssetField(container, wrap, f, idPrefix) {
+  const lab = document.createElement("label");
+  lab.className = "field-label";
+  lab.textContent = f.label || f.name;
+  if (f.optional) lab.textContent += " (optional)";
+  const fid = `${idPrefix}_${String(f.name).replace(/[^a-zA-Z0-9_]/g, "_")}`;
+  const row = document.createElement("div");
+  row.className = "path-with-browse";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.dataset.param = f.name;
+  input.setAttribute("data-param", String(f.name));
+  input.className = "mono path-input";
+  input.id = fid;
+  lab.htmlFor = fid;
+  if (f.placeholder) input.placeholder = f.placeholder;
+  const browse = document.createElement("button");
+  browse.type = "button";
+  browse.className = "btn-browse";
+  browse.textContent = "Browse…";
+  const fileIn = document.createElement("input");
+  fileIn.type = "file";
+  fileIn.hidden = true;
+  fileIn.accept =
+    f.accept != null && String(f.accept).trim() !== "" ? String(f.accept) : "*/*";
+  browse.addEventListener("click", () => fileIn.click());
+  fileIn.addEventListener("change", async (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!file) return;
+    const errEl = $("#editError");
+    try {
+      const lib = uploadLibraryParamForFile(file);
+      const rel = await uploadFileToAssets(file, lib);
+      // After `await`, the form may have been re-rendered; the closure `input` can be detached.
+      const live =
+        document.getElementById(fid) ||
+        (container && container.isConnected && container.querySelector(`#${fid}`)) ||
+        input;
+      if (live) {
+        live.value = rel;
+        live.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (errEl) errEl.textContent = "";
+      const saveErr = $("#saveError");
+      if (saveErr) saveErr.textContent = "";
+      if (idPrefix === "ap") {
+        syncMainActionAdvWithFormAfterAssetChange();
+        setSaveStatus("Media uploaded — click Apply to key to save");
+      }
+    } catch (e) {
+      const msg = String(e.message || e);
+      if (errEl) errEl.textContent = msg;
+      const saveErr = $("#saveError");
+      if (saveErr) saveErr.textContent = msg;
+    }
+  });
+  row.appendChild(input);
+  row.appendChild(browse);
+  row.appendChild(fileIn);
+  wrap.appendChild(lab);
+  wrap.appendChild(row);
+  container.appendChild(wrap);
+}
+
 /**
  * Render action parameter fields into a container (main key editor or knob rotate block).
  * @param {HTMLElement} container
@@ -2316,68 +2404,7 @@ function renderActionFieldsInto(container, type, idPrefix) {
       }
 
       if (f.input === "asset") {
-        const lab = document.createElement("label");
-        lab.className = "field-label";
-        lab.textContent = f.label || f.name;
-        if (f.optional) lab.textContent += " (optional)";
-        const fid = `${idPrefix}_${String(f.name).replace(/[^a-zA-Z0-9_]/g, "_")}`;
-        const row = document.createElement("div");
-        row.className = "path-with-browse";
-        const input = document.createElement("input");
-        input.type = "text";
-        input.dataset.param = f.name;
-        input.setAttribute("data-param", String(f.name));
-        input.className = "mono path-input";
-        input.id = fid;
-        lab.htmlFor = fid;
-        if (f.placeholder) input.placeholder = f.placeholder;
-        const browse = document.createElement("button");
-        browse.type = "button";
-        browse.className = "btn-browse";
-        browse.textContent = "Browse…";
-        const fileIn = document.createElement("input");
-        fileIn.type = "file";
-        fileIn.hidden = true;
-        fileIn.accept =
-          f.accept != null && String(f.accept).trim() !== "" ? String(f.accept) : "*/*";
-        browse.addEventListener("click", () => fileIn.click());
-        fileIn.addEventListener("change", async (ev) => {
-          const file = ev.target.files && ev.target.files[0];
-          ev.target.value = "";
-          if (!file) return;
-          const errEl = $("#editError");
-          try {
-            const lib = uploadLibraryParamForFile(file);
-            const rel = await uploadFileToAssets(file, lib);
-            // After `await`, the form may have been re-rendered; the closure `input` can be detached.
-            const live =
-              document.getElementById(fid) ||
-              (container && container.isConnected && container.querySelector(`#${fid}`)) ||
-              input;
-            if (live) {
-              live.value = rel;
-              live.dispatchEvent(new Event("input", { bubbles: true }));
-            }
-            if (errEl) errEl.textContent = "";
-            const saveErr = $("#saveError");
-            if (saveErr) saveErr.textContent = "";
-            if (idPrefix === "ap") {
-              syncMainActionAdvWithFormAfterAssetChange();
-              setSaveStatus("Media uploaded — click Apply to key to save");
-            }
-          } catch (e) {
-            const msg = String(e.message || e);
-            if (errEl) errEl.textContent = msg;
-            const saveErr = $("#saveError");
-            if (saveErr) saveErr.textContent = msg;
-          }
-        });
-        row.appendChild(input);
-        row.appendChild(browse);
-        row.appendChild(fileIn);
-        wrap.appendChild(lab);
-        wrap.appendChild(row);
-        container.appendChild(wrap);
+        renderAssetField(container, wrap, f, idPrefix);
         continue;
       }
 
@@ -2692,7 +2719,7 @@ function swapButtonEntries(cidA, cidB) {
   renderDeck();
   scheduleAutosave();
   if (selectedControl === cidA || selectedControl === cidB) {
-    openEditor(selectedControl);
+    emit("control:open", selectedControl);
   }
 }
 
@@ -2700,7 +2727,7 @@ function bindCells() {
   document.querySelectorAll(".cell").forEach((el) => {
     el.addEventListener("click", () => {
       if (draggingCid) return; // a drop already fired the swap; ignore the trailing click
-      openEditor(el.dataset.cid);
+      emit("control:open", el.dataset.cid);
     });
 
     el.addEventListener("dragstart", (e) => {
@@ -2929,6 +2956,41 @@ function renderDeck() {
   void hydrateMediaBackgrounds(previewGen);
 }
 
+/** Reset the main action picker, its parameter fields and the Advanced JSON to "no action". */
+function clearMainActionForm() {
+  const sel = $("#actionType");
+  if (sel) {
+    sel.value = "";
+    if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
+  }
+  renderActionFields("");
+  const adv = $("#actionJsonAdv");
+  if (adv) {
+    adv.value = "";
+    lastSyncedAdv = "";
+  }
+}
+
+/** Fill the text/graphic/colour/font/design fields of the key editor from a stored entry. */
+function fillLookFieldsFromEntry(e) {
+  const { icon, image } = splitIconAndImage(e);
+  $("#iconUri").value = icon;
+  $("#imagePath").value = image;
+  $("#buttonText").value = e.text || e.label || "";
+  $("#textColor").value = e.text_color || "";
+  $("#backgroundColor").value = e.background || "";
+  $("#fontSize").value = e.font_size != null && e.font_size !== "" ? String(e.font_size) : "";
+  const ffp = $("#fontFilePath");
+  if (ffp) ffp.value = e.font_file != null && e.font_file !== "" ? String(e.font_file) : "";
+  const gl = $("#graphicTextLayout");
+  if (gl) {
+    const v = String(e.graphic_text_layout || "split").toLowerCase();
+    const overlayish = ["overlay", "overlap", "on_graphic", "stacked_on_graphic", "center"];
+    gl.value = overlayish.includes(v) ? "overlay" : "split";
+  }
+  populateDesignFieldsFromEntry(e);
+}
+
 function openEditor(cid) {
   if (isKnobEncoderId(cid)) {
     openKnobEncoderEditor(cid);
@@ -2950,17 +3012,7 @@ function openEditor(cid) {
   if (det) det.open = false;
 
   if (isLiveSPageSwitchButton(cid)) {
-    const sel = $("#actionType");
-    if (sel) {
-      sel.value = "";
-      if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
-    }
-    renderActionFields("");
-    const adv = $("#actionJsonAdv");
-    if (adv) {
-      adv.value = "";
-      lastSyncedAdv = "";
-    }
+    clearMainActionForm();
     $("#iconUri").value = "";
     $("#imagePath").value = "";
     $("#buttonText").value = "";
@@ -2972,50 +3024,10 @@ function openEditor(cid) {
     populateDesignFieldsFromEntry({});
   } else if (action && action.type) {
     fillFieldsFromAction(action);
-    const { icon, image } = splitIconAndImage(e);
-    $("#iconUri").value = icon;
-    $("#imagePath").value = image;
-    $("#buttonText").value = e.text || e.label || "";
-    $("#textColor").value = e.text_color || "";
-    $("#backgroundColor").value = e.background || "";
-    $("#fontSize").value = e.font_size != null && e.font_size !== "" ? String(e.font_size) : "";
-    const ffpA = $("#fontFilePath");
-    if (ffpA) ffpA.value = e.font_file != null && e.font_file !== "" ? String(e.font_file) : "";
-    const gl = $("#graphicTextLayout");
-    if (gl) {
-      const v = String(e.graphic_text_layout || "split").toLowerCase();
-      const overlayish = ["overlay", "overlap", "on_graphic", "stacked_on_graphic", "center"];
-      gl.value = overlayish.includes(v) ? "overlay" : "split";
-    }
-    populateDesignFieldsFromEntry(e);
+    fillLookFieldsFromEntry(e);
   } else {
-    const sel = $("#actionType");
-    if (sel) {
-      sel.value = "";
-      if (sel._refreshActionSelectTrigger) sel._refreshActionSelectTrigger();
-    }
-    renderActionFields("");
-    const adv = $("#actionJsonAdv");
-    if (adv) {
-      adv.value = "";
-      lastSyncedAdv = "";
-    }
-    const { icon, image } = splitIconAndImage(e);
-    $("#iconUri").value = icon;
-    $("#imagePath").value = image;
-    $("#buttonText").value = e.text || e.label || "";
-    $("#textColor").value = e.text_color || "";
-    $("#backgroundColor").value = e.background || "";
-    $("#fontSize").value = e.font_size != null && e.font_size !== "" ? String(e.font_size) : "";
-    const ffpB = $("#fontFilePath");
-    if (ffpB) ffpB.value = e.font_file != null && e.font_file !== "" ? String(e.font_file) : "";
-    const gl = $("#graphicTextLayout");
-    if (gl) {
-      const v = String(e.graphic_text_layout || "split").toLowerCase();
-      const overlayish = ["overlay", "overlap", "on_graphic", "stacked_on_graphic", "center"];
-      gl.value = overlayish.includes(v) ? "overlay" : "split";
-    }
-    populateDesignFieldsFromEntry(e);
+    clearMainActionForm();
+    fillLookFieldsFromEntry(e);
   }
   syncGraphicLayoutVisibility();
 
@@ -3129,8 +3141,7 @@ async function saveAction() {
   setButtonEntry(selectedControl, entry);
   renderDeck();
   openEditor(selectedControl);
-  clearTimeout(autosaveTimer);
-  autosaveTimer = null;
+  cancelPendingAutosave();
   const ok = await runAutosave();
   if (!ok) return;
   await refreshSkin();
@@ -3263,8 +3274,7 @@ async function clearControl() {
     setButtonEntry(selectedControl, null);
     renderDeck();
     openEditor(selectedControl);
-    clearTimeout(autosaveTimer);
-    autosaveTimer = null;
+    cancelPendingAutosave();
     const ok = await runAutosave();
     if (!ok) return;
     await refreshSkin();
@@ -3273,8 +3283,7 @@ async function clearControl() {
   setButtonEntry(selectedControl, null);
   renderDeck();
   openEditor(selectedControl);
-  clearTimeout(autosaveTimer);
-  autosaveTimer = null;
+  cancelPendingAutosave();
   const ok = await runAutosave();
   if (!ok) return;
   await refreshSkin();
@@ -3508,8 +3517,7 @@ async function applyKnobPagesJson() {
       throw new Error("knob_pages must be a JSON object");
     }
     cfg.knob_pages = o;
-    clearTimeout(autosaveTimer);
-    autosaveTimer = null;
+    cancelPendingAutosave();
     const ok = await runAutosave();
     if (!ok) return;
     await refreshSkin();
@@ -3545,18 +3553,15 @@ async function saveKnobEncoderPagesFromForm() {
     }
   }
   syncKnobPagesEditor();
-  clearTimeout(autosaveTimer);
-  autosaveTimer = null;
+  cancelPendingAutosave();
   const ok = await runAutosave();
   if (!ok) return;
   await refreshSkin();
   renderDeck();
 }
 
-async function init() {
-  wireTabBar();
-  wireUndoRedoKeyboard();
-  void refreshBackupsList();
+/** Fetch the action catalog and the config; false (error shown) when the config cannot be loaded. */
+async function loadCatalogAndConfig() {
   try {
     const cr = await fetch("/api/action_catalog");
     if (cr.ok) {
@@ -3567,17 +3572,13 @@ async function init() {
     cfg = await apiGet();
   } catch (e) {
     $("#saveError").textContent = String(e);
-    return;
+    return false;
   }
-  loadCopiedControlFromStorage();
-  syncSpotifyFromCfg();
-  void refreshSpotifyStatus();
-  handleSpotifyReturnQuery();
-  ensureTwitch();
-  renderTwitchAccounts();
-  ensureDevice();
-  ensureLogging();
-  syncLoggingFromCfg();
+  return true;
+}
+
+/** Services → Logging: level select. */
+function wireLogLevelSelect() {
   const logLevelEl = $("#logLevel");
   if (logLevelEl) {
     logLevelEl.addEventListener("change", () => {
@@ -3586,7 +3587,10 @@ async function init() {
       scheduleAutosave();
     });
   }
-  syncHaFromCfg();
+}
+
+/** Services → Home Assistant: URL and token fields. */
+function wireHaFields() {
   wireSmartField($("#haBaseUrl"), {
     validate: () => true,
     onCommit: (raw) => {
@@ -3601,8 +3605,10 @@ async function init() {
       cfg.ha.token = raw.trim();
     },
   });
+}
 
-  syncObsFromCfg();
+/** Services → OBS: host, port and password fields. */
+function wireObsFields() {
   wireSmartField($("#obsHost"), {
     validate: () => true,
     onCommit: (raw) => {
@@ -3625,7 +3631,10 @@ async function init() {
       cfg.obs.password = raw;
     },
   });
+}
 
+/** Services toolbar: open the config folder. */
+function wireOpenConfigFolderButton() {
   const btnOpenConfigFolder = $("#btnOpenConfigFolder");
   if (btnOpenConfigFolder) {
     btnOpenConfigFolder.addEventListener("click", () => {
@@ -3634,6 +3643,10 @@ async function init() {
       });
     });
   }
+}
+
+/** Services toolbar: "start at login" toggle (reads the current state first). */
+async function initAutostartToggle() {
   const autostartEl = $("#autostartToggle");
   if (autostartEl) {
     try {
@@ -3660,38 +3673,10 @@ async function init() {
       })();
     });
   }
-  try {
-    const sr = await fetch("/api/status");
-    if (sr.ok) {
-      const sj = await sr.json();
-      if (sj.deck_layout === "live" || sj.deck_layout === "live_s") {
-        agentDeckLayout = sj.deck_layout;
-      } else {
-        agentDeckLayout = null;
-      }
-      ensurePages();
-      if (typeof sj.page_index === "number") {
-        syncUiToAgentPage(sj.page_index);
-      }
-    } else {
-      ensurePages();
-    }
-  } catch {
-    ensurePages();
-  }
-  updateLiveSPageChrome();
-  const dm = $("#deviceModel");
-  if (dm) dm.value = cfg.device.model || "auto";
+}
 
-  $("#pageName").textContent = currentPage().name || `Page ${pageIndex + 1}`;
-  const pnInit = $("#pageNameInput");
-  if (pnInit) pnInit.value = currentPage().name || "";
-  syncPageSelect();
-  renderDeck();
-  syncKnobPagesEditor();
-  syncTestPressButton();
-  syncCopyPasteButtons();
-
+/** Page rail: the hidden #pageSelect (page switch) and "+ Add page". */
+function wirePageSelect() {
   $("#pageSelect").addEventListener("change", () => {
     pageIndex = Number($("#pageSelect").value);
     muteAgentPagePollBriefly();
@@ -3714,14 +3699,26 @@ async function init() {
   });
 
   $("#btnAddPage").addEventListener("click", addPage);
+}
+
+/** Services → Backups: backup now, remove backups, reset layout. */
+function wireBackupButtons() {
   const btnBackup = $("#btnBackup");
   if (btnBackup) btnBackup.addEventListener("click", () => void backupConfig());
   const btnWipeBackups = $("#btnWipeBackups");
   if (btnWipeBackups) btnWipeBackups.addEventListener("click", () => void wipeBackupsConfig());
   const btnReset = $("#btnResetDefaults");
   if (btnReset) btnReset.addEventListener("click", () => void resetConfigToDefaults());
+}
+
+/** Key editor: Apply to key / Clear. */
+function wireApplyClearButtons() {
   $("#btnApply").addEventListener("click", () => void saveAction());
   $("#btnClear").addEventListener("click", () => void clearControl());
+}
+
+/** Key editor: copy / paste a control (clipboard persisted in localStorage). */
+function wireCopyPasteButtons() {
   const btnCopyControl = $("#btnCopyControl");
   const btnPasteControl = $("#btnPasteControl");
   if (btnCopyControl) {
@@ -3758,8 +3755,7 @@ async function init() {
           }
           renderDeck();
           openEditor(selectedControl);
-          clearTimeout(autosaveTimer);
-          autosaveTimer = null;
+          cancelPendingAutosave();
           const ok = await runAutosave();
           if (!ok) return;
           await refreshSkin();
@@ -3770,6 +3766,10 @@ async function init() {
       })();
     });
   }
+}
+
+/** Key editor: simulate a press of the selected control. */
+function wireTestPressButton() {
   const btnTestPress = $("#btnTestPress");
   if (btnTestPress) {
     btnTestPress.addEventListener("click", () => {
@@ -3785,6 +3785,10 @@ async function init() {
       })();
     });
   }
+}
+
+/** Encoder editor: simulate push / turn left / turn right. */
+function wireKnobTestButtons() {
   const btnTestKnobPush = $("#btnTestKnobPush");
   const btnTestKnobLeft = $("#btnTestKnobLeft");
   const btnTestKnobRight = $("#btnTestKnobRight");
@@ -3830,6 +3834,10 @@ async function init() {
       })();
     });
   }
+}
+
+/** Key editor: image and font Browse… buttons. */
+function wireUploadButtons() {
   const fileUp = $("#fileUp");
   if (fileUp) fileUp.addEventListener("change", uploadImage);
   const btnBrowseImage = $("#btnBrowseImage");
@@ -3842,7 +3850,10 @@ async function init() {
   if (btnBrowseFont && fileUpFont) {
     btnBrowseFont.addEventListener("click", () => fileUpFont.click());
   }
+}
 
+/** Key editor: action type change re-renders the parameter fields and Advanced JSON. */
+function wireActionTypeSelect() {
   $("#actionType").addEventListener("change", () => {
     const t = $("#actionType").value;
     renderActionFields(t);
@@ -3864,20 +3875,20 @@ async function init() {
       }
     }
   });
+}
 
+/** Page header: rename the current page. */
+function wirePageNameInput() {
   $("#pageNameInput").addEventListener("input", () => {
     currentPage().name = $("#pageNameInput").value;
     $("#pageName").textContent = currentPage().name || `Page ${pageIndex + 1}`;
     syncPageSelect();
     scheduleAutosave();
   });
+}
 
-  if (dm) dm.addEventListener("change", onModelChange);
-
-  wireButtonColorInputs();
-  wireDesignFieldInputs();
-  wireKeyEditorAutoCommit();
-
+/** Encoder editor: save / add page / close / remove page / all-encoders JSON. */
+function wireKnobEditorButtons() {
   const btnKnobPages = $("#btnApplyKnobPages");
   if (btnKnobPages) btnKnobPages.addEventListener("click", () => void applyKnobPagesJson());
 
@@ -3901,9 +3912,10 @@ async function init() {
       }
     });
   }
+}
 
-  startConnectionStatusPolling();
-
+/** Services → Spotify: save, connect, disconnect. */
+function wireSpotifyButtons() {
   const btnSpotifySave = $("#btnSpotifySave");
   if (btnSpotifySave) btnSpotifySave.addEventListener("click", () => void saveSpotifySettings());
   const btnSpotifyConnect = $("#btnSpotifyConnect");
@@ -3930,7 +3942,10 @@ async function init() {
       })();
     });
   }
+}
 
+/** Services → Twitch: add an account. */
+function wireTwitchAddButton() {
   const btnAddTwitch = $("#btnAddTwitchAccount");
   if (btnAddTwitch) {
     btnAddTwitch.addEventListener("click", () => {
@@ -3941,7 +3956,10 @@ async function init() {
       scheduleAutosave();
     });
   }
+}
 
+/** Key editor: look fields refresh the live preview while typing. */
+function wireSidebarPreviewInputs() {
   for (const id of [
     "buttonText",
     "iconUri",
@@ -3956,9 +3974,68 @@ async function init() {
     if (!el) continue;
     el.addEventListener(el.tagName === "SELECT" ? "change" : "input", scheduleSidebarPreviewRefresh);
   }
+}
 
+async function init() {
+  wireTabBar();
+  wireUndoRedoKeyboard();
+  void refreshBackupsList();
+  if (!(await loadCatalogAndConfig())) return;
+  loadCopiedControlFromStorage();
+  syncSpotifyFromCfg();
+  void refreshSpotifyStatus();
+  handleSpotifyReturnQuery();
+  ensureTwitch();
+  renderTwitchAccounts();
+  ensureDevice();
+  ensureLogging();
+  syncLoggingFromCfg();
+  wireLogLevelSelect();
+  syncHaFromCfg();
+  wireHaFields();
+  syncObsFromCfg();
+  wireObsFields();
+  wireOpenConfigFolderButton();
+  await initAutostartToggle();
+  await pullAgentLayoutAndPage();
+  updateLiveSPageChrome();
+  const dm = $("#deviceModel");
+  if (dm) dm.value = cfg.device.model || "auto";
+
+  $("#pageName").textContent = currentPage().name || `Page ${pageIndex + 1}`;
+  const pnInit = $("#pageNameInput");
+  if (pnInit) pnInit.value = currentPage().name || "";
+  syncPageSelect();
+  renderDeck();
+  syncKnobPagesEditor();
+  syncTestPressButton();
+  syncCopyPasteButtons();
+
+  wirePageSelect();
+  wireBackupButtons();
+  wireApplyClearButtons();
+  wireCopyPasteButtons();
+  wireTestPressButton();
+  wireKnobTestButtons();
+  wireUploadButtons();
+  wireActionTypeSelect();
+  wirePageNameInput();
+  if (dm) dm.addEventListener("change", onModelChange);
+
+  wireButtonColorInputs();
+  wireDesignFieldInputs();
+  wireKeyEditorAutoCommit();
+
+  wireKnobEditorButtons();
+  startConnectionStatusPolling();
+
+  wireSpotifyButtons();
+  wireTwitchAddButton();
+  wireSidebarPreviewInputs();
   suppressAutosave = false;
   setSaveStatus("Saved");
 }
 
+on("config:replaced", onConfigReplaced);
+on("control:open", openEditor);
 document.addEventListener("DOMContentLoaded", init);
