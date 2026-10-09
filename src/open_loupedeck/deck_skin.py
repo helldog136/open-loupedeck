@@ -18,6 +18,7 @@ from .live_message import (
     spotify_state_entry,
     spotify_state_params_from_entry,
 )
+from .look_defaults import proposed_entry
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,9 @@ def _has_visual(entry: dict[str, Any]) -> bool:
         return True
     if effective_graphic_source(entry):
         return True
-    return bool(entry.get("background") or (entry.get("text") or entry.get("label") or "").strip())
+    if bool(entry.get("background") or (entry.get("text") or entry.get("label") or "").strip()):
+        return True
+    return proposed_entry(entry) is not None
 
 
 def _apply_rgba_to_control(deck: Any, control_id: str, img: Image.Image) -> None:
@@ -244,7 +247,7 @@ def apply_page_skin(
                 and base is not None
                 and spotify_state_params_from_entry(base) is not None
             ):
-                entry = spotify_state_entry(base, str(overlay))
+                entry = spotify_state_entry(proposed_entry(base) or base, str(overlay))
             else:
                 entry = base
             img: Image.Image | None = None
