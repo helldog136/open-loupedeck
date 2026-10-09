@@ -55,7 +55,7 @@ from .live_message import (
     twitch_live_params_from_entry,
 )
 from .logging_setup import reapply_logging_from_config
-from .look_defaults import resolve_look
+from .look_defaults import proposed_entry, resolve_look
 from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unused_library_media
 from .package_paths import package_root
 from .runtime_refs import AgentRuntimeRefs
@@ -886,7 +886,8 @@ def create_web_app(
                     act = ent.get("action")
                     fb = offline_fallback_mode(act if isinstance(act, dict) else ent)
                     ent["text"] = offline_fallback_text(fb, live_value or str(ent.get("text") or ""))
-            entry = ent
+            # Merge the proposed look here so the cache key carries the (language-dependent) label.
+            entry = proposed_entry(ent) or ent
 
         def _render() -> tuple[bytes, dict[str, Any]]:
             img, measure = render_key_preview(

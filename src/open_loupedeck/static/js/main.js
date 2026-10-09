@@ -4,26 +4,12 @@
  */
 
 import { apiGet } from "./api.js";
-import { populateActionTypeSelect } from "./catalog.js";
 import { renderDeck } from "./deck.js";
-import { loadCopiedControlFromStorage, wireCopyPasteButtons } from "./inspector/clipboard.js";
-import {
-  openEditor,
-  wireActionTypeSelect,
-  wireApplyClearButtons,
-  wireKeyEditorAutoCommit,
-  wireTestPressButton,
-  wireUploadButtons,
-} from "./inspector/editor.js";
+import { loadCopiedControlFromStorage } from "./inspector/clipboard.js";
+import { initInspector, refreshInspector } from "./inspector/index.js";
 import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
 import {
-  wireButtonColorInputs,
-  wireDesignFieldInputs,
-  wireSidebarPreviewInputs,
-} from "./inspector/preview.js";
-import {
   closeKnobEncoderEditor,
-  openKnobEncoderEditor,
   syncKnobPagesEditor,
   wireKnobEditorButtons,
   wireKnobTestButtons,
@@ -81,7 +67,8 @@ function onConfigReplaced(prevPageIndex) {
   renderTwitchAccounts();
   syncPageSelect();
   renderDeck();
-  if (state.selectedControl) openEditor(state.selectedControl);
+  if (state.pageIndex !== prevPageIndex) state.selectedControl = null;
+  refreshInspector();
   scheduleAutosave();
   if (state.pageIndex !== prevPageIndex) void syncAgentPageIndex();
 }
@@ -96,10 +83,8 @@ function onModelChange() {
   renderDeck();
   if (state.selectedKnobEncoder && !liveKnobEncoderIds().includes(state.selectedKnobEncoder)) {
     closeKnobEncoderEditor();
-  } else if (state.selectedKnobEncoder) {
-    openKnobEncoderEditor(state.selectedKnobEncoder);
-  } else if (state.selectedControl) {
-    openEditor(state.selectedControl);
+  } else {
+    refreshInspector();
   }
   scheduleAutosave();
 }
@@ -107,12 +92,14 @@ function onModelChange() {
 /** Fetch the action catalog and the config; false (error shown) when the config cannot be loaded. */
 async function loadCatalogAndConfig() {
   try {
-    const cr = await fetch("/api/action_catalog");
+    // Labels, option labels and help texts come translated in the UI language.
+    if (window.i18n && window.i18n.ready) await window.i18n.ready;
+    const lang = (window.i18n && window.i18n.lang) || "";
+    const cr = await fetch(`/api/action_catalog${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`);
     if (cr.ok) {
       const j = await cr.json();
       state.actionCatalog = j.actions || [];
     }
-    populateActionTypeSelect();
     state.cfg = await apiGet();
   } catch (e) {
     $("#saveError").textContent = String(e);
@@ -164,17 +151,9 @@ async function init() {
 
   wirePageSelect();
   wireBackupButtons();
-  wireApplyClearButtons();
-  wireCopyPasteButtons();
-  wireTestPressButton();
+  initInspector();
   wireKnobTestButtons();
-  wireUploadButtons();
-  wireActionTypeSelect();
   if (dm) dm.addEventListener("change", onModelChange);
-
-  wireButtonColorInputs();
-  wireDesignFieldInputs();
-  wireKeyEditorAutoCommit();
 
   wireKnobEditorButtons();
   startConnectionStatusPolling();
@@ -184,7 +163,6 @@ async function init() {
   wireTwitchMainButton();
   wireConfigureButtons();
   refreshLanguageCard();
-  wireSidebarPreviewInputs();
   state.suppressAutosave = false;
   setSaveStatus(t("status.saved"));
   // An older config with fewer than four pages was padded on load: save it so the agent knows them too.
@@ -213,5 +191,5 @@ document.addEventListener("i18n:change", () => {
 });
 
 on("config:replaced", onConfigReplaced);
-on("control:open", openEditor);
+// "control:open" / "knob:open" are handled by the inspector (inspector/index.js).
 document.addEventListener("DOMContentLoaded", init);

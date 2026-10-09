@@ -160,22 +160,64 @@ def test_live_key_with_runtime_text_gets_proposed_colours_but_keeps_its_text():
     assert out["text"] == "13:54" and out["background"] == "#4a4f8f"
 
 
-def test_configs_with_visuals_render_exactly_as_before(tmp_path: Path):
+def _corner(img):
+    return img.convert("RGB").getpixel((2, 2))
+
+
+def test_customising_one_field_keeps_the_others_proposed(tmp_path: Path):
+    # A custom label only: the proposed colours stay (the key does not fall back to the plain look).
+    entry = {"text": "Jeu", "action": {"type": "obs.set_scene", "scene": "Jeu"}}
+    assert _corner(render_tactile_key_image(entry, tmp_path)) == (0x1F, 0x6F, 0xE0)
+    # A custom background only: the proposed label and icon are still drawn.
+    out = proposed_entry({"background": "#102030", "action": {"type": "sound.play", "file": "sfx/Clap.mp3"}})
+    assert out["background"] == "#102030" and out["text"] == "Clap"
+    assert out["icon"] == "lucide:volume-2" and out["mode"] == "both" and out["text_color"] == "#ffffff"
+    img = render_tactile_key_image({"background": "#102030", "action": {"type": "obs.set_scene"}}, tmp_path)
+    assert _corner(img) == (0x10, 0x20, 0x30)
+
+
+def test_stored_mode_wins_and_drives_the_layout(tmp_path: Path):
+    base = {"action": {"type": "sound.play", "file": "a.wav"}}
+    assert proposed_entry({**base, "mode": "text"})["mode"] == "text"
+    assert "icon" not in proposed_entry({**base, "mode": "text"})
+    text = render_tactile_key_image({**base, "mode": "text"}, tmp_path)
+    both = render_tactile_key_image(base, tmp_path)
+    assert ImageChops.difference(text.convert("RGB"), both.convert("RGB")).getbbox() is not None
+
+
+def test_explicit_content_is_never_hidden_by_the_proposed_mode():
+    icon_on_text_key = resolve_look({"action": {"type": "obs.set_scene", "scene": "A"}, "icon": "lucide:star"})
+    assert icon_on_text_key["mode"] == "both" and icon_on_text_key["source"]["mode"] == "proposed"
+    label_on_icon_key = resolve_look({"action": {"type": "spotify.next"}, "text": "Skip"})
+    assert label_on_icon_key["mode"] == "both"
+    # ...unless the user picked the mode.
+    assert resolve_look({"action": {"type": "spotify.next"}, "text": "Skip", "mode": "icon"})["mode"] == "icon"
+
+
+def test_live_key_keeps_its_own_text_and_colours():
+    out = proposed_entry({"text": "13:54", "text_color": "#ff0000", "action": {"type": "display.clock"}})
+    assert out["text"] == "13:54" and out["text_color"] == "#ff0000" and out["background"] == "#4a4f8f"
+
+
+def test_entries_without_a_known_action_are_untouched():
+    assert proposed_entry({"text": "Go", "background": "#123456"}) is None
+    assert proposed_entry({"text": "Go", "action": {"type": "plugin.unknown"}}) is None
+
+
+def test_device_render_equals_the_editor_preview(tmp_path: Path):
+    from open_loupedeck.button_render import render_key_preview
+
     cases = [
-        {"text": "Jeu", "action": {"type": "obs.set_scene", "scene": "Jeu"}},
-        {"text": "Jeu", "background": "#102030", "action": {"type": "obs.set_scene", "scene": "Jeu"}},
-        {"background": "#102030", "action": {"type": "obs.set_scene", "scene": "Jeu"}},
-        {"text": "13:54", "text_color": "#ff0000", "action": {"type": "display.clock"}},
-        {"text": "Go", "actions": [{"type": "command.run", "argv": ["x"]}]},
+        {"action": {"type": "obs.set_scene", "scene": "Just Chatting"}},
+        {"action": {"type": "sound.play", "file": "x.wav"}, "text": "Clap", "background": "#22a35a"},
+        {"action": {"type": "spotify.next"}, "mode": "text"},
+        {"text": "Plain", "background": "#000000"},
+        {"text": "Big", "background": "#000000", "mode": "text"},
     ]
     for entry in cases:
-        assert proposed_entry(entry) is None or entry["action" if "action" in entry else "actions"]
-        bare = {k: v for k, v in entry.items() if k not in ("action", "actions")}
-        a = render_tactile_key_image(entry, tmp_path)
-        b = render_tactile_key_image(bare, tmp_path)
-        assert a is not None and b is not None
-        if entry.get("text") != "13:54" or "background" in entry or "text_color" in entry:
-            assert ImageChops.difference(a.convert("RGB"), b.convert("RGB")).getbbox() is None, entry
+        device = render_tactile_key_image(entry, tmp_path)
+        preview, _m = render_key_preview(entry, tmp_path)
+        assert ImageChops.difference(device.convert("RGB"), preview.convert("RGB")).getbbox() is None, entry
 
 
 def test_entries_without_action_still_render_nothing(tmp_path: Path):

@@ -65,7 +65,6 @@ function appendKnobRotateUI(fs, side, rotateVal) {
   const curType =
     parsed.mode === "form" && parsed.action && parsed.action.type ? String(parsed.action.type) : "";
   populateKnobActionSelect(sel, curType);
-  enhanceActionTypeSelect(sel, knobCompatibleActionList());
 
   const fields = document.createElement("div");
   fields.className = `knob-rot-fields-${side} knob-rot-fields`;
@@ -101,6 +100,8 @@ function appendKnobRotateUI(fs, side, rotateVal) {
   });
 
   wrap.appendChild(sel);
+  // Enhance once the select is in the DOM (the picker wraps it in place).
+  enhanceActionTypeSelect(sel, knobCompatibleActionList());
   wrap.appendChild(fields);
   wrap.appendChild(adv);
   fs.appendChild(wrap);

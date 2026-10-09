@@ -13,7 +13,6 @@ import {
   stopKeySequenceRecording,
 } from "./key-sequence.js";
 import { setSaveStatus } from "./save.js";
-import { state } from "./state.js";
 import { $, uploadLibraryParamForFile } from "./util.js";
 
 /** Resolve a catalog field control inside an action-fields container (data-param + id suffix fallback). */
@@ -30,12 +29,26 @@ function actionFieldEl(container, field) {
   return container.querySelector(`input[id$="_${suf}"],select[id$="_${suf}"],textarea[id$="_${suf}"]`);
 }
 
+/** Field label in plain language: the catalog's translated label, plus "(optional)". */
+function fieldLabelText(f) {
+  const base = f.label || f.name;
+  return f.optional ? `${base} ${t("inspector.field.optional")}` : base;
+}
+
+/** The catalog's help text for a field, as a hint under it (nothing when there is none). */
+function appendFieldHelp(wrap, f) {
+  if (!f.help) return;
+  const p = document.createElement("p");
+  p.className = "hint field-help";
+  p.textContent = f.help;
+  wrap.appendChild(p);
+}
+
 /** One "asset" parameter row: path input + Browse… (uploads to the asset library, fills the path). */
 function renderAssetField(container, wrap, f, idPrefix) {
   const lab = document.createElement("label");
   lab.className = "field-label";
-  lab.textContent = f.label || f.name;
-  if (f.optional) lab.textContent += " (optional)";
+  lab.textContent = fieldLabelText(f);
   const fid = `${idPrefix}_${String(f.name).replace(/[^a-zA-Z0-9_]/g, "_")}`;
   const row = document.createElement("div");
   row.className = "path-with-browse";
@@ -50,7 +63,7 @@ function renderAssetField(container, wrap, f, idPrefix) {
   const browse = document.createElement("button");
   browse.type = "button";
   browse.className = "btn-browse";
-  browse.textContent = "Browse…";
+  browse.textContent = t("inspector.field.browse");
   const fileIn = document.createElement("input");
   fileIn.type = "file";
   fileIn.hidden = true;
@@ -77,10 +90,7 @@ function renderAssetField(container, wrap, f, idPrefix) {
       if (errEl) errEl.textContent = "";
       const saveErr = $("#saveError");
       if (saveErr) saveErr.textContent = "";
-      if (idPrefix === "ap") {
-        syncMainActionAdvWithFormAfterAssetChange();
-        setSaveStatus("Media uploaded — click Apply to key to save");
-      }
+      if (idPrefix === "ap") setSaveStatus(t("inspector.field.uploaded"));
     } catch (e) {
       const msg = String(e.message || e);
       if (errEl) errEl.textContent = msg;
@@ -93,6 +103,7 @@ function renderAssetField(container, wrap, f, idPrefix) {
   row.appendChild(fileIn);
   wrap.appendChild(lab);
   wrap.appendChild(row);
+  appendFieldHelp(wrap, f);
   container.appendChild(wrap);
 }
 
@@ -118,7 +129,7 @@ export function renderActionFieldsInto(container, type, idPrefix) {
       if (f.input === "key_sequence") {
         const lab = document.createElement("label");
         lab.className = "field-label";
-        lab.textContent = f.label || f.name;
+        lab.textContent = fieldLabelText(f);
         wrap.appendChild(lab);
         renderKeySequenceField(wrap, f, idPrefix);
         container.appendChild(wrap);
@@ -132,8 +143,7 @@ export function renderActionFieldsInto(container, type, idPrefix) {
 
       const lab = document.createElement("label");
       lab.className = "field-label";
-      lab.textContent = f.label || f.name;
-      if (f.optional) lab.textContent += " (optional)";
+      lab.textContent = fieldLabelText(f);
 
       let input;
       if (f.input === "select") {
@@ -143,7 +153,7 @@ export function renderActionFieldsInto(container, type, idPrefix) {
         for (const opt of f.options || []) {
           const op = document.createElement("option");
           op.value = opt;
-          op.textContent = opt;
+          op.textContent = (f.option_labels && f.option_labels[String(opt)]) || opt;
           input.appendChild(op);
         }
         if (f.default != null) input.value = String(f.default);
@@ -169,6 +179,7 @@ export function renderActionFieldsInto(container, type, idPrefix) {
       }
       lab.appendChild(input);
       wrap.appendChild(lab);
+      appendFieldHelp(wrap, f);
       container.appendChild(wrap);
     }
     return;
@@ -177,14 +188,14 @@ export function renderActionFieldsInto(container, type, idPrefix) {
   if (spec.params_json) {
     const hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent =
-      "Parameters as a JSON object (do not repeat \"type\"). Example: {\"scene\": \"Main\"}";
+    hint.textContent = t("inspector.field.params_json", { example: '{"scene": "Main"}' });
     container.appendChild(hint);
     const ta = document.createElement("textarea");
     ta.className = "action-params-json";
     if (idPrefix === "ap") {
       ta.id = "actionParamsJson";
     }
+    ta.setAttribute("aria-label", t("inspector.field.params_label"));
     ta.rows = 8;
     ta.spellcheck = false;
     container.appendChild(ta);
@@ -243,27 +254,6 @@ export function mergeAssetFieldValuesFromForm(container, type, action) {
   return action;
 }
 
-/** Keep Advanced JSON in sync after an asset upload so Apply does not drop the new path. */
-function syncMainActionAdvWithFormAfterAssetChange() {
-  const adv = $("#actionJsonAdv");
-  const type = $("#actionType").value;
-  const fields = $("#actionFields");
-  if (!adv || !type || !fields) return;
-  let base = { type };
-  const cur = adv.value.trim();
-  if (cur) {
-    try {
-      const p = JSON.parse(cur);
-      if (p && typeof p === "object" && !Array.isArray(p)) base = p;
-    } catch {
-      return;
-    }
-  }
-  mergeAssetFieldValuesFromForm(fields, type, base);
-  adv.value = JSON.stringify(base, null, 2);
-  state.lastSyncedAdv = adv.value.trim();
-}
-
 export function buildActionFromFormIn(container, type) {
   if (!type) return null;
   const spec = getSpec(type);
@@ -287,7 +277,7 @@ export function buildActionFromFormIn(container, type) {
         try {
           out[f.name] = JSON.parse(raw);
         } catch {
-          throw new Error(`${f.label || f.name}: invalid JSON`);
+          throw new Error(t("inspector.error.invalid_json", { field: f.label || f.name }));
         }
       } else if (f.input === "number") {
         out[f.name] = Number(raw);
@@ -306,10 +296,10 @@ export function buildActionFromFormIn(container, type) {
       try {
         extra = JSON.parse(raw);
       } catch {
-        throw new Error("Parameters: invalid JSON");
+        throw new Error(t("inspector.error.params_json"));
       }
       if (typeof extra !== "object" || extra === null || Array.isArray(extra)) {
-        throw new Error("Parameters must be a JSON object");
+        throw new Error(t("inspector.error.params_object"));
       }
       Object.assign(out, extra);
     }

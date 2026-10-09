@@ -51,8 +51,11 @@ def main() -> int:
     def on_console(msg) -> None:
         if msg.type != "error":
             return
-        if str((msg.location or {}).get("url", "")).endswith("/favicon.ico"):
+        url = str((msg.location or {}).get("url", ""))
+        if url.endswith("/favicon.ico"):
             return
+        if args.ignore_external and url and not url.startswith(origin):
+            return  # e.g. "Failed to load resource" for a CDN icon while offline
         errors.append(f"console error: {msg.text} ({(msg.location or {}).get('url', '')})")
 
     def on_request_failed(req) -> None:
@@ -82,7 +85,7 @@ def main() -> int:
             step("load page")
             page.goto(base + "/")
             page.wait_for_selector("#deckRoot .dk-key")
-            page.wait_for_selector("#actionType option:nth-child(2)", state="attached")  # catalog loaded
+            page.wait_for_selector("#keyEditorBlock .insp-empty-state")  # inspector mounted (catalog loaded)
             page.wait_for_timeout(500)  # rest of the boot sequence (status, wiring)
             config_before = fetch_config(page)
 
@@ -95,21 +98,14 @@ def main() -> int:
 
             step("select touch_0")
             page.click('.dk-key[data-cid="touch_0"]')
-            page.wait_for_function("document.querySelector('#selLabel').textContent === 'touch_0'")
+            page.wait_for_selector('#keyEditorBlock .insp-view[data-control="touch_0"] .pk-act')
 
             step("pick an action type")
-            before = page.input_value("#actionType")
-            picked = before
-            for nth in (0, 1):  # the second item if the first one is the key's current action
-                page.click("#keyEditorBlock .action-select-trigger")
-                page.wait_for_selector(".action-select-panel")
-                category = page.locator(".action-select-panel .action-select-category").first
-                if "open" not in (category.get_attribute("class") or ""):
-                    category.click()
-                page.locator(".action-select-panel .action-select-subitem:visible").nth(nth).click()
-                picked = page.input_value("#actionType")
-                if picked and picked != before:
-                    break
+            selected = '#keyEditorBlock .pk-act[aria-selected="true"]'
+            before = page.get_attribute(selected, "data-type") if page.locator(selected).count() else ""
+            page.locator('#keyEditorBlock .pk-act[aria-selected="false"]').first.click()
+            page.wait_for_selector(selected)
+            picked = page.get_attribute(selected, "data-type")
             if not picked or picked == before:
                 raise AssertionError(f"action type did not change (still {before!r})")
             print(f"  action type: {before or '(none)'} -> {picked}")
