@@ -44,3 +44,16 @@ Open `http://127.0.0.1:8774`, go to the Services tab, **Language**, and pick you
 - Web: `window.t("common.save")`, or `data-i18n="common.save"` / `data-i18n-attr="title:common.save"` in HTML;
   wait for `window.i18n.ready` before first render; listen to the `i18n:change` event to re-render dynamic parts.
 - Add new keys to `en.json` **and** `fr.json` in the same change; `section.sub.name` naming, lowercase.
+
+## The action catalog
+
+Every action's name, field labels, placeholders, select options and category, plus the default key labels, live in the
+same JSON files under three families of keys:
+
+- `action.<type>.label`, `action.<type>.field.<name>.label|placeholder|help`, `action.<type>.field.<name>.option.<value>`
+- `category.<slug>`
+- `look.<type>.label` (the short text proposed on a key)
+
+`python scripts/check_catalog_keys.py` lists catalog keys that are missing from a locale file (and stray ones). Technical
+placeholders such as `{twitch_status}` must be kept; plain numbers and HTTP verbs are not translated. The web API
+`GET /api/action_catalog?lang=fr` returns the catalog already translated, with the `*_key` of each text.

@@ -8,16 +8,11 @@ from pathlib import Path
 import pytest
 from PIL import ImageChops
 
+from open_loupedeck import i18n
 from open_loupedeck.action_catalog import ACTION_CATALOG, merged_catalog
 from open_loupedeck.button_render import render_tactile_key_image
 from open_loupedeck.icon_loader import icon_url_from_spec
-from open_loupedeck.look_defaults import (
-    DEFAULT_LABELS_EN,
-    DEFAULT_LABELS_FR,
-    LIVE_PLACEHOLDER,
-    proposed_entry,
-    resolve_look,
-)
+from open_loupedeck.look_defaults import LIVE_PLACEHOLDER, proposed_entry, resolve_look
 
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 TYPES = [e["type"] for e in ACTION_CATALOG]
@@ -31,17 +26,19 @@ def test_every_catalog_action_has_a_valid_default_look(action):
     assert look["mode"] in ("text", "icon", "both")
     assert icon_url_from_spec(look["icon"]) is not None
     assert look["label_key"] == f"look.{action}.label"
-    assert look["label_key"] in DEFAULT_LABELS_EN
-    assert look["label_key"] in DEFAULT_LABELS_FR
+    for code in ("en", "fr"):
+        assert i18n.t(look["label_key"], code) != look["label_key"]
     if "label_from" in look:
         assert look["label_from"] in {f["name"] for f in entry["fields"]}
     if "live" in look:
         assert HEX.match(look["live"]["offline_bg"]) and HEX.match(look["live"]["offline_fg"])
 
 
-def test_label_tables_have_the_same_keys_and_no_strays():
-    assert set(DEFAULT_LABELS_EN) == set(DEFAULT_LABELS_FR)
-    assert set(DEFAULT_LABELS_EN) == {f"look.{t}.label" for t in TYPES}
+def test_look_label_keys_exist_in_every_locale_and_none_are_stray():
+    expected = {f"look.{t}.label" for t in TYPES}
+    for code in ("en", "fr"):
+        keys = {k for k in i18n.messages_for(code) if k.startswith("look.")}
+        assert keys == expected, code
 
 
 def test_transport_controls_are_icon_mode_and_live_actions_are_flagged():
