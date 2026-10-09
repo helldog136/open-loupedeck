@@ -1,4 +1,9 @@
-"""Per-knob page stacks: rotate left/right actions; push cycles pages (no separate push binding)."""
+"""Legacy per-knob page stacks (``knob_pages``): rotate left/right actions; push cycles pages.
+
+Superseded by per-deck-page knob roles (``pages[].knobs``, see ``knob_roles.py``); configs are
+migrated on load. This module is still used by the migration, by the fallback runtime path for
+configs without deck pages, and for the knob -> neighbouring touch key mapping.
+"""
 
 from __future__ import annotations
 
@@ -56,12 +61,16 @@ def feedback_touch_key_for_knob_page_name(knob_id: str, model: str) -> str | Non
 
 
 def feedback_duration_sec(raw: dict[str, Any]) -> float:
+    """Global knob feedback duration, 0–2 s (``knob_page_feedback.duration_sec``; 0 = no feedback)."""
+
     fb = raw.get("knob_page_feedback")
     if isinstance(fb, dict):
-        d = fb.get("duration_sec") or fb.get("seconds")
-        if d is not None:
+        d = fb.get("duration_sec")
+        if d is None:
+            d = fb.get("seconds")
+        if d is not None and not isinstance(d, bool):
             try:
-                return max(0.3, min(KNOB_PAGE_FEEDBACK_MAX_SEC, float(d)))
+                return max(0.0, min(KNOB_PAGE_FEEDBACK_MAX_SEC, float(d)))
             except (TypeError, ValueError):
                 pass
     return KNOB_PAGE_FEEDBACK_MAX_SEC

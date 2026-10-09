@@ -37,6 +37,8 @@ from .config_state import ConfigState
 from .control_ids import is_page_scoped_control
 from .hardware.live_s_device import LoupedeckLiveS
 from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
+from .knob_duos import list_duos
+from .knob_roles import validate_knobs_config
 from .live_message import (
     battery_params_from_entry,
     clock_params_from_entry,
@@ -382,6 +384,13 @@ def create_web_app(
         code = resolve_language(lang) if lang else get_language()
         return JSONResponse({"lang": code, "actions": merged_catalog(code)})
 
+    @app.get("/api/knob_duos")
+    async def knob_duos(
+        lang: str | None = Query(None, description="Language code; default = the app's current language"),
+    ) -> JSONResponse:
+        code = resolve_language(lang) if lang else get_language()
+        return JSONResponse({"lang": code, "duos": list_duos(code)})
+
     @app.post("/api/resolve_look")
     async def post_resolve_look(body: dict[str, Any] = Body(...)) -> JSONResponse:
         """Final look (label/icon/colours/mode + proposed|modified source) of a key entry."""
@@ -539,6 +548,9 @@ def create_web_app(
         if not isinstance(body, dict):
             raise HTTPException(400, t("error.json_object_required"))
         merged = ensure_minimal_structure(body)
+        knob_errors = validate_knobs_config(merged)
+        if knob_errors:
+            raise HTTPException(400, t("error.invalid_knobs", details="; ".join(knob_errors[:10])))
         merged, _ = materialize_external_media(merged, config_dir)
         n_pages = len(merged.get("pages") or []) if isinstance(merged.get("pages"), list) else 0
         logger.debug("PUT /api/config pages=%s path=%s", n_pages, config_path)
