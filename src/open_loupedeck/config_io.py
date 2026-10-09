@@ -91,6 +91,7 @@ def raw_to_settings(raw: dict[str, Any]) -> Settings:
 
 def default_raw_config() -> dict[str, Any]:
     return {
+        "language": "auto",
         "logging": {
             "dir": "",
             "level": "INFO",
@@ -202,6 +203,8 @@ def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
         out["obs"] = {"host": "127.0.0.1", "port": 4455, "password": ""}
     if "ha" not in out or not isinstance(out["ha"], dict):
         out["ha"] = {"base_url": "", "token": ""}
+    if not isinstance(out.get("language"), str) or not out["language"].strip():
+        out["language"] = "auto"
     if "logging" not in out:
         out["logging"] = {
             "dir": "",

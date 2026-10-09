@@ -184,6 +184,25 @@
       </details>
     </section>
 
+    <section class="logging-banner" id="languageBanner">
+      <details class="logging-details">
+        <summary class="logging-summary">
+          <span class="logging-summary-title" data-i18n="language.title">Language</span>
+          <span class="logging-summary-hint" data-i18n="language.hint">applies immediately (no restart)</span>
+        </summary>
+        <div class="logging-inner">
+          <label class="row" for="uiLanguage" data-i18n="language.label">Interface language</label>
+          <select id="uiLanguage" class="log-level-select">
+            <option value="auto">auto</option>
+          </select>
+          <p class="hint small" data-i18n="language.help">
+            Stored as language in config.yaml. Translations live in the locales folder; see the contributing guide to
+            add yours.
+          </p>
+        </div>
+      </details>
+    </section>
+
     <section class="obs-banner" id="obsBanner">
       <details class="obs-details">
         <summary class="obs-summary">
@@ -609,6 +628,7 @@
       </aside>
     </main>
     </div>
+    <script src="/assets/ui/i18n.js"></script>
     <script src="/assets/ui/app.js"></script>
   </body>
 </html>

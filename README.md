@@ -113,6 +113,8 @@ The config lives at:
 
 Editing it by hand is possible (it's plain YAML) but the config window covers everything and validates as you go — see **[docs/configuration.md](docs/configuration.md)** for the full schema (every action type and its parameters, dispatch order between pages/global_buttons/bindings, the button design fields, troubleshooting) if you want to script it directly or write a plugin.
 
+Languages: English and French are built in (setting `language: auto` follows your OS). Adding another is a single JSON file — see **[docs/translating.md](docs/translating.md)**.
+
 Extra Python actions: `plugin_modules: ["/path/to/file.py"]` in the config, `@register_action("my.action")` in the file — see `examples/custom_action.py`.
 
 ---

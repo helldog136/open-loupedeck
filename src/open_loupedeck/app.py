@@ -31,6 +31,7 @@ from .device_discovery import list_loupedeck_usb_ports, usb_hint_for_port
 from .events import NormalizedEvent, normalize_loupedeck_message
 from .ha_client import HaClient
 from .hardware.live_s_device import LoupedeckLiveS
+from .i18n import set_language_from_raw
 from .knob_flash import flash_knob_page_name
 from .knob_pages import (
     KNOB_ENCODER_IDS,
@@ -593,6 +594,7 @@ async def _async_main(
             loop.add_signal_handler(sig, _request_shutdown)
 
     raw = load_raw_for_logging(config_path)
+    set_language_from_raw(raw)
     bootstrap_logging(
         verbose=verbose,
         log_dir_override=log_dir,
