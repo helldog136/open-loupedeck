@@ -1,10 +1,11 @@
 /*
- * services/spotify.js — Services → Spotify: client id / redirect URI, connection status, connect /
- * disconnect, OAuth return query.
+ * services/spotify.js — Services → Spotify: client id / redirect URI, connection status (card pill,
+ * Connect / Disconnect button), connect / disconnect, OAuth return query.
  */
 
 import { state } from "../state.js";
 import { $ } from "../util.js";
+import { setServiceState } from "./cards.js";
 
 export function syncSpotifyFromCfg() {
   const sp = (state.cfg && state.cfg.spotify) || {};
@@ -16,26 +17,57 @@ export function syncSpotifyFromCfg() {
   }
 }
 
-export async function refreshSpotifyStatus() {
+let lastSpotify = null;
+
+/** Update the card's pill, its Connect / Disconnect button and the status line. */
+function showSpotifyState(j) {
+  lastSpotify = j;
   const line = $("#spotifyStatusLine");
+  const connectBtn = $("#btnSpotifyConnect");
+  const disconnectBtn = $("#btnSpotifyDisconnect");
+  const hasOwnApp = !!(state.cfg && state.cfg.spotify && state.cfg.spotify.client_id);
+  let text;
+  let mode;
+  if (!j) {
+    mode = "idle";
+    text = t("status.unreachable");
+  } else if (!j.configured) {
+    mode = "idle";
+    text = t("svc.spotify.state.no_app");
+  } else if (!j.connected) {
+    mode = "bad";
+    text = t("status.not_connected");
+  } else {
+    mode = "ok";
+    text = t("status.connected");
+  }
+  if (line) {
+    if (!j) line.textContent = "";
+    else if (!j.configured) line.textContent = t("svc.spotify.line.no_app");
+    else if (!j.connected) line.textContent = t("svc.spotify.line.not_connected");
+    else line.textContent = j.user ? t("svc.spotify.line.connected_as", { user: j.user }) : t("status.connected");
+  }
+  if (connectBtn) connectBtn.hidden = !!(j && j.connected);
+  if (disconnectBtn) disconnectBtn.hidden = !(j && j.connected);
+  // The header chip only appears once Spotify is in use (connected, or a Client ID was entered).
+  setServiceState("spotify", mode, text, !!(j && (j.connected || hasOwnApp)));
+}
+
+/** Redraw from the last answer (language change). */
+export function redrawSpotifyState() {
+  showSpotifyState(lastSpotify);
+}
+
+export async function refreshSpotifyStatus() {
   try {
     const r = await fetch("/api/spotify/status");
     if (!r.ok) {
-      if (line) line.textContent = "";
+      showSpotifyState(null);
       return;
     }
-    const j = await r.json();
-    if (!line) return;
-    if (!j.configured) {
-      line.textContent =
-        "No built-in Spotify app in this build: open Advanced and enter your own Client ID.";
-    } else if (!j.connected) {
-      line.textContent = "Configured — not connected. Click Connect with Spotify.";
-    } else {
-      line.textContent = j.user ? `Connected as ${j.user}.` : "Connected.";
-    }
+    showSpotifyState(await r.json());
   } catch {
-    if (line) line.textContent = "";
+    showSpotifyState(null);
   }
 }
 
