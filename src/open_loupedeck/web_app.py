@@ -109,7 +109,7 @@ def create_web_app(
     async def _no_cache(request: Any, call_next: Any) -> Any:
         """This is a local single-user config UI, never a public site: correctness after an app
         update matters far more than caching a few KB of static assets. Without this, a webview's
-        disk cache serving a stale index.html/app.js/style.css after an install can look exactly
+        disk cache serving a stale index.html, JS module or style.css after an install can look exactly
         like "the fix didn't take" even though the new file is right there on disk."""
 
         response = await call_next(request)

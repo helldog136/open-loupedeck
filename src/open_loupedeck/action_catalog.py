@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Each entry: type, label, optional fields (see static app.js), optional params_json for plugins.
+# Each entry: type, label, optional fields (see static/js/action-fields.js), optional params_json for plugins.
 # Field input types: text, number, select, json, asset (path + Browse uploads via /api/upload; optional "accept").
 ACTION_CATALOG: list[dict[str, Any]] = [
     {
