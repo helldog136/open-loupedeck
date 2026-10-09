@@ -286,6 +286,15 @@ MIN_FONT_SIZE = 8
 # Text mode is meant to be read at a glance: below this a 90px key label is not legible, so a word
 # that only fits smaller than this is reported as overflow (and drawn clipped at this size).
 TEXT_MODE_MIN_SIZE = 14
+
+
+def _autosize_cap(h: int) -> int:
+    """Largest font of the big-text ("text" mode) layout: a short label (a dash, "OK") stays readable
+    instead of filling the whole key."""
+
+    return max(TEXT_MODE_MIN_SIZE, round(h * 0.4))
+
+
 KEY_PREVIEW_MODES = ("text", "icon", "both")
 
 
@@ -375,7 +384,7 @@ def measure_label(
         margin = max(4, min(w, h) // 14)
         max_w, max_h = w - 2 * margin, h - 2 * margin
         max_lines, gap, bold, min_size = AUTOSIZE_MAX_LINES, 2, True, TEXT_MODE_MIN_SIZE
-        max_size = font_size_cap or None
+        max_size = font_size_cap or _autosize_cap(h)
     fs, lines, fits = _fit_text(
         text, font_path, max_w, max_h, bold=bold, max_lines=max_lines, max_size=max_size, gap=gap, min_size=min_size
     )
@@ -410,7 +419,13 @@ def _draw_multiline_center(
     if autosize:
         # Preview "text" mode: biggest bold font that fits in at most AUTOSIZE_MAX_LINES lines.
         fs, lines, _fits = _fit_text(
-            text, resolved_font_path, max_w, max_h, bold=True, max_size=font_size_cap, min_size=TEXT_MODE_MIN_SIZE
+            text,
+            resolved_font_path,
+            max_w,
+            max_h,
+            bold=True,
+            max_size=font_size_cap or _autosize_cap(h),
+            min_size=TEXT_MODE_MIN_SIZE,
         )
         font = _load_font(fs, resolved_font_path, bold=True)
         boxes = [draw.textbbox((0, 0), ln, font=font) for ln in lines]
@@ -797,6 +812,24 @@ def _apply_whole_key_press_effect(
     return base
 
 
+def _content_mode_options(entry: dict[str, Any]) -> tuple[float | None, bool, bool, bool, dict[str, Any]]:
+    """Render options for the entry's content ``mode`` (text / icon / both), shared by the device and
+    the editor preview: ``(graphic_scale, text_autosize, suppress_graphic, suppress_text, entry)``.
+    No (valid) mode keeps the historical layout. ``both`` uses the split layout unless the entry asks
+    for ``graphic_text_layout: overlay``."""
+
+    m = str(entry.get("mode") or "").strip().lower()
+    if m == "text":
+        return None, True, True, False, entry
+    if m == "icon":
+        return 0.66, False, False, True, entry
+    if m == "both":
+        if _graphic_text_layout_mode(entry) == "overlay":
+            return None, False, False, False, entry
+        return 0.4, False, False, False, {**entry, "graphic_text_layout": "split"}
+    return None, False, False, False, entry
+
+
 def render_tactile_key_image(
     entry: dict[str, Any],
     config_dir: Path,
@@ -845,8 +878,10 @@ def render_tactile_key_image(
       is used as the key graphic automatically.
     """
 
-    # An action with no visual fields yet draws its proposed look (see look_defaults.py).
+    # Untouched look fields follow the action's proposed look (see look_defaults.py).
     entry = proposed_entry(entry) or entry
+    if graphic_scale is None and not (text_autosize or suppress_graphic or suppress_text):
+        graphic_scale, text_autosize, suppress_graphic, suppress_text, entry = _content_mode_options(entry)
     text = "" if suppress_text else (entry.get("text") or entry.get("label") or "").strip()
     raw_img = None if suppress_graphic else effective_graphic_source(entry)
     has_bg_grad = (
@@ -1023,7 +1058,9 @@ def render_key_preview(
     ``None`` (the endpoint's 404, as before).
     """
 
-    m = normalize_preview_mode(mode, entry)
+    # Same merge as the device: untouched fields follow the action, the stored/proposed mode applies.
+    entry = proposed_entry(entry) or entry
+    m = normalize_preview_mode(mode, entry) or normalize_preview_mode(entry.get("mode"), entry)
     ent = offline_look(entry) if offline else dict(entry)
     kwargs: dict[str, Any] = {"animation_frame": animation_frame, "press_elapsed_frames": press_elapsed_frames}
     if m == "text":
@@ -1040,12 +1077,14 @@ def render_key_preview(
     has_graphic = effective_graphic_source(entry) is not None
     split = _graphic_text_layout_mode(entry) == "split"
     eff_mode = m or ("both" if text and has_graphic and split else "plain")
+    if eff_mode == "both" and not has_graphic:
+        eff_mode = "plain"  # nothing to put above the label: it is drawn centred
     measure = measure_label(
         text,
         eff_mode,
         size,
         _resolve_font_path(entry.get("font_file"), config_dir),
-        None if m == "text" else _int_or_none(entry.get("font_size")),
+        _int_or_none(entry.get("font_size")),
     )
     return img, measure
 

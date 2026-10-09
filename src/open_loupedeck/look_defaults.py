@@ -4,8 +4,14 @@ Principle ("smart defaults"): choosing an action gives the key a proposed look t
 ``action_catalog.DEFAULT_LOOKS``. Any visual field present in the entry is *modified* (it wins and
 stops following the action); absent fields are *proposed*. No new storage format: the existing
 ``button_render`` keys are used -- ``text``/``label``, ``icon``/``image``, ``background`` (or the
-``background_gradient_*`` keys) and ``text_color`` (or ``text_gradient_*``). The content ``mode`` has
-no stored key yet: an optional ``mode`` key (text/icon/both) is honoured when present.
+``background_gradient_*`` keys) and ``text_color`` (or ``text_gradient_*``), plus the optional content
+``mode`` key (text/icon/both).
+
+The device renders exactly what :func:`resolve_look` reports: :func:`proposed_entry` fills every
+untouched field from the proposed look (so customising only the background keeps the proposed label
+and icon) and records the content mode in ``mode`` for ``button_render``. When no mode is stored and
+the proposed one would hide content the user set explicitly (a custom icon on a text key, a custom
+label on an icon key), the key shows both.
 """
 
 from __future__ import annotations
@@ -70,6 +76,21 @@ def _param_label(param: str, value: Any) -> str:
     return s
 
 
+def effective_mode(stored: str, proposed: str, *, label_mod: bool, icon_mod: bool) -> str:
+    """Content mode a key is shown in: the stored ``mode``, else the proposed one widened to ``both``
+    when it would hide a label or icon the user set explicitly. ``""`` when there is neither."""
+
+    s = str(stored or "").strip().lower()
+    if s in MODES:
+        return s
+    p = str(proposed or "").strip().lower()
+    if p not in MODES:
+        return ""
+    if (p == "text" and icon_mod) or (p == "icon" and label_mod):
+        return "both"
+    return p
+
+
 def resolve_look(
     entry: dict[str, Any],
     lang: str | None = None,
@@ -93,6 +114,7 @@ def resolve_look(
     fg_mod = _set(entry, "text_color") or all(entry.get(k) for k in _GRADIENT_FG)
     raw_mode = str(entry.get("mode") or "").strip().lower()
     mode_mod = raw_mode in MODES
+    mode = effective_mode(raw_mode, str(dl.get("mode") or ""), label_mod=label_mod, icon_mod=icon_mod)
 
     label = ""
     if label_mod:
@@ -111,7 +133,7 @@ def resolve_look(
         "icon": icon,
         "bg": str(entry.get("background")) if _set(entry, "background") else str(dl.get("bg") or ""),
         "fg": str(entry.get("text_color")) if _set(entry, "text_color") else str(dl.get("fg") or ""),
-        "mode": raw_mode if mode_mod else str(dl.get("mode") or ""),
+        "mode": mode,
     }
     out["source"] = {
         "label": "modified" if label_mod else "proposed",
@@ -125,17 +147,14 @@ def resolve_look(
     return out
 
 
-def _has_any_visual(entry: dict[str, Any]) -> bool:
-    keys = ("text", "label", "icon", "image", "background", "text_color", *_GRADIENT_BG, *_GRADIENT_FG)
-    return any(str(entry.get(k) or "").strip() for k in keys)
-
-
 def proposed_entry(entry: dict[str, Any], lang: str | None = None) -> dict[str, Any] | None:
-    """Entry with the proposed look written in the keys ``button_render`` understands, or ``None``.
+    """Entry with its final look written in the keys ``button_render`` understands, or ``None``.
 
-    Applies only when the entry has an action with a default look and sets no visual field at all,
-    so configs that already define visuals render exactly as before. Live display actions (clock,
-    OBS scene...) whose text arrives at runtime but that set no colours get the proposed colours.
+    For an action with a default look, every field the entry does not set is taken from the proposed
+    look (see :func:`resolve_look`): colours, label (the live value for live keys -- a dash while there
+    is none, drawn in the offline colours), icon, and the content ``mode`` (always written, so the
+    renderer lays the key out as text / icon / both). Entries without a known action are returned
+    as-is (``None``); a stored ``mode`` on them is still honoured by the renderer.
     """
 
     act = first_action(entry)
@@ -144,24 +163,28 @@ def proposed_entry(entry: dict[str, Any], lang: str | None = None) -> dict[str, 
     dl = default_look_for(str(act["type"]))
     if dl is None:
         return None
-    live = dl.get("live")
-    has_text = _set(entry, "text", "label")
-    if live and has_text:
-        if _set(entry, "background", "text_color", *_GRADIENT_BG, *_GRADIENT_FG, "icon", "image"):
-            return None
-        return {**entry, "background": dl["bg"], "text_color": dl["fg"]}
-    if _has_any_visual(entry):
-        return None
     look = resolve_look(entry, lang)
+    src = look["source"]
     out = dict(entry)
-    if live:  # no value yet: offline look with a dash
-        out.update(text=LIVE_PLACEHOLDER, background=live["offline_bg"], text_color=live["offline_fg"])
-        return out
-    out["background"], out["text_color"] = look["bg"], look["fg"]
-    if look["mode"] in ("text", "both") and look["label"]:
-        out["text"] = look["label"]
-    if look["mode"] in ("icon", "both") and look["icon"]:
+    live = dl.get("live")
+    if live:
+        # The text of a live key comes from its source at runtime (or the preview); none yet -> dash.
+        waiting = "text" not in entry and "label" not in entry
+        if waiting:
+            out["text"] = LIVE_PLACEHOLDER
+        if src["bg"] == "proposed":
+            out["background"] = live["offline_bg"] if waiting else look["bg"]
+        if src["fg"] == "proposed":
+            out["text_color"] = live["offline_fg"] if waiting else look["fg"]
+    else:
+        if src["bg"] == "proposed":
+            out["background"] = look["bg"]
+        if src["fg"] == "proposed":
+            out["text_color"] = look["fg"]
+        if src["label"] == "proposed" and look["label"]:
+            out["text"] = look["label"]
+    if src["icon"] == "proposed" and look["icon"] and look["mode"] in ("icon", "both"):
         out["icon"] = look["icon"]
-    if look["mode"] == "both":
-        out["graphic_text_layout"] = "split"
+    if look["mode"]:
+        out["mode"] = look["mode"]
     return out

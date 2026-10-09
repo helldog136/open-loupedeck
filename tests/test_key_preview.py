@@ -198,3 +198,13 @@ def test_cache_key_tracks_icon_file_changes(tmp_path: Path, icon_path: str):
 
     os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
     assert preview_cache_key(entry, tmp_path, (90, 90), "icon", False) != k1
+
+
+def test_endpoint_measures_the_proposed_label(client: TestClient):
+    # No text stored: the label comes from the action (here the scene name) and is measured too.
+    action = {"type": "obs.set_scene", "scene": "BRB"}
+    assert _post(client, {"action": action}).headers["X-Key-Overflow"] == "0"
+    long_action = {"type": "obs.set_scene", "scene": "Supercalifragilisticexpialidocious"}
+    assert _post(client, {"action": long_action}).headers["X-Key-Overflow"] == "1"
+    # A stored icon mode hides the label: nothing to cut.
+    assert _post(client, {"action": long_action, "mode": "icon"}).headers["X-Key-Overflow"] == "0"
