@@ -5,6 +5,7 @@
 
 import { apiGet } from "./api.js";
 import { renderDeck } from "./deck.js";
+import "./pickers/sound-picker.js";
 import { loadCopiedControlFromStorage } from "./inspector/clipboard.js";
 import { initInspector, openControl, refreshInspector } from "./inspector/index.js";
 import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";

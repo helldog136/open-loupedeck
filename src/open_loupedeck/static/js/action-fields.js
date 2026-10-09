@@ -15,6 +15,14 @@ import {
 import { setSaveStatus } from "./save.js";
 import { $, uploadLibraryParamForFile } from "./util.js";
 
+/** Custom renderers keyed "<action type>.<field name>" (e.g. the sound library picker). A renderer gets
+ * (container, wrap, field, idPrefix), appends `wrap` to `container` and must provide a text input with
+ * data-param=<field name> so fill/build keep working. */
+const fieldRenderers = new Map();
+export function registerFieldRenderer(type, name, render) {
+  fieldRenderers.set(`${type}.${name}`, render);
+}
+
 /** Resolve a catalog field control inside an action-fields container (data-param + id suffix fallback). */
 function actionFieldEl(container, field) {
   if (!container || !field || field.name == null) return null;
@@ -133,6 +141,12 @@ export function renderActionFieldsInto(container, type, idPrefix) {
         wrap.appendChild(lab);
         renderKeySequenceField(wrap, f, idPrefix);
         container.appendChild(wrap);
+        continue;
+      }
+
+      const custom = fieldRenderers.get(`${type}.${f.name}`);
+      if (custom) {
+        custom(container, wrap, f, idPrefix);
         continue;
       }
 

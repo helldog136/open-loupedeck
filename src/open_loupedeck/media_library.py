@@ -351,14 +351,15 @@ def _prune_key_video_gif_cache(config_dir: Path, keep: set[str]) -> int:
 def prune_unused_library_media(raw: Any, config_dir: Path) -> int:
     """Delete media files under the config tree that are not referenced anywhere in ``raw``.
 
-    Covers ``library/images``, ``library/videos``, ``library/sounds``, ``library/fonts``, ``assets``, and
+    Covers ``library/images``, ``library/videos``, ``library/fonts``, ``assets``, and
     ``library/generated/key_video_gif``. Call after saving or loading normalized config.
     """
 
     config_dir = config_dir.resolve()
     keep = collect_referenced_library_rel_paths(raw, config_dir)
     removed = _prune_key_video_gif_cache(config_dir, keep)
-    for sub in ("library/images", "library/videos", "library/sounds", "library/fonts", "assets"):
+    # library/sounds is the user-curated soundboard (managed from the sound picker): never auto-pruned.
+    for sub in ("library/images", "library/videos", "library/fonts", "assets"):
         d = config_dir / sub
         if not d.is_dir():
             continue

@@ -22,7 +22,7 @@ from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile, WebSo
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import autostart
+from . import autostart, sound_library, sound_player
 from .action_catalog import merged_catalog
 from .button_render import (
     PreviewCache,
@@ -771,6 +771,65 @@ def create_web_app(
         dest.write_bytes(data)
         rel = f"library/{sub}/{unique}"
         return JSONResponse({"path": rel, "name": unique})
+
+    # ---- sound library (library/sounds): list / preview on this PC / stop / rename / delete ----
+
+    def _sound_file(name: Any) -> Path:
+        try:
+            return sound_library.resolve_library_file(config_dir, name)
+        except sound_library.SoundPathError:
+            raise HTTPException(400, t("error.invalid_path")) from None
+        except FileNotFoundError:
+            raise HTTPException(404, t("error.not_found")) from None
+
+    @app.get("/api/sounds")
+    async def list_sounds() -> JSONResponse:
+        items = await asyncio.to_thread(sound_library.list_sounds, config_dir)
+        return JSONResponse(
+            {
+                "sounds": items,
+                "platform": sys.platform,
+                "windows_extensions": sorted(sound_player.WINDOWS_EXTENSIONS),
+            }
+        )
+
+    @app.post("/api/sounds/preview")
+    async def preview_sound(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        p = _sound_file(body.get("file"))
+        try:
+            await asyncio.to_thread(
+                sound_player.get_player().play,
+                str(p),
+                body.get("volume", 100),
+                "restart",
+                "__preview__",
+            )
+        except Exception as e:
+            logger.warning("sound preview failed: %s", e)
+            raise HTTPException(500, str(e)) from e
+        return JSONResponse({"ok": True})
+
+    @app.post("/api/sounds/stop")
+    async def stop_sounds() -> JSONResponse:
+        n = await asyncio.to_thread(sound_player.get_player().stop_all)
+        return JSONResponse({"ok": True, "stopped": n})
+
+    @app.post("/api/sounds/rename")
+    async def rename_sound(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        _sound_file(body.get("file"))
+        try:
+            dest = sound_library.rename_sound(config_dir, body.get("file"), body.get("name"))
+        except sound_library.SoundPathError:
+            raise HTTPException(400, t("error.invalid_path")) from None
+        except FileExistsError:
+            raise HTTPException(409, t("error.sound_exists")) from None
+        return JSONResponse({"ok": True, "file": f"{sound_library.LIBRARY_REL}/{dest.name}"})
+
+    @app.post("/api/sounds/delete")
+    async def delete_sound(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        _sound_file(body.get("file"))
+        sound_library.delete_sound(config_dir, body.get("file"))
+        return JSONResponse({"ok": True})
 
     @app.get("/api/local-file")
     async def local_file(
