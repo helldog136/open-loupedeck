@@ -81,7 +81,7 @@ def main() -> int:
         try:
             step("load page")
             page.goto(base + "/")
-            page.wait_for_selector("#deckRoot .cell")
+            page.wait_for_selector("#deckRoot .dk-key")
             page.wait_for_selector("#actionType option:nth-child(2)", state="attached")  # catalog loaded
             page.wait_for_timeout(500)  # rest of the boot sequence (status, wiring)
             config_before = fetch_config(page)
@@ -94,7 +94,7 @@ def main() -> int:
             page.wait_for_selector("#tabPanelButtons:not([hidden])")
 
             step("select touch_0")
-            page.click('.cell[data-cid="touch_0"]')
+            page.click('.dk-key[data-cid="touch_0"]')
             page.wait_for_function("document.querySelector('#selLabel').textContent === 'touch_0'")
 
             step("pick an action type")
