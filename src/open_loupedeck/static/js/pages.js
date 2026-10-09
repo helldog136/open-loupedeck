@@ -1,34 +1,53 @@
 /*
- * pages.js — Page rail and page header: list/select/add/rename/remove/reorder pages, and keeping the
- * UI's page in sync with the agent's page_index (both directions).
+ * pages.js — Page tabs and page header: the four hardware pages (page N = round button N, coloured with
+ * that button's LED), extra pages 5+, inline rename, add/remove, and keeping the UI's page in sync with
+ * the agent's page_index (both directions).
  */
 
 import { postAgentPageIndex } from "./api.js";
 import { renderDeck } from "./deck.js";
 import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
 import { closeKnobEncoderEditor } from "./knobs.js";
-import { clampPageIndex, currentPage, ensurePages, isLiveSModel } from "./model.js";
-import { scheduleAutosave } from "./save.js";
+import { HARDWARE_PAGE_COUNT, clampPageIndex, currentPage, ensurePages } from "./model.js";
+import { flushAutosave, scheduleAutosave } from "./save.js";
 import { state } from "./state.js";
 import { snapshotBeforeAction } from "./undo.js";
-import { $ } from "./util.js";
+import { $, cssColorForLedPreview } from "./util.js";
 
 /**
- * After we change the page ourselves (click a rail item, add/remove/reorder a page), ignore the
- * status poll's reported page_index for this long (ms). The poll can race a local change from
- * either direction — a response already in flight when we click, computed against the pre-click
- * server state, or (with a real device) a POST that takes a while to return because the agent
- * waits for the physical redraw — and blindly trusting it snaps the UI back to the old page for a
- * moment before a later poll corrects it forward again (a visible flicker). A flat cooldown is
- * simpler and more robust than trying to track exactly which in-flight request a given poll
- * result predates. Once it elapses, a poll reporting a different page again (e.g. a genuine
- * physical button press) is applied normally.
+ * While we are changing the page ourselves (click a tab, add/remove a page), ignore the status poll's
+ * reported page_index. The poll can race a local change in either direction — a response already in
+ * flight when we click, or a POST that takes a while because the agent waits for the physical redraw —
+ * and trusting it snaps the UI back to the old page for a moment. The mute covers the whole sync
+ * (until the agent has the new index) plus a short cooldown afterwards; later, a poll reporting a
+ * different page (e.g. a real button press) is applied normally.
  */
 const PAGE_INDEX_POLL_COOLDOWN_MS = 2000;
 let pageIndexPollMutedUntil = 0;
 
 function muteAgentPagePollBriefly() {
   pageIndexPollMutedUntil = Date.now() + PAGE_INDEX_POLL_COOLDOWN_MS;
+}
+
+/** Round buttons bound to pages 1-4, and the LED colour used when the config has none yet. */
+const PAGE_BUTTON_IDS = ["btn_circle", "btn_1", "btn_2", "btn_3"];
+const DEFAULT_PAGE_LEDS = ["#3b6bff", "#ff8a2b", "#e040c8", "#2de0c0"];
+
+function pageLedColor(i) {
+  if (i >= HARDWARE_PAGE_COUNT) return null;
+  const e = state.cfg.global_buttons && state.cfg.global_buttons[PAGE_BUTTON_IDS[i]];
+  const raw = e && e.button_color && String(e.button_color).trim();
+  return raw ? cssColorForLedPreview(raw) : DEFAULT_PAGE_LEDS[i];
+}
+
+function pageLabel(i) {
+  const p = state.cfg.pages[i];
+  return (p && p.name) || t("pages.default_name", { number: i + 1 });
+}
+
+function resetSelectionLabel() {
+  const sl = $("#selLabel");
+  if (sl) sl.textContent = t("shell.select_control");
 }
 
 export function syncUiToAgentPage(agentIndex) {
@@ -38,15 +57,12 @@ export function syncUiToAgentPage(agentIndex) {
   state.pageIndex = target;
   const sel = $("#pageSelect");
   if (sel) sel.value = String(state.pageIndex);
-  $("#pageName").textContent = currentPage().name || `Page ${state.pageIndex + 1}`;
-  const pn = $("#pageNameInput");
-  if (pn) pn.value = currentPage().name || "";
+  $("#pageName").textContent = currentPage().name || pageLabel(state.pageIndex);
   if (changed) {
     renderDeck();
     renderPageRail();
     state.selectedControl = null;
-    const sl = $("#selLabel");
-    if (sl) sl.textContent = "Select a control";
+    resetSelectionLabel();
     syncTestPressButton();
     syncCopyPasteButtons();
   }
@@ -75,21 +91,19 @@ export async function pullAgentLayoutAndPage() {
   }
 }
 
+/** Kept for callers that re-lay out the deck: the tabs are the same for every model. */
 export function updateLiveSPageChrome() {
-  const hint = $(".page-rail-hint");
-  if (hint) {
-    hint.title = isLiveSModel()
-      ? "On the device, circle + btn 1–3 only switch among page indices 0–3 (first four pages)."
-      : "";
-  }
-  const nameIn = $("#pageNameInput");
-  if (nameIn) nameIn.hidden = false;
+  renderPageRail();
 }
 
 function addPage() {
   snapshotBeforeAction();
   ensurePages();
-  state.cfg.pages.push({ name: `Page ${state.cfg.pages.length + 1}`, buttons: {} });
+  state.cfg.pages.push({
+    id: state.cfg.pages.length,
+    name: t("pages.default_name", { number: state.cfg.pages.length + 1 }),
+    buttons: {},
+  });
   state.pageIndex = state.cfg.pages.length - 1;
   syncPageSelect();
   renderDeck();
@@ -104,16 +118,14 @@ export function syncPageSelect() {
   state.cfg.pages.forEach((p, i) => {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = p.name || `Page ${i + 1}`;
+    o.textContent = p.name || pageLabel(i);
     sel.appendChild(o);
   });
   sel.value = String(state.pageIndex);
   renderPageRail();
 }
 
-const PAGE_RAIL_HARDWARE_BADGES = ["①", "②", "③", "④"];
-
-/** Clicking a rail item reuses the existing #pageSelect "change" wiring (page switch, agent sync, etc.). */
+/** Clicking a tab reuses the hidden #pageSelect "change" wiring (page switch, agent sync, etc.). */
 function selectPageIndex(i) {
   const sel = $("#pageSelect");
   if (!sel) return;
@@ -123,24 +135,30 @@ function selectPageIndex(i) {
 
 /**
  * The agent (and the physical device) track their own `page_index` server-side; a background poll
- * (`refreshConnectionStatus`, every 1.5s) pulls it back into the client whenever they differ. Any
- * client-side operation that changes which numeric index the active page sits at (not just "switch
- * to a different page") must push that index to the agent too, or the next poll snaps the UI back
- * to the stale server-side page within ~1.5s.
+ * (every 1.5 s) pulls it back into the client whenever they differ. Any client-side operation that
+ * changes which numeric index the active page sits at must push that index to the agent too, or the
+ * next poll snaps the UI back to the stale server-side page.
+ *
+ * The agent only knows pages it has been sent, and the debounced autosave is what sends them: so a
+ * freshly added page must be saved BEFORE its index is posted, or the agent rejects/ignores the index
+ * and the poll then pulls the UI back (the old "Add page jumps back to page 1" bug).
  */
-export function syncAgentPageIndex() {
-  muteAgentPagePollBriefly();
-  void postAgentPageIndex(state.pageIndex).catch((e) => {
+export async function syncAgentPageIndex() {
+  pageIndexPollMutedUntil = Number.POSITIVE_INFINITY;
+  try {
+    await flushAutosave();
+    await postAgentPageIndex(state.pageIndex);
+  } catch (e) {
     $("#saveError").textContent = String(e);
-  });
+  } finally {
+    muteAgentPagePollBriefly();
+  }
 }
 
 function removePageAt(i) {
   ensurePages();
-  if (state.cfg.pages.length <= 1) return;
-  const name = state.cfg.pages[i].name || `Page ${i + 1}`;
-  if (!confirm(`Remove page "${name}"?`)) return;
-  snapshotBeforeAction();
+  if (i < HARDWARE_PAGE_COUNT || state.cfg.pages.length <= HARDWARE_PAGE_COUNT) return;
+  snapshotBeforeAction(); // no confirmation: Undo brings the page back
   const prevIndex = state.pageIndex;
   state.cfg.pages.splice(i, 1);
   if (state.pageIndex >= state.cfg.pages.length) state.pageIndex = state.cfg.pages.length - 1;
@@ -148,114 +166,153 @@ function removePageAt(i) {
   syncPageSelect();
   renderDeck();
   scheduleAutosave();
-  if (state.pageIndex !== prevIndex) syncAgentPageIndex();
+  if (state.pageIndex !== prevIndex) void syncAgentPageIndex();
+  else void flushAutosave();
 }
 
-/** Index of the page currently being dragged in the rail, or null. */
-let draggingPageIndex = null;
-
-function reorderPage(fromIndex, toIndex) {
-  ensurePages();
-  snapshotBeforeAction();
-  const prevIndex = state.pageIndex;
-  const activePage = state.cfg.pages[state.pageIndex];
-  const [moved] = state.cfg.pages.splice(fromIndex, 1);
-  state.cfg.pages.splice(toIndex, 0, moved);
-  state.pageIndex = state.cfg.pages.indexOf(activePage);
+/** Commit (or cancel) an inline rename. */
+function finishRename(i, nameEl, commit) {
+  nameEl.contentEditable = "false";
+  const next = nameEl.textContent.trim();
+  const page = state.cfg.pages[i];
+  if (commit && next && page && next !== page.name) {
+    snapshotBeforeAction();
+    page.name = next;
+    scheduleAutosave();
+  }
   syncPageSelect();
-  renderDeck();
-  scheduleAutosave();
-  if (state.pageIndex !== prevIndex) syncAgentPageIndex();
+  $("#pageName").textContent = currentPage().name || pageLabel(state.pageIndex);
 }
 
-function wirePageRailDrag(item, index) {
-  item.addEventListener("dragstart", (e) => {
-    draggingPageIndex = index;
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(index));
-    item.classList.add("dragging");
-  });
-  item.addEventListener("dragend", () => {
-    draggingPageIndex = null;
-    item.classList.remove("dragging");
-    document.querySelectorAll(".page-rail-item.drag-over").forEach((el) => el.classList.remove("drag-over"));
-  });
-  item.addEventListener("dragover", (e) => {
-    if (draggingPageIndex === null || draggingPageIndex === index) return;
-    e.preventDefault();
-    item.classList.add("drag-over");
-  });
-  item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
-  item.addEventListener("drop", (e) => {
-    item.classList.remove("drag-over");
-    if (draggingPageIndex === null || draggingPageIndex === index) return;
-    e.preventDefault();
-    reorderPage(draggingPageIndex, index);
-    draggingPageIndex = null;
-  });
+function startRename(nameEl) {
+  nameEl.contentEditable = "true";
+  nameEl.focus();
+  const range = document.createRange();
+  range.selectNodeContents(nameEl);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function renderPageRail() {
   const rail = $("#pageRail");
-  if (!rail) return;
+  if (!rail || !Array.isArray(state.cfg.pages)) return;
+  // Do not rebuild the tabs under the user's caret while a name is being edited.
+  if (rail.querySelector('.nm[contenteditable="true"]')) return;
   rail.innerHTML = "";
   state.cfg.pages.forEach((p, i) => {
-    const item = document.createElement("div");
-    item.className = "page-rail-item" + (i === state.pageIndex ? " active" : "");
-    item.draggable = true;
-    const badgeHtml =
-      i < 4
-        ? `<span class="page-rail-badge" title="Reachable via the physical ${
-            i === 0 ? "Circle" : `btn_${i}`
-          } button">${PAGE_RAIL_HARDWARE_BADGES[i]}</span>`
-        : `<span class="page-rail-badge page-rail-badge-muted" title="Not reachable by the physical page buttons — use agent.goto_page">&middot;</span>`;
-    item.innerHTML = `${badgeHtml}<span class="page-rail-name"></span><button type="button" class="page-rail-delete" title="Remove page" aria-label="Remove page">✕</button>`;
-    item.querySelector(".page-rail-name").textContent = p.name || `Page ${i + 1}`;
-    item.addEventListener("click", (e) => {
-      if (e.target.closest(".page-rail-delete")) return;
-      selectPageIndex(i);
-    });
-    item.querySelector(".page-rail-delete").addEventListener("click", (e) => {
+    const hardware = i < HARDWARE_PAGE_COUNT;
+    const tab = document.createElement("div");
+    tab.className = "pagetab";
+    tab.setAttribute("role", "tab");
+    tab.tabIndex = 0;
+    tab.setAttribute("aria-selected", i === state.pageIndex ? "true" : "false");
+    const led = pageLedColor(i);
+    if (led) tab.style.setProperty("--led", led);
+    tab.title = hardware
+      ? t("pages.tab.hardware", { number: i + 1 })
+      : t("pages.tab.extra");
+
+    const dot = document.createElement("i");
+    dot.className = "dot";
+    const num = document.createElement("span");
+    num.className = "num";
+    num.textContent = String(i + 1);
+    const nm = document.createElement("b");
+    nm.className = "nm";
+    nm.textContent = pageLabel(i);
+    tab.append(dot, num, nm);
+
+    const pencil = document.createElement("button");
+    pencil.type = "button";
+    pencil.className = "tab-icon-btn pencil";
+    pencil.textContent = "✎";
+    pencil.title = t("pages.rename");
+    pencil.setAttribute("aria-label", t("pages.rename"));
+    pencil.addEventListener("click", (e) => {
       e.stopPropagation();
-      removePageAt(i);
+      startRename(nm);
     });
-    wirePageRailDrag(item, i);
-    rail.appendChild(item);
+    tab.appendChild(pencil);
+
+    if (!hardware) {
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "tab-icon-btn del";
+      del.textContent = "×";
+      del.title = t("pages.delete");
+      del.setAttribute("aria-label", t("pages.delete"));
+      del.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removePageAt(i);
+      });
+      tab.appendChild(del);
+    }
+
+    tab.addEventListener("click", () => {
+      if (nm.isContentEditable) return;
+      if (i !== state.pageIndex) selectPageIndex(i);
+    });
+    tab.addEventListener("keydown", (e) => {
+      if (e.target !== tab) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (i !== state.pageIndex) selectPageIndex(i);
+      }
+    });
+    tab.addEventListener("dblclick", () => startRename(nm));
+    nm.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finishRename(i, nm, true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finishRename(i, nm, false);
+      }
+    });
+    nm.addEventListener("blur", () => {
+      if (nm.isContentEditable) finishRename(i, nm, true);
+    });
+    rail.appendChild(tab);
+  });
+
+  const hint = $("#pagesHint");
+  if (hint) {
+    hint.textContent =
+      state.pageIndex < HARDWARE_PAGE_COUNT
+        ? t("pages.hint.hardware", { number: state.pageIndex + 1 })
+        : t("pages.hint.extra");
+  }
+}
+
+/** Refresh the tab dots after a button's LED colour changed (cheap; no re-render). */
+export function syncPageLedColors() {
+  document.querySelectorAll("#pageRail .pagetab").forEach((tab, i) => {
+    const led = pageLedColor(i);
+    if (led) tab.style.setProperty("--led", led);
   });
 }
 
-/** Page rail: the hidden #pageSelect (page switch) and "+ Add page". */
+/** Re-render the tabs (language change). */
+export function refreshPageTabs() {
+  renderPageRail();
+}
+
+/** Hidden #pageSelect (page switch) and "+ Page". */
 export function wirePageSelect() {
   $("#pageSelect").addEventListener("change", () => {
     state.pageIndex = Number($("#pageSelect").value);
-    muteAgentPagePollBriefly();
     // Respond immediately from the client's own state; the agent (and physical device) catch up
     // in the background. Never block the UI switch on this request's completion.
-    void (async () => {
-      try {
-        await postAgentPageIndex(state.pageIndex);
-      } catch (e) {
-        $("#saveError").textContent = String(e);
-      }
-    })();
+    void syncAgentPageIndex();
     renderDeck();
     renderPageRail();
     state.selectedControl = null;
     closeKnobEncoderEditor();
-    const sl = $("#selLabel");
-    if (sl) sl.textContent = "Select a control";
+    resetSelectionLabel();
     syncTestPressButton();
   });
 
   $("#btnAddPage").addEventListener("click", addPage);
-}
-
-/** Page header: rename the current page. */
-export function wirePageNameInput() {
-  $("#pageNameInput").addEventListener("input", () => {
-    currentPage().name = $("#pageNameInput").value;
-    $("#pageName").textContent = currentPage().name || `Page ${state.pageIndex + 1}`;
-    syncPageSelect();
-    scheduleAutosave();
-  });
 }
