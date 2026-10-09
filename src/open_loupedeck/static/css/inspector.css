@@ -13,7 +13,6 @@
 @media (max-width: 960px) {
   #mount-inspector.insp-host { position: static; max-height: none; overflow: visible; }
 }
-#mount-inspector .knob-encoder-panel { position: static; max-height: none; box-shadow: none; }
 
 .insp { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
 .insp[hidden] { display: none; }

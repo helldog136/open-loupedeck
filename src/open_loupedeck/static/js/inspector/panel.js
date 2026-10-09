@@ -1,8 +1,7 @@
 /*
- * inspector/panel.js — Inspector chrome shared with other modules: which block of the panel is shown
- * (the inspector or the legacy encoder editor) and the enabled state of the header buttons (copy /
- * paste / clear) and of the test-press button. Modules that change the selection (pages.js, knobs.js)
- * call these; the inspector re-syncs itself through the "inspector:sync" event.
+ * inspector/panel.js — Inspector chrome shared with other modules: the enabled state of the header
+ * buttons (copy / paste / clear) and of the test-press button. Modules that change the selection
+ * (pages.js) call these; the inspector re-syncs itself through the "inspector:sync" event.
  */
 
 import { canPasteToControl, controlCanSimulate, getButtonEntry } from "../model.js";
@@ -28,11 +27,9 @@ export function syncCopyPasteButtons() {
   emit("inspector:sync");
 }
 
-/** Show the inspector (and hide the legacy encoder editor). */
+/** Show the inspector and let it re-sync with the selection. */
 export function showKeyEditorPanel() {
   const k = $("#keyEditorBlock");
-  const kn = $("#knobEncoderEditorBlock");
   if (k) k.hidden = false;
-  if (kn) kn.hidden = true;
   emit("inspector:sync");
 }

@@ -1,10 +1,10 @@
 /*
  * inspector/index.js — The right-hand inspector panel (#mount-inspector): empty state, opening a
  * control ("control:open" cid) in the key view or the page-button view, opening a knob ("knob:open"
- * {knobId}) in a registered view (or the legacy encoder editor), and re-syncing after Undo, a page
- * switch or a language change.
+ * {knobId}) in the "knob" view (knob-view.js), and re-syncing after Undo, a page switch or a
+ * language change.
  *
- * Extension point for other packages (e.g. the knob editor):
+ * Extension point (the knob view is registered through it):
  *   registerInspectorView("knob", {
  *     render(container, ctx) { ... },   // ctx = { knobId, close() }; container is empty and visible
  *     destroy() { ... },                // called before the panel shows something else
@@ -13,17 +13,17 @@
  */
 
 import { isKnobEncoderId } from "../model.js";
-import { openKnobEncoderEditor } from "../knobs.js";
 import { on, state } from "../state.js";
 import { $ } from "../util.js";
 import { controlKind } from "./controls.js";
 import { el } from "./dom.js";
 import { createKeyView } from "./key-view.js";
+import { initKnobView, knobView } from "./knob-view.js";
 import { createPageButtonView } from "./page-button-view.js";
 import { stopSidebarAnimPreview } from "./preview.js";
 
 const views = new Map();
-/** What the panel shows: { type: "empty" | "control" | "view" | "legacy-knob", id, view } */
+/** What the panel shows: { type: "empty" | "control" | "view", id, view } */
 let current = { type: "empty" };
 let host = null;
 
@@ -31,13 +31,9 @@ let host = null;
 export function registerInspectorView(name, view) {
   if (!name || !view || typeof view.render !== "function") throw new Error("registerInspectorView: view needs render()");
   views.set(name, view);
-  if (name === "knob" && (current.type === "legacy-knob" || (current.type === "view" && current.name === "knob"))) {
+  if (name === "knob" && current.type === "view" && current.name === "knob") {
     openKnob(current.id);
   }
-}
-
-function blocks() {
-  return { key: $("#keyEditorBlock"), knob: $("#knobEncoderEditorBlock") };
 }
 
 function teardown() {
@@ -50,13 +46,12 @@ function teardown() {
     }
   }
   if (host) host.textContent = "";
+  state.selectedKnobEncoder = null;
   current = { type: "empty" };
 }
 
 function showInspectorBlock() {
-  const b = blocks();
-  if (b.key) b.key.hidden = false;
-  if (b.knob) b.knob.hidden = true;
+  if (host) host.hidden = false;
 }
 
 function renderEmpty() {
@@ -104,18 +99,14 @@ export function openControl(cid) {
   }
 }
 
-/** Open a knob: the registered "knob" view, else the legacy encoder editor. */
+/** Open a knob in the registered "knob" view. */
 export function openKnob(knobId) {
   if (!host) return;
   const v = views.get("knob");
+  if (!v) return;
   teardown();
   state.selectedControl = null;
   state.selectedKnobEncoder = knobId;
-  if (!v) {
-    current = { type: "legacy-knob", id: knobId };
-    openKnobEncoderEditor(knobId);
-    return;
-  }
   showInspectorBlock();
   v.render(host, { knobId, close: () => openControl(null) });
   current = { type: "view", name: "knob", id: knobId, view: v };
@@ -135,8 +126,6 @@ export function refreshInspector() {
     current.view.refresh(true);
   } else if (current.type === "view" && current.view.refresh) {
     current.view.refresh();
-  } else if (current.type === "legacy-knob") {
-    openKnobEncoderEditor(current.id);
   }
 }
 
@@ -163,19 +152,20 @@ async function reloadCatalog() {
 
 /** Mount the inspector (once, after the config and catalog are loaded). */
 export function initInspector() {
-  const b = blocks();
-  host = b.key;
+  host = $("#keyEditorBlock");
   if (!host) return;
+  views.set("knob", knobView);
+  initKnobView();
   renderEmpty();
   on("control:open", openControl);
   on("knob:open", (arg) => openKnob(arg && typeof arg === "object" ? arg.knobId : arg));
-  // Another module changed the selection (page switch, legacy encoder editor closed).
+  // Another module changed the selection or the page shown (page switch).
   on("inspector:sync", () => {
     if (current.type === "control" && state.selectedControl !== current.id) {
       if (state.selectedControl) openControl(state.selectedControl);
       else renderEmpty();
-    } else if (current.type === "legacy-knob" && !state.selectedKnobEncoder && !b.key.hidden) {
-      renderEmpty();
+    } else if (current.type === "view" && current.view.refresh) {
+      current.view.refresh();
     }
   });
   document.addEventListener("i18n:change", async () => {

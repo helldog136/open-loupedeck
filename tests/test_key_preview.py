@@ -208,3 +208,12 @@ def test_endpoint_measures_the_proposed_label(client: TestClient):
     assert _post(client, {"action": long_action}).headers["X-Key-Overflow"] == "1"
     # A stored icon mode hides the label: nothing to cut.
     assert _post(client, {"action": long_action, "mode": "icon"}).headers["X-Key-Overflow"] == "0"
+
+
+def test_bare_action_gets_its_proposed_look_in_the_requested_language(client: TestClient):
+    entry = {"action": {"type": "obs.scene_step", "step": 1}}
+    en = _png(_post(client, entry, lang="en"))
+    fr = _png(_post(client, entry, lang="fr"))
+    assert en.size == (90, 90)
+    assert en.getpixel((1, 1))[:3] == (0x1F, 0x6F, 0xE0)  # the action's colour, not the plain default
+    assert en.tobytes() != fr.tobytes()  # the label follows the language

@@ -5,7 +5,6 @@
 
 import { apiGet, refreshSkin } from "../api.js";
 import { renderDeck } from "../deck.js";
-import { closeKnobEncoderEditor, syncKnobPagesEditor } from "../knobs.js";
 import { currentPage, ensureDevice } from "../model.js";
 import { pullAgentLayoutAndPage, syncPageSelect, updateLiveSPageChrome } from "../pages.js";
 import { cancelPendingAutosave, runAutosave, scheduleAutosave, setSaveStatus } from "../save.js";
@@ -104,7 +103,6 @@ async function restoreBackupByName(name) {
       JSON.stringify({ cfg: j.config, pageIndex: Math.max(0, Math.min(state.pageIndex, restoredPageCount - 1)) }),
     );
     state.selectedControl = null;
-    closeKnobEncoderEditor();
     setSaveStatus(t("svc.backups.restored", { name }));
     void refreshBackupsList();
   } catch (e) {
@@ -154,7 +152,6 @@ async function resetConfigToDefaults() {
     $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
     syncPageSelect();
     renderDeck();
-    syncKnobPagesEditor();
     state.suppressAutosave = false;
     scheduleAutosave(); // the four hardware pages may have been padded on load
     setSaveStatus(t("svc.maint.reset_done"));

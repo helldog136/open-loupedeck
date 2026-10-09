@@ -7,10 +7,9 @@
 import { postAgentPageIndex } from "./api.js";
 import { renderDeck } from "./deck.js";
 import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
-import { closeKnobEncoderEditor } from "./knobs.js";
 import { HARDWARE_PAGE_COUNT, clampPageIndex, currentPage, ensurePages } from "./model.js";
 import { flushAutosave, scheduleAutosave } from "./save.js";
-import { state } from "./state.js";
+import { emit, state } from "./state.js";
 import { snapshotBeforeAction } from "./undo.js";
 import { $, cssColorForLedPreview } from "./util.js";
 
@@ -309,7 +308,7 @@ export function wirePageSelect() {
     renderDeck();
     renderPageRail();
     state.selectedControl = null;
-    closeKnobEncoderEditor();
+    emit("inspector:sync"); // an open knob shows its role on the new page
     resetSelectionLabel();
     syncTestPressButton();
   });

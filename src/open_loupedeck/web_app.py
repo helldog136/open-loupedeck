@@ -813,6 +813,7 @@ def create_web_app(
         if mode is not None and mode not in ("text", "icon", "both"):
             raise HTTPException(400, "body.mode must be one of text, icon, both")
         offline = body.get("offline") is True
+        lang = str(body.get("lang") or "").strip() or None
         live_value = body.get("live_value")
         live_value = None if live_value is None else str(live_value)
 
@@ -887,7 +888,7 @@ def create_web_app(
                     fb = offline_fallback_mode(act if isinstance(act, dict) else ent)
                     ent["text"] = offline_fallback_text(fb, live_value or str(ent.get("text") or ""))
             # Merge the proposed look here so the cache key carries the (language-dependent) label.
-            entry = proposed_entry(ent) or ent
+            entry = proposed_entry(ent, lang) or ent
 
         def _render() -> tuple[bytes, dict[str, Any]]:
             img, measure = render_key_preview(

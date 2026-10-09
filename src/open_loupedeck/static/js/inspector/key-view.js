@@ -20,7 +20,7 @@ import { editEntry } from "./edit.js";
 import { entryAction, setEntryAction } from "./entry.js";
 
 /** A fresh action of `type`: catalog defaults, plus same-named parameters carried over from `prev`. */
-function newAction(type, prev) {
+export function newAction(type, prev) {
   const spec = getSpec(type);
   const out = { type };
   for (const f of (spec && spec.fields) || []) {
