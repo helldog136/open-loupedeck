@@ -100,9 +100,9 @@ def test_fallback_texts():
 
 
 def test_measure_label_overflow_word():
-    r = measure_label("Countdown", "text", 90)
+    r = measure_label("Supercalifragilistic", "text", 90)
     assert r["fits"] is False
-    assert "Countdown" in r["clipped_words"]
+    assert "Supercalifragilistic" in r["clipped_words"]
 
 
 def test_measure_label_fits_and_lines():
@@ -123,7 +123,7 @@ def test_endpoint_headers_and_png(client: TestClient):
     assert _png(resp).size == (90, 90)
     assert resp.headers["X-Key-Overflow"] == "0"
     assert resp.headers["X-Key-Lines"] == "2"
-    resp = _post(client, {"text": "Countdown"}, mode="text")
+    resp = _post(client, {"text": "Supercalifragilistic"}, mode="text")
     assert resp.headers["X-Key-Overflow"] == "1"
 
 
