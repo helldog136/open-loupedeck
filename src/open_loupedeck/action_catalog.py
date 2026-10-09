@@ -104,6 +104,8 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         "category": "sound",
         "fields": [
             {"name": "file", "input": "asset", "accept": "audio/*,.wav,.mp3,.ogg,.flac,.m4a,.opus,.aac"},
+            {"name": "volume", "input": "number", "optional": True, "placeholder": "100"},
+            {"name": "mode", "input": "select", "options": ["play", "toggle", "restart"], "default": "play"},
             {
                 "name": "player",
                 "input": "select",
@@ -112,6 +114,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             },
         ],
     },
+    {"type": "sound.stop_all", "category": "sound", "fields": []},
     {
         "type": "sound.volume_set",
         "category": "sound",
@@ -359,6 +362,7 @@ _LOOK_SPECS: dict[str, tuple[str, str, str, str | None, dict[str, str] | None]] 
     "overlay.play_sound": ("lucide:volume-2", _SOUND, "both", "file", None),
     "overlay.clear": ("lucide:eraser", _OBS_OVERLAY, "both", None, None),
     "sound.play": ("lucide:volume-2", _SOUND, "both", "file", None),
+    "sound.stop_all": ("lucide:square", _SOUND, "icon", None, None),
     "sound.volume_set": ("lucide:sliders-horizontal", _SOUND, "icon", None, None),
     "sound.volume_delta": ("lucide:volume-1", _SOUND, "icon", None, None),
     "sound.mute_toggle": ("lucide:volume-x", _SOUND, "icon", None, None),

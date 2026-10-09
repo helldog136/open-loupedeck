@@ -24,6 +24,7 @@ import {
   layoutMode,
   setButtonEntry,
 } from "./model.js";
+import { cleanSoundName, isAudioFile, uploadSoundFile } from "./pickers/sound-picker.js";
 import { scheduleAutosave } from "./save.js";
 import { emit, on, state } from "./state.js";
 import { snapshotBeforeAction } from "./undo.js";
@@ -460,6 +461,43 @@ function duplicateKey(cid) {
   note(t("deck.duplicated", { number: ids.indexOf(target) + 1 }));
 }
 
+function isFileDrag(ev) {
+  return !!ev.dataTransfer && Array.from(ev.dataTransfer.types || []).includes("Files");
+}
+
+/** Audio files dropped on an empty key: upload to the sound library, one `sound.play` key per file
+ * (the first on the drop target, the next ones on the following empty keys), labelled with the clean name. */
+async function dropSoundFiles(cid, files) {
+  const audio = files.filter(isAudioFile);
+  if (!audio.length) {
+    note(t("sound.picker.not_audio"));
+    return;
+  }
+  const ids = touchIds();
+  const free = [cid, ...ids.slice(ids.indexOf(cid) + 1), ...ids.slice(0, ids.indexOf(cid))].filter(
+    (c, i) => i === 0 || !isFilled(getButtonEntry(c)),
+  );
+  try {
+    let made = 0;
+    for (const file of audio.slice(0, free.length)) {
+      const rel = await uploadSoundFile(file);
+      const target = free[made];
+      if (isFilled(getButtonEntry(target))) continue;
+      snapshotBeforeAction();
+      setButtonEntry(target, { action: { type: "sound.play", file: rel }, text: cleanSoundName(file.name) });
+      made += 1;
+      renderDeck();
+      scheduleAutosave();
+    }
+    if (made) {
+      selectKey(free[0]);
+      note(t("sound.deck.created", { count: made }));
+    }
+  } catch (e) {
+    note(String((e && e.message) || e));
+  }
+}
+
 function clearKey(cid) {
   if (!isTouch(cid) || !isFilled(getButtonEntry(cid))) return;
   snapshotBeforeAction();
@@ -547,6 +585,19 @@ function bindKey(el) {
     el.classList.add("drag-over");
   });
   el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
+  // Audio files dropped from the desktop onto an empty key create sound keys (see dropSoundFiles).
+  el.addEventListener("dragover", (ev) => {
+    if (draggingCid || !isFileDrag(ev) || isFilled(getButtonEntry(cid))) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "copy";
+    el.classList.add("drag-over");
+  });
+  el.addEventListener("drop", (ev) => {
+    if (draggingCid || !isFileDrag(ev)) return;
+    ev.preventDefault();
+    el.classList.remove("drag-over");
+    if (!isFilled(getButtonEntry(cid))) void dropSoundFiles(cid, Array.from(ev.dataTransfer.files));
+  });
   el.addEventListener("drop", (ev) => {
     el.classList.remove("drag-over");
     if (!draggingCid || cid === draggingCid) return;

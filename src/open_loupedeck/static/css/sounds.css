@@ -1,0 +1,24 @@
+/* Sound library picker (static/js/pickers/sound-picker.js). Depends on tokens.css. */
+
+.snd-picker { display: grid; gap: var(--sp-2); margin-top: var(--sp-2); padding: var(--sp-2); border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: var(--surface); min-width: 0; }
+.snd-picker.is-drop { border-color: var(--accent); background: var(--accent-soft); }
+.snd-bar { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.snd-search { flex: 1 1 120px; min-width: 0; }
+.snd-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; }
+.snd-empty { color: var(--muted); text-align: center; padding: var(--sp-4) var(--sp-2); font-size: var(--fs-sm); }
+.snd-row { display: flex; align-items: center; gap: 2px; border: 1px solid transparent; border-radius: var(--r-sm); }
+.snd-row:hover { background: var(--surface-2); }
+.snd-row.is-selected { border-color: var(--accent); background: var(--surface-2); }
+.snd-play, .snd-icon { flex: none; width: 30px; height: 30px; padding: 0; background: none; border: 0; border-radius: var(--r-sm); color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; }
+.snd-play { color: var(--accent); }
+.snd-play:hover, .snd-icon:hover { color: var(--fg); background: var(--surface-2); }
+.snd-pick { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: var(--sp-2); text-align: left; background: none; border: 0; padding: 6px 4px; color: var(--fg); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.snd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.snd-meta { font-size: var(--fs-xs); color: var(--muted); flex: none; }
+.snd-warn { color: var(--accent); flex: none; }
+.snd-status { min-height: 1em; margin: 0; }
+.snd-status.is-bad { color: var(--bad); }
+.snd-vol { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); color: var(--muted); }
+.snd-vol-range { flex: 1; min-width: 0; accent-color: var(--accent); }
+.snd-vol-out { width: 3ch; text-align: right; color: var(--fg); }
+.snd-hint { margin: 0; }
