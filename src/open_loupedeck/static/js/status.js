@@ -1,70 +1,100 @@
 /*
- * status.js — Connection status pills (USB / OBS / Home Assistant) and the 1.5 s /api/status poll,
- * which also feeds the agent's deck layout, current page and per-key render errors back into the UI.
+ * status.js — Header status chips (device / OBS / Home Assistant, plus Spotify / Twitch once set up) and
+ * the 1.5 s /api/status poll, which also feeds the agent's deck layout, current page and per-key render
+ * errors back into the UI. A chip is actionable: it opens the matching Services card.
  */
 
-import { ensurePages } from "./model.js";
-import { syncPageSelect, syncUiToAgentPage, updateLiveSPageChrome } from "./pages.js";
+import { layoutMode, ensurePages } from "./model.js";
+import { syncPageLedColors, syncPageSelect, syncUiToAgentPage, updateLiveSPageChrome } from "./pages.js";
+import { getServiceState, setServiceState } from "./services/cards.js";
+import { refreshSpotifyStatus } from "./services/spotify.js";
+import { refreshTwitchStatus } from "./services/twitch.js";
+import { goToService } from "./shell.js";
 import { state } from "./state.js";
+import { $ } from "./util.js";
 
 let statusPollTimer = null;
+let pollTick = 0;
+/** Spotify / Twitch are asked about every N polls (Spotify's profile call is a remote request). */
+const SLOW_SERVICE_EVERY = 6;
+/** Last device chip content, so a language change can redraw it without a new request. */
+let lastStatus = null;
 
-function setConnBadge(el, mode, text) {
-  if (!el) return;
-  el.textContent = text;
-  el.classList.remove("ok", "offline", "muted");
-  el.classList.add(mode);
+/**
+ * mode: "ok" (connected), "bad" (needs attention: shows the call to action), "idle" (not set up / off).
+ * `action` is the short call to action shown inside the chip when it is not ok.
+ */
+function setChip(id, { mode, action = "", title = "", show = true }) {
+  const chip = document.getElementById(id);
+  if (!chip) return;
+  chip.hidden = !show;
+  chip.classList.toggle("ok", mode === "ok");
+  chip.classList.toggle("bad", mode === "bad");
+  const em = chip.querySelector(".chip-action");
+  if (em) em.textContent = mode === "ok" ? "" : action;
+  chip.title = title;
+}
+
+function serviceChip(id, svc) {
+  const st = getServiceState(svc);
+  if (!st) return;
+  const action = st.mode === "ok" ? "" : t(st.mode === "bad" ? "common.connect" : "common.configure");
+  setChip(id, { mode: st.mode, action, title: st.text, show: st.show });
+}
+
+function updateDeviceChip(usb) {
+  const name = layoutMode() === "live" ? "Loupedeck Live" : "Loupedeck Live S";
+  const nameEl = document.querySelector("#chipDevice .chip-name");
+  if (nameEl) nameEl.textContent = name;
+  if (usb.disabled) {
+    setChip("chipDevice", { mode: "idle", action: t("status.device.simulation"), title: t("status.device.simulation_title") });
+  } else if (usb.connected) {
+    setChip("chipDevice", { mode: "ok", title: t("status.device.connected", { path: usb.path || usb.detail || "" }) });
+  } else {
+    setChip("chipDevice", { mode: "bad", action: t("status.device.not_found"), title: t("status.device.not_found_title") });
+  }
+}
+
+/** OBS / Home Assistant block of /api/status -> card pill + header chip. */
+function updateConnection(svc, chipId, block) {
+  let mode;
+  let text;
+  if (!block.configured) {
+    mode = "idle";
+    text = t("status.not_configured");
+  } else if (block.connected) {
+    mode = "ok";
+    text = t("status.connected");
+  } else {
+    mode = "bad";
+    text = t("status.offline");
+  }
+  setServiceState(svc, mode, text);
+  const action = mode === "ok" ? "" : t(mode === "bad" ? "common.connect" : "common.configure");
+  setChip(chipId, { mode, action, title: block.url ? `${text} — ${block.url}` : text });
+}
+
+function renderServiceChips() {
+  serviceChip("chipSpotify", "spotify");
+  serviceChip("chipTwitch", "twitch");
+}
+
+/** Redraw every chip from the last known data (after a language change). */
+export function renderStatusChips() {
+  if (lastStatus) {
+    updateDeviceChip(lastStatus.usb || {});
+    updateConnection("obs", "chipObs", lastStatus.obs || {});
+    updateConnection("ha", "chipHa", lastStatus.ha || {});
+  }
+  renderServiceChips();
 }
 
 async function refreshConnectionStatus() {
-  const usbBadge = document.getElementById("stUsbBadge");
-  const usbPath = document.getElementById("stUsbPath");
-  const obsBadge = document.getElementById("stObsBadge");
-  const obsMeta = document.getElementById("stObsMeta");
-  const haBadge = document.getElementById("stHaBadge");
-  const haMeta = document.getElementById("stHaMeta");
-  if (!usbBadge || !obsBadge) return;
   try {
     const r = await fetch("/api/status");
     if (!r.ok) return;
     const j = await r.json();
-    const usb = j.usb || {};
-    if (usb.disabled) {
-      setConnBadge(usbBadge, "muted", "Disabled");
-      if (usbPath) usbPath.textContent = "";
-    } else if (usb.connected) {
-      setConnBadge(usbBadge, "ok", "Connected");
-      if (usbPath) usbPath.textContent = usb.path || usb.detail || "";
-    } else {
-      setConnBadge(usbBadge, "offline", "Offline");
-      if (usbPath) usbPath.textContent = usb.path || usb.detail || "";
-    }
-
-    const obs = j.obs || {};
-    if (!obs.configured) {
-      setConnBadge(obsBadge, "muted", "Not configured");
-      if (obsMeta) obsMeta.textContent = "";
-    } else if (obs.connected) {
-      setConnBadge(obsBadge, "ok", "Connected");
-      if (obsMeta) obsMeta.textContent = obs.url || "";
-    } else {
-      setConnBadge(obsBadge, "offline", "Offline");
-      if (obsMeta) obsMeta.textContent = obs.url || obs.detail || "";
-    }
-
-    if (haBadge) {
-      const ha = j.ha || {};
-      if (!ha.configured) {
-        setConnBadge(haBadge, "muted", "Not configured");
-        if (haMeta) haMeta.textContent = "";
-      } else if (ha.connected) {
-        setConnBadge(haBadge, "ok", "Connected");
-        if (haMeta) haMeta.textContent = ha.url || "";
-      } else {
-        setConnBadge(haBadge, "offline", "Offline");
-        if (haMeta) haMeta.textContent = ha.url || ha.detail || "";
-      }
-    }
+    lastStatus = j;
 
     const prevLayout = state.agentDeckLayout;
     if (j.deck_layout === "live" || j.deck_layout === "live_s") {
@@ -78,9 +108,15 @@ async function refreshConnectionStatus() {
       syncPageSelect();
     }
 
+    updateDeviceChip(j.usb || {});
+    updateConnection("obs", "chipObs", j.obs || {});
+    updateConnection("ha", "chipHa", j.ha || {});
+    renderServiceChips();
+
     if (typeof j.page_index === "number") {
       syncUiToAgentPage(j.page_index);
     }
+    syncPageLedColors();
     state.touchErrors = j.touch_errors && typeof j.touch_errors === "object" ? j.touch_errors : {};
     // Update outlines without waiting for a full re-render.
     document.querySelectorAll(".cell").forEach((el) => {
@@ -93,14 +129,22 @@ async function refreshConnectionStatus() {
       }
     });
   } catch {
-    setConnBadge(usbBadge, "muted", "…");
-    setConnBadge(obsBadge, "muted", "…");
-    if (haBadge) setConnBadge(haBadge, "muted", "…");
+    for (const id of ["chipDevice", "chipObs", "chipHa"]) setChip(id, { mode: "idle", title: t("status.unreachable") });
+  }
+  pollTick += 1;
+  if (pollTick % SLOW_SERVICE_EVERY === 0) {
+    void refreshSpotifyStatus();
+    void refreshTwitchStatus();
   }
 }
 
 export function startConnectionStatusPolling() {
-  if (!document.getElementById("connBar")) return;
+  if (!$("#connBar")) return;
+  document.querySelectorAll("#connBar .pill").forEach((chip) => {
+    chip.addEventListener("click", () => goToService(chip.dataset.svc));
+  });
+  void refreshSpotifyStatus();
+  void refreshTwitchStatus();
   void refreshConnectionStatus();
   if (statusPollTimer) clearInterval(statusPollTimer);
   statusPollTimer = setInterval(refreshConnectionStatus, 1500);

@@ -32,7 +32,7 @@ export function wireObsFields() {
     },
   });
   wireSmartField($("#obsPort"), {
-    validate: (v) => FIELD_VALIDATORS.port(v) || "Port must be an integer 1–65535",
+    validate: (v) => FIELD_VALIDATORS.port(v) || t("svc.obs.port_invalid"),
     optional: false,
     onCommit: (raw) => {
       ensureObs();

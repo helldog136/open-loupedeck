@@ -8,7 +8,8 @@ import { renderDeck } from "../deck.js";
 import { closeKnobEncoderEditor, syncKnobPagesEditor } from "../knobs.js";
 import { currentPage, ensureDevice } from "../model.js";
 import { pullAgentLayoutAndPage, syncPageSelect, updateLiveSPageChrome } from "../pages.js";
-import { cancelPendingAutosave, runAutosave, setSaveStatus } from "../save.js";
+import { cancelPendingAutosave, runAutosave, scheduleAutosave, setSaveStatus } from "../save.js";
+import { setServiceState, wireInlineConfirm } from "./cards.js";
 import { ensureLogging, syncLoggingFromCfg } from "./logging.js";
 import { syncSpotifyFromCfg } from "./spotify.js";
 import { state } from "../state.js";
@@ -26,11 +27,11 @@ async function backupConfig() {
     const j = await r.json();
     const files = j.files || [];
     const names = files.map((f) => f.name).join(", ");
-    setSaveStatus(names ? `Backup: ${names}` : "Backup created");
+    setSaveStatus(names ? t("svc.backups.done_named", { names }) : t("svc.backups.done"));
     void refreshBackupsList();
   } catch (e) {
     $("#saveError").textContent = String(e);
-    setSaveStatus("Backup failed", true);
+    setSaveStatus(t("svc.backups.failed"), true);
   }
 }
 
@@ -42,8 +43,17 @@ export async function refreshBackupsList() {
     if (!r.ok) return;
     const j = await r.json();
     const rows = j.backups || [];
+    setServiceState(
+      "backups",
+      "idle",
+      rows.length ? t("svc.backups.count", { count: rows.length }) : t("svc.backups.none"),
+    );
     if (!rows.length) {
-      mount.innerHTML = '<p class="hint small">No backups yet — one is taken automatically on each launch.</p>';
+      mount.innerHTML = "";
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = t("svc.backups.empty");
+      mount.appendChild(empty);
       return;
     }
     mount.innerHTML = "";
@@ -60,8 +70,14 @@ export async function refreshBackupsList() {
       metaEl.textContent = `${when} · ${kb} KB`;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = "Restore";
-      btn.addEventListener("click", () => void restoreBackupByName(b.name));
+      btn.className = "btn btn-sm";
+      btn.textContent = t("svc.backups.restore");
+      wireInlineConfirm(btn, {
+        promptKey: "svc.backups.restore_prompt",
+        confirmKey: "svc.backups.restore_yes",
+        vars: { name: b.name },
+        onConfirm: () => void restoreBackupByName(b.name),
+      });
       row.appendChild(nameEl);
       row.appendChild(metaEl);
       row.appendChild(btn);
@@ -73,9 +89,6 @@ export async function refreshBackupsList() {
 }
 
 async function restoreBackupByName(name) {
-  if (!confirm(`Restore config from "${name}"? This overwrites the current configuration (Ctrl+Z can undo it).`)) {
-    return;
-  }
   $("#saveError").textContent = "";
   try {
     const r = await fetch("/api/config/backups/restore", {
@@ -92,23 +105,16 @@ async function restoreBackupByName(name) {
     );
     state.selectedControl = null;
     closeKnobEncoderEditor();
-    setSaveStatus(`Restored from ${name}`);
+    setSaveStatus(t("svc.backups.restored", { name }));
     void refreshBackupsList();
   } catch (e) {
     $("#saveError").textContent = String(e);
-    setSaveStatus("Restore failed", true);
+    setSaveStatus(t("svc.backups.restore_failed"), true);
   }
 }
 
 async function wipeBackupsConfig() {
   $("#saveError").textContent = "";
-  if (
-    !confirm(
-      "Remove all rotating config backups on disk? The current editor config will be saved first; only the main YAML file will remain."
-    )
-  ) {
-    return;
-  }
   cancelPendingAutosave();
   const saved = await runAutosave();
   if (!saved) return;
@@ -117,25 +123,18 @@ async function wipeBackupsConfig() {
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();
     const n = j.count ?? 0;
-    setSaveStatus(n ? `Removed ${n} backup file(s)` : "No backup files to remove");
+    setSaveStatus(n ? t("svc.backups.removed", { count: n }) : t("svc.backups.none_to_remove"));
     void refreshBackupsList();
   } catch (e) {
     $("#saveError").textContent = String(e);
-    setSaveStatus("Remove backups failed", true);
+    setSaveStatus(t("svc.backups.remove_failed"), true);
   }
 }
 
 async function resetConfigToDefaults() {
   $("#saveError").textContent = "";
-  if (
-    !confirm(
-      "Reset touch-page layout to defaults?\n\nThis will reset the deck pages/buttons layout and delete config backups. Other settings (e.g. Spotify) will be preserved."
-    )
-  ) {
-    return;
-  }
   cancelPendingAutosave();
-  setSaveStatus("Resetting…");
+  setSaveStatus(t("svc.maint.resetting"));
   try {
     const r = await fetch("/api/config/reset", {
       method: "POST",
@@ -152,18 +151,17 @@ async function resetConfigToDefaults() {
     syncSpotifyFromCfg();
     ensureLogging();
     syncLoggingFromCfg();
-    $("#pageName").textContent = currentPage().name || `Page ${state.pageIndex + 1}`;
-    const pnR = $("#pageNameInput");
-    if (pnR) pnR.value = currentPage().name || "";
+    $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
     syncPageSelect();
     renderDeck();
     syncKnobPagesEditor();
     state.suppressAutosave = false;
-    setSaveStatus("Reset ok");
+    scheduleAutosave(); // the four hardware pages may have been padded on load
+    setSaveStatus(t("svc.maint.reset_done"));
     await refreshSkin();
   } catch (e) {
     $("#saveError").textContent = String(e);
-    setSaveStatus("Reset failed", true);
+    setSaveStatus(t("svc.maint.reset_failed"), true);
   }
 }
 
@@ -172,7 +170,19 @@ export function wireBackupButtons() {
   const btnBackup = $("#btnBackup");
   if (btnBackup) btnBackup.addEventListener("click", () => void backupConfig());
   const btnWipeBackups = $("#btnWipeBackups");
-  if (btnWipeBackups) btnWipeBackups.addEventListener("click", () => void wipeBackupsConfig());
+  if (btnWipeBackups) {
+    wireInlineConfirm(btnWipeBackups, {
+      promptKey: "svc.maint.wipe_prompt",
+      confirmKey: "svc.maint.wipe_yes",
+      onConfirm: () => void wipeBackupsConfig(),
+    });
+  }
   const btnReset = $("#btnResetDefaults");
-  if (btnReset) btnReset.addEventListener("click", () => void resetConfigToDefaults());
+  if (btnReset) {
+    wireInlineConfirm(btnReset, {
+      promptKey: "svc.maint.reset_prompt",
+      confirmKey: "svc.maint.reset_yes",
+      onConfirm: () => void resetConfigToDefaults(),
+    });
+  }
 }

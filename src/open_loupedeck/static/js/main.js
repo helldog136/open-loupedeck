@@ -31,28 +31,36 @@ import {
 import { currentPage, ensureDevice, ensureGlobalButtons, ensurePages, liveKnobEncoderIds } from "./model.js";
 import {
   pullAgentLayoutAndPage,
+  refreshPageTabs,
   syncAgentPageIndex,
   syncPageSelect,
   updateLiveSPageChrome,
-  wirePageNameInput,
   wirePageSelect,
 } from "./pages.js";
 import { scheduleAutosave, setSaveStatus } from "./save.js";
 import { refreshBackupsList, wireBackupButtons } from "./services/backups.js";
+import { setServiceState, wireConfigureButtons } from "./services/cards.js";
 import { ensureHa, syncHaFromCfg, wireHaFields } from "./services/ha.js";
 import { ensureLogging, syncLoggingFromCfg, wireLogLevelSelect } from "./services/logging.js";
 import { ensureObs, syncObsFromCfg, wireObsFields } from "./services/obs.js";
 import {
   handleSpotifyReturnQuery,
+  redrawSpotifyState,
   refreshSpotifyStatus,
   syncSpotifyFromCfg,
   wireSpotifyButtons,
 } from "./services/spotify.js";
 import { initAutostartToggle, wireOpenConfigFolderButton } from "./services/system.js";
-import { ensureTwitch, renderTwitchAccounts, wireTwitchAddButton } from "./services/twitch.js";
+import {
+  ensureTwitch,
+  redrawTwitchState,
+  renderTwitchAccounts,
+  wireTwitchAddButton,
+  wireTwitchMainButton,
+} from "./services/twitch.js";
 import { wireTabBar } from "./shell.js";
 import { on, state } from "./state.js";
-import { startConnectionStatusPolling } from "./status.js";
+import { renderStatusChips, startConnectionStatusPolling } from "./status.js";
 import { wireUndoRedoKeyboard } from "./undo.js";
 import { $ } from "./util.js";
 
@@ -75,7 +83,7 @@ function onConfigReplaced(prevPageIndex) {
   renderDeck();
   if (state.selectedControl) openEditor(state.selectedControl);
   scheduleAutosave();
-  if (state.pageIndex !== prevPageIndex) syncAgentPageIndex();
+  if (state.pageIndex !== prevPageIndex) void syncAgentPageIndex();
 }
 
 /** Services toolbar: device model select (auto / Live S / Live) re-lays out the deck and editors. */
@@ -119,6 +127,8 @@ async function loadCatalogAndConfig() {
  * suppressed until the very end).
  */
 async function init() {
+  // Strings: wait for the language to be loaded so the first render is already translated.
+  if (window.i18n && window.i18n.ready) await window.i18n.ready;
   wireTabBar();
   wireUndoRedoKeyboard();
   void refreshBackupsList();
@@ -139,14 +149,13 @@ async function init() {
   wireObsFields();
   wireOpenConfigFolderButton();
   await initAutostartToggle();
+  const loadedPageCount = Array.isArray(state.cfg.pages) ? state.cfg.pages.length : 0;
   await pullAgentLayoutAndPage();
   updateLiveSPageChrome();
   const dm = $("#deviceModel");
   if (dm) dm.value = state.cfg.device.model || "auto";
 
-  $("#pageName").textContent = currentPage().name || `Page ${state.pageIndex + 1}`;
-  const pnInit = $("#pageNameInput");
-  if (pnInit) pnInit.value = currentPage().name || "";
+  $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
   syncPageSelect();
   renderDeck();
   syncKnobPagesEditor();
@@ -161,7 +170,6 @@ async function init() {
   wireKnobTestButtons();
   wireUploadButtons();
   wireActionTypeSelect();
-  wirePageNameInput();
   if (dm) dm.addEventListener("change", onModelChange);
 
   wireButtonColorInputs();
@@ -173,10 +181,36 @@ async function init() {
 
   wireSpotifyButtons();
   wireTwitchAddButton();
+  wireTwitchMainButton();
+  wireConfigureButtons();
+  refreshLanguageCard();
   wireSidebarPreviewInputs();
   state.suppressAutosave = false;
-  setSaveStatus("Saved");
+  setSaveStatus(t("status.saved"));
+  // An older config with fewer than four pages was padded on load: save it so the agent knows them too.
+  if (state.cfg.pages.length !== loadedPageCount) scheduleAutosave();
 }
+
+/** The Language card's pill shows the language in use. */
+function refreshLanguageCard() {
+  const api = window.i18n;
+  if (!api) return;
+  const known = (api.languages || []).find((l) => l.code === api.lang);
+  setServiceState("language", "idle", known ? known.name : api.lang);
+}
+
+/** A language change re-renders every string that JS (not data-i18n) wrote. */
+document.addEventListener("i18n:change", () => {
+  if (!state.cfg || !state.cfg.pages) return;
+  refreshLanguageCard();
+  refreshPageTabs();
+  renderStatusChips();
+  redrawSpotifyState();
+  redrawTwitchState();
+  renderTwitchAccounts();
+  void refreshBackupsList();
+  setSaveStatus(t("status.saved"));
+});
 
 on("config:replaced", onConfigReplaced);
 on("control:open", openEditor);

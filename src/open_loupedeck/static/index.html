@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/assets/ui/tokens.css" />
     <link rel="stylesheet" href="/assets/ui/components.css" />
     <link rel="stylesheet" href="/assets/ui/style.css" />
+    <link rel="stylesheet" href="/assets/ui/css/shell.css" />
   </head>
   <body>
     <header class="app-header">
@@ -20,308 +21,242 @@
         <span class="app-logo" aria-hidden="true"></span>
         <div>
           <h1>Open-Loupedeck</h1>
-          <p class="app-tagline">Deck layout editor</p>
+          <p class="app-tagline" data-i18n="app.tagline">Loupedeck control center</p>
         </div>
       </div>
-      <nav class="tab-bar" id="tabBar" role="tablist">
-        <button type="button" class="tab-btn" id="tabBtnButtons" data-tab="buttons" role="tab" aria-selected="true">
-          Buttons
-        </button>
-        <button type="button" class="tab-btn" id="tabBtnServices" data-tab="services" role="tab" aria-selected="false">
-          Services
-        </button>
+      <nav class="tab-bar seg" id="tabBar" role="tablist">
+        <button type="button" class="tab-btn" id="tabBtnButtons" data-tab="buttons" role="tab" aria-selected="true" data-i18n="nav.buttons">Buttons</button>
+        <button type="button" class="tab-btn" id="tabBtnServices" data-tab="services" role="tab" aria-selected="false" data-i18n="nav.services">Services</button>
       </nav>
-      <span
-        id="saveStatus"
-        class="save-status"
-        title="Edits are saved to disk automatically; the Loupedeck display updates when you click Apply to key or Clear"
-      ></span>
-      <span class="error" id="saveError"></span>
-      <div class="conn-bar" id="connBar" aria-live="polite">
-        <div class="conn-pill" title="USB serial connection to the Loupedeck">
-          <span class="conn-name">Loupedeck USB</span>
-          <span id="stUsbBadge" class="conn-badge">…</span>
-          <code id="stUsbPath" class="conn-meta"></code>
+      <div class="app-header-right">
+        <div class="status-chips" id="connBar" aria-live="polite">
+          <button type="button" class="pill" id="chipDevice" data-svc="device"><i></i><span class="chip-name">Loupedeck</span><em class="chip-action"></em></button>
+          <button type="button" class="pill" id="chipObs" data-svc="obs"><i></i><span class="chip-name">OBS</span><em class="chip-action"></em></button>
+          <button type="button" class="pill" id="chipHa" data-svc="ha"><i></i><span class="chip-name">Home Assistant</span><em class="chip-action"></em></button>
+          <button type="button" class="pill" id="chipSpotify" data-svc="spotify" hidden><i></i><span class="chip-name">Spotify</span><em class="chip-action"></em></button>
+          <button type="button" class="pill" id="chipTwitch" data-svc="twitch" hidden><i></i><span class="chip-name">Twitch</span><em class="chip-action"></em></button>
         </div>
-        <div class="conn-pill" title="OBS Studio WebSocket">
-          <span class="conn-name">OBS</span>
-          <span id="stObsBadge" class="conn-badge">…</span>
-          <code id="stObsMeta" class="conn-meta"></code>
-        </div>
-        <div class="conn-pill" title="Home Assistant REST API">
-          <span class="conn-name">Home Assistant</span>
-          <span id="stHaBadge" class="conn-badge">…</span>
-          <code id="stHaMeta" class="conn-meta"></code>
+        <div class="saved-box">
+          <span id="saveStatus" class="save-status" data-i18n-attr="title:header.saved_hint" title="Changes are saved automatically"></span>
+          <button type="button" class="btn btn-sm" id="btnUndo" disabled data-i18n="common.undo" data-i18n-attr="title:header.undo_title">Undo</button>
         </div>
       </div>
+      <span class="error header-error" id="saveError"></span>
     </header>
 
     <div id="tabPanelServices" class="tab-panel" hidden>
-      <section class="services-toolbar">
-        <label
-          >Hardware
-          <select id="deviceModel" title="Matches device.model in YAML">
-            <option value="auto">Auto (USB PID if available)</option>
-            <option value="live_s">Loupedeck Live S</option>
-            <option value="live">Loupedeck Live (original)</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          id="btnBackup"
-          title="Copy the current config into rotating backups (newest .bak1; keeps 3 files)"
-        >
-          Backup config
-        </button>
-        <button
-          type="button"
-          id="btnWipeBackups"
-          title="Save current config and delete all rotating backup files (.bak1–.bak3)"
-        >
-          Remove backups
-        </button>
-        <button
-          type="button"
-          id="btnResetDefaults"
-          title="Delete config + backups and recreate a fresh default config"
-        >
-          Reset to defaults
-        </button>
-        <button type="button" id="btnOpenConfigFolder" title="Open the folder containing config.yaml">
-          Open config folder
-        </button>
-        <label class="autostart-toggle" title="Windows: registry Run key · macOS: LaunchAgent · Linux: XDG autostart">
-          <input type="checkbox" id="autostartToggle" />
-          Launch at startup
-        </label>
-      </section>
+      <div class="svc-wrap">
+        <p class="hint svc-intro" data-i18n="svc.intro">Connect the apps your keys control. Everything saves as you type.</p>
+        <div class="svc-grid">
 
-    <section class="ha-banner" id="backupsBanner">
-      <details class="ha-details">
-        <summary class="ha-summary">
-          <span class="ha-summary-title">Backups</span>
-          <span class="ha-summary-hint">rotating .bak1–.bak3 — one is also taken automatically at each launch</span>
-        </summary>
-        <div class="ha-inner">
-          <div id="backupsListMount"></div>
-        </div>
-      </details>
-    </section>
-
-    <section class="spotify-banner" id="spotifyBanner">
-      <details class="spotify-details">
-        <summary class="spotify-summary">
-          <span class="spotify-summary-title">Spotify</span>
-          <span class="spotify-summary-hint">OAuth &amp; playback — optional</span>
-        </summary>
-        <div class="spotify-inner">
-          <p class="hint small spotify-intro">
-            Click <strong>Connect with Spotify</strong> and log in &mdash; nothing to copy or paste.
-            Playback control needs
-            <a href="https://www.spotify.com/premium/" target="_blank" rel="noopener">Spotify Premium</a> for
-            most users, and an active Spotify Connect device (app open on phone, desktop, or web).
-          </p>
-          <p class="hint small" id="spotifyStatusLine"></p>
-          <div class="row gap-row">
-            <button type="button" id="btnSpotifyConnect">Connect with Spotify</button>
-            <button type="button" id="btnSpotifyDisconnect">Disconnect</button>
-          </div>
-          <details class="adv-json">
-            <summary>
-              Advanced: use my own Spotify app
-              <span class="info-tip" tabindex="0" title="Spotify limits the built-in app to 25 hand-approved users. If Connect fails or you are not on that list, create your own free Spotify app: dashboard -> Create app -> tick 'Web API' -> Redirect URI = the value below -> paste its Client ID here. See docs/configuration.md.">&#9432;</span>
-            </summary>
-            <p class="hint small">
-              <strong>Connect says &ldquo;user not registered&rdquo; or fails?</strong> Spotify limits the built-in app to
-              25 approved users. Create your own (free, 2 minutes): open the dashboard below &rarr;
-              <em>Create app</em> &rarr; tick <em>Web API</em> &rarr; add the Redirect URI shown here &rarr; paste the
-              Client ID, save, then Connect.
-            </p>            <p class="hint small">
-              <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Create an app</a>
-              (Web API), add the redirect URI below to its settings, paste its Client ID, then save and connect.
-            </p>
-            <label class="row" for="spotifyClientId">Client ID</label>
-            <input
-              type="text"
-              id="spotifyClientId"
-              class="full-width mono"
-              placeholder="Empty = built-in app"
-              autocomplete="off"
-              spellcheck="false"
-            />
-            <label class="row" for="spotifyRedirectUri">Redirect URI (must match Dashboard exactly)</label>
-            <input type="text" id="spotifyRedirectUri" class="full-width mono" spellcheck="false" />
-            <div class="row gap-row">
-              <button type="button" id="btnSpotifySave">Save Spotify settings</button>
+          <section class="card svc-card" id="svc-obs" data-svc="obs">
+            <div class="svc-head">
+              <h3>OBS Studio</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
             </div>
-          </details>
-          <p class="error" id="spotifyErrorLine" hidden></p>
-        </div>
-      </details>
-    </section>
+            <p class="hint svc-desc" data-i18n="svc.obs.desc">Switch scenes, mute sources and change volume from your keys.</p>
+            <div class="svc-actions">
+              <button type="button" class="btn btn-primary" id="btnObsConfigure" data-svc-main data-i18n="common.configure">Configure</button>
+            </div>
+            <details class="acc svc-details" id="obsDetails">
+              <summary data-i18n="svc.details">Details</summary>
+              <div class="acc-body">
+                <p class="hint" data-i18n="svc.obs.help">In OBS, open Tools, then WebSocket Server Settings, and enable the server. "Show Connect Info" gives you the password.</p>
+                <div class="row two-col">
+                  <label class="stack"><span data-i18n="svc.obs.host">Address</span>
+                    <input type="text" id="obsHost" class="mono" placeholder="127.0.0.1" autocomplete="off" spellcheck="false" />
+                  </label>
+                  <label class="stack"><span data-i18n="svc.obs.port">Port</span>
+                    <input type="number" id="obsPort" class="mono" placeholder="4455" min="1" max="65535" />
+                  </label>
+                </div>
+                <label class="stack"><span data-i18n="svc.obs.password">Password</span>
+                  <input type="password" id="obsPassword" class="mono" data-i18n-attr="placeholder:svc.obs.password_ph" placeholder="Leave empty if there is no password" autocomplete="off" spellcheck="false" />
+                </label>
+              </div>
+            </details>
+          </section>
 
-    <section class="logging-banner" id="loggingBanner">
-      <details class="logging-details">
-        <summary class="logging-summary">
-          <span class="logging-summary-title">Logging</span>
-          <span class="logging-summary-hint">level &mdash; applies after save (no restart)</span>
-        </summary>
-        <div class="logging-inner">
-          <label class="row" for="logLevel">Log level</label>
-          <select id="logLevel" class="log-level-select" title="Saved to logging.level in config.yaml">
-            <option value="DEBUG">DEBUG</option>
-            <option value="INFO" selected>INFO</option>
-            <option value="WARNING">WARNING</option>
-            <option value="WARN">WARN</option>
-            <option value="ERROR">ERROR</option>
-            <option value="CRITICAL">CRITICAL</option>
-          </select>
-          <p class="hint small">
-            Written to <code>logging.level</code>. If the agent was started with <code>-v</code>, root handlers stay
-            at DEBUG until restart. Console/file toggles are only in YAML for now.
-          </p>
-        </div>
-      </details>
-    </section>
+          <section class="card svc-card" id="svc-ha" data-svc="ha">
+            <div class="svc-head">
+              <h3>Home Assistant</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
+            </div>
+            <p class="hint svc-desc" data-i18n="svc.ha.desc">Run lights, scripts and scenes, and show sensors or the weather on your keys.</p>
+            <div class="svc-actions">
+              <button type="button" class="btn btn-primary" id="btnHaConfigure" data-svc-main data-i18n="common.configure">Configure</button>
+            </div>
+            <details class="acc svc-details" id="haDetails">
+              <summary data-i18n="svc.details">Details</summary>
+              <div class="acc-body">
+                <p class="hint" data-i18n="svc.ha.help">In Home Assistant, open your profile, then Security, then create a long-lived access token. Paste it here with your Home Assistant address.</p>
+                <label class="stack"><span data-i18n="svc.ha.url">Home Assistant address</span>
+                  <input type="text" id="haBaseUrl" class="mono" placeholder="http://homeassistant.local:8123" autocomplete="off" spellcheck="false" />
+                </label>
+                <label class="stack"><span data-i18n="svc.ha.token">Access token</span>
+                  <input type="password" id="haToken" class="mono" placeholder="eyJ…" autocomplete="off" spellcheck="false" />
+                </label>
+              </div>
+            </details>
+          </section>
 
-    <section class="logging-banner" id="languageBanner">
-      <details class="logging-details">
-        <summary class="logging-summary">
-          <span class="logging-summary-title" data-i18n="language.title">Language</span>
-          <span class="logging-summary-hint" data-i18n="language.hint">applies immediately (no restart)</span>
-        </summary>
-        <div class="logging-inner">
-          <label class="row" for="uiLanguage" data-i18n="language.label">Interface language</label>
-          <select id="uiLanguage" class="log-level-select">
-            <option value="auto">auto</option>
-          </select>
-          <p class="hint small" data-i18n="language.help">
-            Stored as language in config.yaml. Translations live in the locales folder; see the contributing guide to
-            add yours.
-          </p>
-        </div>
-      </details>
-    </section>
+          <section class="card svc-card" id="svc-spotify" data-svc="spotify">
+            <div class="svc-head">
+              <h3>Spotify</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
+            </div>
+            <p class="hint svc-desc" data-i18n="svc.spotify.desc">Play, pause and skip tracks. Needs Spotify Premium and an open Spotify app on any device.</p>
+            <div class="svc-actions">
+              <button type="button" class="btn btn-primary" id="btnSpotifyConnect" data-svc-main data-i18n="common.connect">Connect</button>
+              <button type="button" class="btn" id="btnSpotifyDisconnect" data-svc-main hidden data-i18n="common.disconnect">Disconnect</button>
+            </div>
+            <details class="acc svc-details" id="spotifyDetails">
+              <summary data-i18n="svc.details">Details</summary>
+              <div class="acc-body">
+                <p class="hint" id="spotifyStatusLine"></p>
+                <p class="hint" data-i18n="svc.spotify.own_help">If connecting fails with "user not registered", create your own free Spotify app: open the developer dashboard, create an app, tick "Web API", add the redirect address shown below, then paste its Client ID here.</p>
+                <p class="hint"><a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" data-i18n="svc.spotify.dashboard">Open the Spotify developer dashboard</a></p>
+                <label class="stack"><span data-i18n="svc.spotify.client_id">Client ID</span>
+                  <input type="text" id="spotifyClientId" class="mono" data-i18n-attr="placeholder:svc.spotify.client_id_ph" placeholder="Empty = built-in app" autocomplete="off" spellcheck="false" />
+                </label>
+                <label class="stack"><span data-i18n="svc.spotify.redirect">Redirect address (must match the dashboard exactly)</span>
+                  <input type="text" id="spotifyRedirectUri" class="mono" spellcheck="false" />
+                </label>
+                <div><button type="button" class="btn" id="btnSpotifySave" data-i18n="svc.spotify.save">Save Spotify settings</button></div>
+                <p class="msg-error" id="spotifyErrorLine" hidden></p>
+              </div>
+            </details>
+          </section>
 
-    <section class="obs-banner" id="obsBanner">
-      <details class="obs-details">
-        <summary class="obs-summary">
-          <span class="obs-summary-title">OBS Studio</span>
-          <span class="obs-summary-hint">WebSocket server — scenes, mute, volume</span>
-        </summary>
-        <div class="obs-inner">
-          <p class="hint small">
-            OBS: Tools &rarr; WebSocket Server Settings (or Settings &rarr; Network on OBS 28+) &rarr; Enable
-            WebSocket server &rarr; Show Connect Info for the password.
-          </p>
-          <div class="row two-col">
-            <label class="stack">Host
-              <input type="text" id="obsHost" class="full-width mono" placeholder="127.0.0.1" autocomplete="off" spellcheck="false" />
-            </label>
-            <label class="stack">Port
-              <input type="number" id="obsPort" class="full-width mono" placeholder="4455" min="1" max="65535" />
-            </label>
-          </div>
-          <label class="row" for="obsPassword">Password</label>
-          <input
-            type="password"
-            id="obsPassword"
-            class="full-width mono"
-            placeholder="Leave empty if authentication is disabled"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </div>
-      </details>
-    </section>
+          <section class="card svc-card" id="svc-twitch" data-svc="twitch">
+            <div class="svc-head">
+              <h3>Twitch</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
+            </div>
+            <p class="hint svc-desc" data-i18n="svc.twitch.desc">Make clips, run ads, change chat modes and show whether you are live. Works with several accounts.</p>
+            <div class="svc-actions">
+              <button type="button" class="btn btn-primary" id="btnTwitchMain" data-svc-main data-i18n="common.connect">Connect</button>
+            </div>
+            <details class="acc svc-details" id="twitchDetails">
+              <summary data-i18n="svc.details">Details</summary>
+              <div class="acc-body">
+                <p class="hint" data-i18n="svc.twitch.help">Click Connect and approve on twitch.tv; there is nothing to copy. Each Twitch action runs once for every account listed here.</p>
+                <div id="twitchAccountsMount"></div>
+                <div><button type="button" class="btn" id="btnAddTwitchAccount" data-i18n="svc.twitch.add_account">Add account</button></div>
+                <p class="msg-error" id="twitchErrorLine" hidden></p>
+              </div>
+            </details>
+          </section>
 
-    <section class="ha-banner" id="haBanner">
-      <details class="ha-details">
-        <summary class="ha-summary">
-          <span class="ha-summary-title">Home Assistant</span>
-          <span class="ha-summary-hint">REST API (long-lived token) — lights, scripts, sensors, weather</span>
-        </summary>
-        <div class="ha-inner">
-          <p class="hint small">
-            In Home Assistant: your profile (bottom-left) &rarr; Security &rarr; Long-Lived Access Tokens &rarr;
-            Create Token. Paste it below along with the base URL (e.g. <code>http://homeassistant.local:8123</code>).
-            Then use the <code>ha.*</code> actions and <code>display.ha_sensor</code> /
-            <code>display.ha_weather</code> on your buttons.
-          </p>
-          <label class="row" for="haBaseUrl">Base URL</label>
-          <input
-            type="text"
-            id="haBaseUrl"
-            class="full-width mono"
-            placeholder="http://homeassistant.local:8123"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <label class="row" for="haToken">Long-lived access token</label>
-          <input
-            type="password"
-            id="haToken"
-            class="full-width mono"
-            placeholder="eyJ…"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </div>
-      </details>
-    </section>
+          <section class="card svc-card" id="svc-language" data-svc="language">
+            <div class="svc-head">
+              <h3 data-i18n="language.title">Language</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
+            </div>
+            <p class="hint svc-desc" data-i18n="svc.language.desc">The language of this interface and of the default key labels. Applies immediately.</p>
+            <div class="svc-actions">
+              <label class="sr-only" for="uiLanguage" data-i18n="language.label">Interface language</label>
+              <select id="uiLanguage" data-svc-main><option value="auto">auto</option></select>
+            </div>
+          </section>
 
-    <section class="twitch-banner" id="twitchBanner">
-      <details class="twitch-details">
-        <summary class="twitch-summary">
-          <span class="twitch-summary-title">Twitch</span>
-          <span class="twitch-summary-hint">Helix (stream status) &amp; multi-account actions</span>
-        </summary>
-        <div class="twitch-inner">
-          <p class="hint small">
-            Click <strong>Connect</strong> and log in on twitch.tv &mdash; nothing to copy or paste. This enables the
-            <code>Twitch</code> actions (clip, ads, chat modes, raid, &hellip;). Each one runs once per
-            account listed here. Display keys (like <code>display.twitch_live</code>) only need a Client
-            ID / secret under &ldquo;Advanced&rdquo;.
-          </p>
-          <div id="twitchAccountsMount"></div>
-          <div class="row gap-row">
-            <button type="button" id="btnAddTwitchAccount">Add account</button>
-          </div>
-          <p class="error" id="twitchErrorLine" hidden></p>
+          <section class="card svc-card" id="svc-logging" data-svc="logging">
+            <div class="svc-head">
+              <h3 data-i18n="svc.logging.title">Logging</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
+            </div>
+            <p class="hint svc-desc" data-i18n="svc.logging.desc">How much detail is written to the log file. Useful when reporting a problem. Applies without a restart.</p>
+            <div class="svc-actions">
+              <label class="sr-only" for="logLevel" data-i18n="svc.logging.level">Log level</label>
+              <select id="logLevel" data-svc-main>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO" selected>INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="WARN">WARN</option>
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="card svc-card" id="svc-backups" data-svc="backups">
+            <div class="svc-head">
+              <h3 data-i18n="svc.backups.title">Backups</h3>
+              <span class="pill svc-pill"><i></i><span class="svc-pill-text">…</span></span>
+            </div>
+            <p class="hint svc-desc" data-i18n="svc.backups.desc">The three latest copies of your configuration are kept, and one is made at every launch.</p>
+            <div class="svc-actions">
+              <button type="button" class="btn btn-primary" id="btnBackup" data-svc-main data-i18n="svc.backups.now">Back up now</button>
+            </div>
+            <details class="acc svc-details" id="backupsDetails">
+              <summary data-i18n="svc.details">Details</summary>
+              <div class="acc-body">
+                <div id="backupsListMount"></div>
+              </div>
+            </details>
+          </section>
+
+          <section class="card svc-card" id="svc-general" data-svc="general">
+            <div class="svc-head">
+              <h3 data-i18n="svc.general.title">General</h3>
+            </div>
+            <div class="svc-rows">
+              <label class="svc-row">
+                <span class="svc-row-label" data-i18n="svc.general.model">Hardware</span>
+                <select id="deviceModel">
+                  <option value="auto" data-i18n="svc.general.model_auto">Detect automatically</option>
+                  <option value="live_s">Loupedeck Live S</option>
+                  <option value="live" data-i18n="svc.general.model_live">Loupedeck Live (original)</option>
+                </select>
+              </label>
+              <label class="svc-row">
+                <span class="svc-row-label" data-i18n="svc.general.autostart">Launch at startup</span>
+                <span class="toggle"><input type="checkbox" id="autostartToggle" /><span></span></span>
+              </label>
+              <div class="svc-row">
+                <span class="svc-row-label" data-i18n="svc.general.folder_hint">Where your configuration and media are stored</span>
+                <button type="button" class="btn" id="btnOpenConfigFolder" data-i18n="svc.general.open_folder">Open config folder</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="card svc-card svc-maint" id="svc-maintenance" data-svc="maintenance">
+            <div class="svc-head">
+              <h3 data-i18n="svc.maint.title">Maintenance</h3>
+            </div>
+            <div class="svc-rows">
+              <div class="svc-row">
+                <span class="svc-row-label" data-i18n="svc.maint.wipe_desc">Delete the saved backup copies. Your current configuration is kept.</span>
+                <button type="button" class="btn btn-danger" id="btnWipeBackups" data-i18n="svc.maint.wipe">Remove backups</button>
+              </div>
+              <div class="svc-row">
+                <span class="svc-row-label" data-i18n="svc.maint.reset_desc">Put the pages and keys back to the defaults and delete the backups. Your connections are kept.</span>
+                <button type="button" class="btn btn-danger" id="btnResetDefaults" data-i18n="svc.maint.reset">Reset to defaults</button>
+              </div>
+            </div>
+          </section>
+
         </div>
-      </details>
-    </section>
+      </div>
     </div>
 
     <div id="tabPanelButtons" class="tab-panel">
-      <div class="page-manage-bar">
-        <label id="pageSelectLabel" hidden
-          >Page
-          <select id="pageSelect"></select>
-        </label>
-        <label class="row" for="pageNameInput">Rename current page</label>
-        <input type="text" id="pageNameInput" placeholder="Page name" />
+      <div class="pages-bar">
+        <div id="pageRail" class="page-tabs" role="tablist"></div>
+        <button type="button" id="btnAddPage" class="pagetab add" data-i18n="pages.add">+ Page</button>
+        <span class="hint pages-hint" id="pagesHint"></span>
+        <select id="pageSelect" hidden aria-hidden="true" tabindex="-1"></select>
       </div>
-    <main>
-      <aside class="page-rail-wrap">
-        <div class="page-rail-header">
-          <span class="deck-region-label">Pages</span>
-          <span class="page-rail-hint" title="Physical Circle/1/2/3 buttons only reach pages ①–④">
-            ①–④ = hardware
-          </span>
-        </div>
-        <div id="pageRail" class="page-rail"></div>
-        <button type="button" id="btnAddPage" class="page-rail-add-btn">+ Add page</button>
-      </aside>
-      <section class="deck-wrap deck-shell">
-        <div class="deck-page-bar">
-          <span class="deck-page-label">Editing</span>
-          <p class="deck-title" id="pageName">Page</p>
-        </div>
-        <div id="deckRoot"></div>
-      </section>
+      <main class="buttons-layout">
+        <section id="mount-deck" class="deck-wrap deck-shell">
+          <div class="deck-page-bar">
+            <span class="deck-page-label" data-i18n="deck.editing">Editing</span>
+            <p class="deck-title" id="pageName">Page</p>
+          </div>
+          <div id="deckRoot"></div>
+        </section>
 
-      <aside class="side-panel">
+        <aside id="mount-inspector" class="side-panel">
         <div id="keyEditorBlock">
         <h2 id="selLabel">Select a control</h2>
         <div id="keyEditorApplyRow" class="row gap-row key-editor-sticky-bar">
@@ -625,8 +560,8 @@
             <p class="error" id="knobPagesError"></p>
           </details>
         </div>
-      </aside>
-    </main>
+        </aside>
+      </main>
     </div>
     <script src="/assets/ui/i18n.js"></script>
     <script type="module" src="/assets/ui/js/main.js"></script>
