@@ -65,6 +65,11 @@ logger = logging.getLogger(__name__)
 
 SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
 
+# The config UI is native ES modules (static/js/*.js), which browsers only execute when served with a
+# JavaScript MIME type. On Windows, mimetypes reads the registry, where some installers map .js to
+# text/plain -- that would leave the UI blank. Pin the standard type.
+mimetypes.add_type("text/javascript", ".js")
+
 
 def _static_dir() -> Path:
     return package_root() / "static"
