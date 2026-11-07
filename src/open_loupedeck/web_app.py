@@ -35,6 +35,7 @@ from .config_io import default_raw_config, ensure_minimal_structure, save_raw_co
 from .config_paths import ensure_application_dirs
 from .config_state import ConfigState
 from .control_ids import is_page_scoped_control
+from .deck_brightness import make_deck_brightness, parse_hhmm
 from .hardware.live_s_device import LoupedeckLiveS
 from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
 from .knob_duos import list_duos
@@ -107,6 +108,8 @@ def create_web_app(
     if rt.twitch is None:
         rt.twitch = TwitchManager(config_dir / "twitch_tokens.json", lambda: _twitch_accounts_from(state.raw))
     tw: TwitchManager = rt.twitch
+    if rt.deck_brightness is None:
+        rt.deck_brightness = make_deck_brightness(state, rt)
 
     @app.middleware("http")
     async def _no_cache(request: Any, call_next: Any) -> Any:
@@ -173,6 +176,43 @@ def create_web_app(
             state.replace_raw(raw)
         current = set_language_from_raw(raw)
         return JSONResponse({"ok": True, "setting": value, "current": current})
+
+    def _brightness_payload() -> dict[str, Any]:
+        ctl = rt.deck_brightness
+        return {
+            "level": ctl.level,
+            "night": dict(ctl.night),
+            "effective": ctl.effective_level(),
+            "night_active": ctl.night_active(),
+        }
+
+    @app.get("/api/brightness")
+    async def get_brightness() -> JSONResponse:
+        return JSONResponse(_brightness_payload())
+
+    @app.put("/api/brightness")
+    async def put_brightness(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        ctl = rt.deck_brightness
+        if "level" in body:
+            lv = body["level"]
+            if isinstance(lv, bool) or not isinstance(lv, (int, float)) or not 0 <= lv <= 100:
+                raise HTTPException(400, t("error.invalid_brightness_level"))
+        night = body.get("night")
+        if night is not None:
+            if not isinstance(night, dict):
+                raise HTTPException(400, t("error.invalid_brightness_night"))
+            for key in ("from", "to"):
+                if key in night and parse_hhmm(night[key]) is None:
+                    raise HTTPException(400, t("error.invalid_brightness_time"))
+            lv = night.get("level")
+            if "level" in night and (isinstance(lv, bool) or not isinstance(lv, (int, float)) or not 0 <= lv <= 100):
+                raise HTTPException(400, t("error.invalid_brightness_level"))
+        if "level" in body:
+            ctl.set(body["level"], period="day")
+        if night is not None:
+            ctl.update_night(night)
+        ctl.apply()
+        return JSONResponse({"ok": True, **_brightness_payload()})
 
     @app.get("/api/locale/{code}")
     async def api_locale(code: str) -> JSONResponse:
@@ -568,6 +608,9 @@ def create_web_app(
             merged["language"] = state.raw.get("language") or "auto"
             # Same for the dismissed onboarding: once done it stays done.
             merged["onboarding_done"] = bool(state.raw.get("onboarding_done")) or bool(merged.get("onboarding_done"))
+            # Same for the screen brightness: it is owned by /api/brightness (live controller).
+            if rt.deck_brightness is not None:
+                merged.update(rt.deck_brightness.snapshot())
             save_raw_config(config_path, merged)
             state.replace_raw(merged)
             prune_stale_live_message_keys(dict(state.raw), rt)
@@ -631,6 +674,9 @@ def create_web_app(
             state.reload_from_disk()
             prune_stale_live_message_keys(dict(state.raw), rt)
             fresh = dict(state.raw)
+            if rt.deck_brightness is not None:
+                rt.deck_brightness.load_from_raw(fresh)
+                rt.deck_brightness.apply()
 
         set_language_from_raw(fresh)
         try:

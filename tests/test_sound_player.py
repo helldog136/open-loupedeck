@@ -193,3 +193,35 @@ def test_sound_play_action_and_stop_all(tmp_path: Path) -> None:
         assert be.started[0].volume == 30 and be.started[0].path.endswith("a.wav")
     finally:
         sp.set_player(None)
+
+
+def test_mci_commands_all_run_on_one_worker_thread():
+    """MCI devices are thread-affine: open/play/status/stop/close must share a single thread."""
+
+    import threading
+
+    seen: set[int] = set()
+
+    def send(command: str) -> str:
+        seen.add(threading.get_ident())
+        return "playing" if command.startswith("status") else ""
+
+    be = sp.WindowsMciBackend(send=send, poll_seconds=3600)
+    player = sp.SoundPlayer(be)
+    threads = [threading.Thread(target=player.play, args=("a.mp3", 100, "restart", f"k{i}")) for i in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    player.stop_all()
+    assert len(seen) == 1
+    assert threading.get_ident() not in seen
+
+
+def test_restart_stops_same_file_even_from_another_key():
+    be = sp.NullBackend()
+    player = sp.SoundPlayer(be)
+    player.play("a.wav", 100, "play", "key-1")
+    assert player.active_count() == 1
+    player.play("a.wav", 100, "restart", "key-2")
+    assert player.active_count() == 1

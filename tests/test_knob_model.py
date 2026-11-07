@@ -92,6 +92,7 @@ def test_catalogue_covers_the_required_duos():
         "spotify_track",
         "obs_scene",
         "deck_page",
+        "screen_brightness",
         "keyboard_up_down",
     ):
         assert required in ids

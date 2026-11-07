@@ -16,9 +16,11 @@ variable ``OPEN_LOUPEDECK_SOUND_BACKEND=null`` selects a backend that only recor
 
 from __future__ import annotations
 
+import concurrent.futures
 import itertools
 import logging
 import os
+import queue
 import shutil
 import subprocess
 import sys
@@ -179,12 +181,43 @@ class WindowsMciBackend:
         self._live: dict[str, _MciPlayback] = {}
         self._reaper: threading.Thread | None = None
         self._poll = poll_seconds
+        self._queue: queue.Queue[tuple[str, concurrent.futures.Future[str]]] = queue.Queue()
+        self._worker: threading.Thread | None = None
 
     def _send(self, command: str) -> str:
+        """Run one MCI command on the dedicated MCI thread and return its reply.
+
+        MCI devices (``mpegvideo`` in particular) belong to the thread that opened them: stopping or
+        closing one from another thread can silently fail, leaving the sound playing. Every command
+        (open, play, status, stop, close) therefore goes through one worker thread.
+        """
+
+        if threading.current_thread() is self._worker:
+            return self._run_command(command)
+        done: concurrent.futures.Future[str] = concurrent.futures.Future()
+        self._ensure_worker()
+        self._queue.put((command, done))
+        return done.result()
+
+    def _run_command(self, command: str) -> str:
+        if self._send_fn is None:
+            self._send_fn = _default_mci_send()
+        return self._send_fn(command)
+
+    def _ensure_worker(self) -> None:
         with self._lock:
-            if self._send_fn is None:
-                self._send_fn = _default_mci_send()
-            return self._send_fn(command)
+            if self._worker is not None and self._worker.is_alive():
+                return
+            self._worker = threading.Thread(target=self._work_loop, name="mci-worker", daemon=True)
+            self._worker.start()
+
+    def _work_loop(self) -> None:
+        while True:
+            command, done = self._queue.get()
+            try:
+                done.set_result(self._run_command(command))
+            except BaseException as exc:  # delivered to the caller, which decides what to do
+                done.set_exception(exc)
 
     @staticmethod
     def _device_type(path: str) -> str:
@@ -220,7 +253,7 @@ class WindowsMciBackend:
             try:
                 self._send(cmd)
             except MciError:
-                logger.debug("MCI %s failed", cmd, exc_info=True)
+                logger.warning("MCI %s failed", cmd, exc_info=True)
         with self._lock:
             pb = self._live.pop(alias, None)
         if pb is not None:
@@ -291,7 +324,7 @@ class SoundPlayer:
     def __init__(self, backend: Backend | None = None) -> None:
         self._backend = backend
         self._lock = threading.Lock()
-        self._active: list[tuple[str, Playback]] = []
+        self._active: list[tuple[str, Playback, str]] = []
 
     @property
     def backend(self) -> Backend:
@@ -300,17 +333,19 @@ class SoundPlayer:
         return self._backend
 
     def _prune(self) -> None:
-        self._active = [(k, p) for k, p in self._active if p.is_running()]
+        self._active = [(k, p, f) for k, p, f in self._active if p.is_running()]
 
-    def _stop_key(self, key: str) -> bool:
+    def _stop_key(self, key: str, path: str) -> bool:
+        """Stop the running playbacks of this key and every playback of the same file."""
+
         stopped = False
-        keep: list[tuple[str, Playback]] = []
-        for k, p in self._active:
-            if k == key:
+        keep: list[tuple[str, Playback, str]] = []
+        for k, p, f in self._active:
+            if k == key or f == path:
                 p.stop()
                 stopped = True
             else:
-                keep.append((k, p))
+                keep.append((k, p, f))
         self._active = keep
         return stopped
 
@@ -333,17 +368,17 @@ class SoundPlayer:
         with self._lock:
             self._prune()
             if mode in ("toggle", "restart"):
-                was_playing = self._stop_key(key)
+                was_playing = self._stop_key(key, path)
                 if was_playing and mode == "toggle":
                     return "stopped"
             pb = backend.start(path, vol)
-            self._active.append((key, pb))
+            self._active.append((key, pb, path))
         return "started"
 
     def stop_all(self) -> int:
         with self._lock:
             n = len(self._active)
-            for _, p in self._active:
+            for _, p, _f in self._active:
                 p.stop()
             self._active = []
         return n

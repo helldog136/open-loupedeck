@@ -145,15 +145,17 @@ def download_update(info: UpdateInfo, timeout: float = 120.0) -> Path:
     return dest
 
 
-def apply_windows_update(installer_path: Path) -> None:
-    """Launch the downloaded installer silently and detached.
+def apply_windows_update(installer_path: Path) -> Path:
+    """Launch the downloaded installer silently and detached; return the path of its log file.
 
-    Relies on Inno Setup's ``/CLOSEAPPLICATIONS`` (plus the ``AppMutex`` declared in
-    ``packaging/windows/installer.iss``) to close this running app via the Windows Restart
-    Manager, and ``/RESTARTAPPLICATIONS`` to relaunch it once installed -- this call does not,
-    and should not, exit the current process itself.
+    The installer declares an ``AppMutex`` (see ``packaging/windows/installer.iss``): it will not
+    proceed while this app is still running, and a silent run cannot ask anyone to close it. The
+    caller MUST therefore exit this process shortly after this returns (``TrayApp._quit_for_update``)
+    so the mutex is released before the installer's checks. The installer's ``[Run]`` entry
+    relaunches the app once the install is done. ``/LOG`` makes a failed update diagnosable.
     """
 
+    log_path = Path(tempfile.gettempdir()) / "open-loupedeck-update.log"
     subprocess.Popen(
         [
             str(installer_path),
@@ -161,8 +163,9 @@ def apply_windows_update(installer_path: Path) -> None:
             "/SUPPRESSMSGBOXES",
             "/NORESTART",
             "/CLOSEAPPLICATIONS",
-            "/RESTARTAPPLICATIONS",
+            f"/LOG={log_path}",
         ],
         close_fds=True,
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
+    return log_path
