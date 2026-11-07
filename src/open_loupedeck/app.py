@@ -26,6 +26,7 @@ from .config_io import raw_to_settings
 from .config_paths import default_config_path
 from .config_state import ConfigState
 from .control_ids import control_ids_for_lookup
+from .deck_brightness import make_deck_brightness
 from .deck_skin import apply_page_skin, page_needs_animated_skin
 from .device_discovery import list_loupedeck_usb_ports, usb_hint_for_port
 from .events import NormalizedEvent, normalize_loupedeck_message
@@ -230,7 +231,13 @@ async def run_agent(
             ha = HaClient(http_client, settings.ha.base_url, settings.ha.token)
         runtime.ha = ha
 
+        brightness = runtime.deck_brightness
+        if brightness is None:
+            brightness = runtime.deck_brightness = make_deck_brightness(state, runtime)
+        brightness_task = asyncio.create_task(brightness.run())
+
         ctx = ActionContext(
+            deck_brightness=brightness,
             obs=obs,
             http_client=http_client,
             log=logger,
@@ -346,6 +353,8 @@ async def run_agent(
                 finally:
                     ctx.on_action_error = None
             text = res.feedback
+            if text and not failed and any(str(a.get("type", "")).startswith("deck.brightness") for a in res.actions):
+                text = t("knob.feedback.brightness", level=brightness.effective_level())
             if failed and text:
                 text = t("knob.feedback.failed", text=text)
             if text and runtime.deck is not None:
@@ -543,9 +552,7 @@ async def run_agent(
                         old.stop()
                 try:
                     new_deck.start()
-                    if hasattr(new_deck, "set_brightness"):
-                        with contextlib.suppress(Exception):
-                            new_deck.set_brightness(80)
+                    brightness.apply()
                     new_deck.set_callback(thread_callback)
                     logger.info(
                         "Loupedeck reconnected (%s, %s)",
@@ -567,11 +574,7 @@ async def run_agent(
         if runtime.deck is not None:
             runtime.deck.start()
             try:
-                if hasattr(runtime.deck, "set_brightness"):
-                    try:
-                        runtime.deck.set_brightness(80)
-                    except Exception:
-                        logger.debug("Could not set brightness", exc_info=True)
+                brightness.apply()
                 if navigator is not None:
                     await redraw_skin("agent_startup")
             except Exception:
@@ -591,6 +594,9 @@ async def run_agent(
                 reconnect_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await reconnect_task
+            brightness_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await brightness_task
             live_task.cancel()
             skin_anim_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

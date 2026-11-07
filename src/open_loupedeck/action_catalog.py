@@ -134,6 +134,16 @@ ACTION_CATALOG: list[dict[str, Any]] = [
             {"name": "sink", "input": "text", "optional": True},
         ],
     },
+    {
+        "type": "deck.brightness_set",
+        "category": "deck",
+        "fields": [{"name": "percent", "input": "number", "placeholder": "50"}],
+    },
+    {
+        "type": "deck.brightness_delta",
+        "category": "deck",
+        "fields": [{"name": "delta", "input": "number", "placeholder": "10"}],
+    },
     {"type": "agent.next_page", "category": "deck", "fields": []},
     {"type": "agent.prev_page", "category": "deck", "fields": []},
     {
@@ -368,6 +378,8 @@ _LOOK_SPECS: dict[str, tuple[str, str, str, str | None, dict[str, str] | None]] 
     "sound.volume_set": ("lucide:sliders-horizontal", _SOUND, "icon", None, None),
     "sound.volume_delta": ("lucide:volume-1", _SOUND, "icon", None, None),
     "sound.mute_toggle": ("lucide:volume-x", _SOUND, "icon", None, None),
+    "deck.brightness_set": ("lucide:sun-medium", _SLATE, "icon", None, None),
+    "deck.brightness_delta": ("lucide:sun", _SLATE, "icon", None, None),
     "agent.next_page": ("lucide:chevron-right", _SLATE, "icon", None, None),
     "agent.prev_page": ("lucide:chevron-left", _SLATE, "icon", None, None),
     "agent.goto_page": ("lucide:layers", _SLATE, "text", "name", None),

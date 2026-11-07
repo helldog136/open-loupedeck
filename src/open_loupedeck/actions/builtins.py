@@ -415,6 +415,34 @@ class AgentPrevPage:
         await nav.prev_page()
 
 
+def _brightness(ctx: ActionContext, kind: str) -> Any:
+    if ctx.deck_brightness is None:
+        raise RuntimeError(f"{kind} requires the screen brightness controller")
+    return ctx.deck_brightness
+
+
+@register_action("deck.brightness_set")
+class DeckBrightnessSet:
+    """Set the screen brightness (0-100%); inside the night window this sets the night level."""
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        raw = params.get("percent")
+        if raw is None:
+            raise ValueError("deck.brightness_set requires percent (0-100)")
+        _brightness(ctx, "deck.brightness_set").set(float(raw))
+
+
+@register_action("deck.brightness_delta")
+class DeckBrightnessDelta:
+    """Raise or lower the screen brightness by N percent points."""
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        raw = params.get("delta") if params.get("delta") is not None else params.get("step")
+        if raw is None:
+            raise ValueError("deck.brightness_delta requires delta (e.g. 10 or -10)")
+        _brightness(ctx, "deck.brightness_delta").delta(float(raw))
+
+
 @register_action("agent.goto_page")
 class AgentGotoPage:
     async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:

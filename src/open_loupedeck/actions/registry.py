@@ -32,6 +32,9 @@ class ActionContext:
     on_action_error: Callable[[str, dict[str, Any], BaseException], None] | None = None
     # Optional callback invoked when an action succeeds.
     on_action_success: Callable[[str, dict[str, Any]], None] | None = None
+    """``DeckBrightness`` controller (deck.brightness_* actions); ``None`` if not wired."""
+
+    deck_brightness: Any | None = None
     """Page navigation when using multi-page config (agent.* actions)."""
 
     pages: Any | None = None

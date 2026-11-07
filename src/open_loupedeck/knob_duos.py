@@ -133,6 +133,13 @@ KNOB_DUOS: tuple[KnobDuo, ...] = (
         ({"type": "agent.prev_page"},),
         ({"type": "agent.next_page"},),
     ),
+    KnobDuo(
+        "screen_brightness",
+        "deck",
+        ({"type": "deck.brightness_delta", "delta": P("step", -1)},),
+        ({"type": "deck.brightness_delta", "delta": P("step")},),
+        (_step(10, 1, 50),),
+    ),
     KnobDuo("keyboard_up_down", "keyboard", (_keys("up"),), (_keys("down"),)),
     KnobDuo("keyboard_page_up_down", "keyboard", (_keys("page_up"),), (_keys("page_down"),)),
     KnobDuo("keyboard_left_right", "keyboard", (_keys("left"),), (_keys("right"),)),

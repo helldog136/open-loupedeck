@@ -29,6 +29,8 @@ class AgentRuntimeRefs:
     spotify_playing: bool | None = None
     spotify_last_fetch: float = 0.0
     no_device: bool = False
+    # DeckBrightness controller (screen brightness + night window); created by app.py / the web app.
+    deck_brightness: Any | None = None
     knob_page_indices: dict[str, int] = field(default_factory=dict)
     live_message_text: dict[str, str] = field(default_factory=dict)
     live_message_http_value: dict[str, str] = field(default_factory=dict)
