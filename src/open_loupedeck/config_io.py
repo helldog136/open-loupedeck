@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from .config import DeviceConfig, HaConfig, ObsConfig, Settings
+from .deck_brightness import clamp_level, normalize_night
 from .knob_roles import migrate_legacy_knob_pages
 
 
@@ -94,6 +95,8 @@ def default_raw_config() -> dict[str, Any]:
     return {
         "language": "auto",
         "onboarding_done": False,
+        "brightness": 80,
+        "brightness_night": {"enabled": False, "from": "22:00", "to": "07:00", "level": 20},
         "logging": {
             "dir": "",
             "level": "INFO",
@@ -207,6 +210,8 @@ def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(out.get("language"), str) or not out["language"].strip():
         out["language"] = "auto"
     out["onboarding_done"] = out.get("onboarding_done") is True
+    out["brightness"] = clamp_level(out.get("brightness"))
+    out["brightness_night"] = normalize_night(out.get("brightness_night"))
     if "logging" not in out:
         out["logging"] = {
             "dir": "",

@@ -21,7 +21,7 @@ import {
 import { renderOnboarding, wireOnboarding } from "./onboarding.js";
 import { scheduleAutosave, setSaveStatus } from "./save.js";
 import { refreshBackupsList, wireBackupButtons } from "./services/backups.js";
-import { setServiceState, wireConfigureButtons } from "./services/cards.js";
+import { initBrightnessCard, setServiceState, wireConfigureButtons } from "./services/cards.js";
 import { ensureHa, syncHaFromCfg, wireHaFields } from "./services/ha.js";
 import { ensureLogging, syncLoggingFromCfg, wireLogLevelSelect } from "./services/logging.js";
 import { ensureObs, syncObsFromCfg, wireObsFields } from "./services/obs.js";
@@ -133,6 +133,7 @@ async function init() {
   wireObsFields();
   wireOpenConfigFolderButton();
   await initAutostartToggle();
+  await initBrightnessCard();
   const loadedPageCount = Array.isArray(state.cfg.pages) ? state.cfg.pages.length : 0;
   await pullAgentLayoutAndPage();
   updateLiveSPageChrome();
