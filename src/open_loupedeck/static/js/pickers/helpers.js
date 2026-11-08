@@ -122,6 +122,9 @@ export const LUCIDE_VER = "0.446.0";
 export const MDI_VER = "7.4.47";
 export const HEROICONS_VER = "2.1.5";
 const SLUG_SAFE = /^[a-zA-Z0-9._-]+$/;
+// World of Warcraft icons (Blizzard assets: never bundled, loaded from Wowhead's CDN; keep in sync with wow_icons.py).
+export const WOW_ICON_BASE = "https://wow.zamimg.com/images/wow/icons/large";
+export const WOW_NAME = /^[a-z0-9_]+$/;
 
 /**
  * Classify an `icon` config value.
@@ -156,6 +159,11 @@ export function parseIconValue(raw) {
     const color = parts.length > 1 ? parts[1].toLowerCase() : "ffffff";
     if (!SLUG_SAFE.test(slug) || parts.length > 2 || !/^[0-9a-f]{6}$/.test(color)) return { kind: "invalid", url: null };
     return { kind: "si", slug, color: parts.length > 1 ? color : null, url: `https://cdn.simpleicons.org/${encodeURIComponent(slug)}/${color}` };
+  }
+  if (low.startsWith("wow:")) {
+    const slug = rest(4).toLowerCase();
+    if (!WOW_NAME.test(slug) || slug.length > 96) return { kind: "invalid", url: null };
+    return { kind: "wow", slug, url: `${WOW_ICON_BASE}/${slug}.jpg` };
   }
   if (low.startsWith("https://") || low.startsWith("http://")) return { kind: "url", url: s };
   return { kind: "file", url: null, path: s };

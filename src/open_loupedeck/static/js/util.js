@@ -104,7 +104,7 @@ export function localFileUrl(relPath) {
 
 function isIconUri(s) {
   const t = String(s || "").trim();
-  return /^(si:|simpleicons:|heroicons:|lucide:|mdi:|https?:\/\/)/i.test(t);
+  return /^(si:|simpleicons:|heroicons:|lucide:|mdi:|wow:|https?:\/\/)/i.test(t);
 }
 
 export function splitIconAndImage(e) {

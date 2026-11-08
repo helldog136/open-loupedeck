@@ -24,7 +24,7 @@ def _actions(entry: dict) -> list[dict]:
 
 
 def test_expected_packs_exist() -> None:
-    assert {"streamer", "music", "smart_home", "blank"} <= {p["id"] for p in PACKS}
+    assert {"streamer", "music", "smart_home", "wow", "blank"} <= {p["id"] for p in PACKS}
 
 
 @pytest.mark.parametrize("pack", PACKS, ids=lambda p: p["id"])
@@ -63,6 +63,31 @@ def test_list_packs_translated_with_preview() -> None:
     assert "Salon" in labels
     assert all("text_key" not in e for p in fr.values() for pg in p["pages"] for e in pg["keys"].values())
     assert en["streamer"]["preview"] and not en["blank"]["preview"]
+
+
+def test_wow_pack_one_chord_per_key() -> None:
+    from open_loupedeck.icon_loader import looks_like_icon_uri
+    from open_loupedeck.keyboard_replay import parse_chord
+
+    pack = next(p for p in PACKS if p["id"] == "wow")
+    keys = pack["pages"][0]["keys"]
+    assert len(keys) == 10
+    chords = []
+    for entry in keys.values():
+        acts = _actions(entry)
+        assert len(acts) == 1 and acts[0]["type"] == "wow.keybind"  # one key press = one action = one chord
+        assert "actions" not in entry
+        chords.append(acts[0]["key"])
+        assert acts[0]["macro_name"].strip()
+        assert entry["icon"].startswith("wow:") and looks_like_icon_uri(entry["icon"])
+    assert len(set(chords)) == 10
+    assert chords == [f"ctrl+shift+f{n}" for n in range(13, 23)]
+    for c in chords:
+        parse_chord(c)
+    assert {i["label"] for i in next(p for p in list_packs("fr") if p["id"] == "wow")["preview"]} >= {
+        "Hearthstone",
+        "Mount",
+    }
 
 
 def test_onboarding_done_default_and_normalised() -> None:

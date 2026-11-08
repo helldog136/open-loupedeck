@@ -115,6 +115,8 @@ Editing it by hand is possible (it's plain YAML) but the config window covers ev
 
 Languages: English and French are built in (setting `language: auto` follows your OS). Adding another is a single JSON file — see **[docs/translating.md](docs/translating.md)**.
 
+World of Warcraft: one deck key sends one key chord for a macro bound inside the game, plus on-demand WoW icons (`wow:<name>`) — see **[docs/wow.md](docs/wow.md)**.
+
 Extra Python actions: `plugin_modules: ["/path/to/file.py"]` in the config, `@register_action("my.action")` in the file — see `examples/custom_action.py`.
 
 ---

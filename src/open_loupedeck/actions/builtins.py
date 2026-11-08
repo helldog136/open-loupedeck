@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 
-from ..keyboard_replay import play_sequence_blocking
+from ..keyboard_replay import parse_chord, play_sequence_blocking, send_chord_blocking
 from ..platform_volume import (
     SYSTEM_VOLUME_MAX_PERCENT,
     delta_output_volume,
@@ -475,6 +475,21 @@ class KeyboardPlaySequence:
             raise ValueError("keyboard.play_sequence requires a non-empty 'steps' list")
         delay_ms = float(params.get("delay_ms", 30) or 30)
         await asyncio.to_thread(play_sequence_blocking, steps, delay_ms)
+
+
+@register_action("wow.keybind")
+class WowKeybind:
+    """Sends exactly ONE key chord (e.g. ``ctrl+shift+f13``) to the focused game.
+
+    One input triggers one action in World of Warcraft (Blizzard's rule), so unlike
+    ``keyboard.play_sequence`` this never sends several chords: the macro itself lives in the game,
+    bound to that chord. ``macro_name`` is only a display label.
+    """
+
+    async def run(self, ctx: ActionContext, params: dict[str, Any]) -> None:
+        chord = params.get("key")
+        parse_chord(chord)  # raises ValueError with a readable reason before anything is sent
+        await asyncio.to_thread(send_chord_blocking, chord)
 
 
 @register_action("command.run")
