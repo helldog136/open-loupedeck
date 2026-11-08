@@ -4,16 +4,20 @@
  *   const g = createIconGallery(container, { value, onChange });
  *   g.setValue(v)   g.focus()   g.destroy()
  *
- * Three tabs: "Common" (curated Lucide icons from icons.json, searchable, category chips), "Brand" (Simple Icons
- * slug -> `si:<slug>`) and "Other…" (any icon URI the server understands: `heroicons:24/solid/heart`, `mdi:home`,
+ * Four tabs: "Common" (curated Lucide icons from icons.json, searchable, category chips), "Brand" (Simple Icons
+ * slug -> `si:<slug>`), "WoW" (World of Warcraft icon *names* from wow-icons.json, grouped and searchable, plus a
+ * free field for any other name or Wowhead icon link -> `wow:<name>`; images are Blizzard's and only ever loaded
+ * from the CDN) and "Other…" (any icon URI the server understands: `heroicons:24/solid/heart`, `mdi:home`,
  * `https://….svg`, or an uploaded image via POST /api/upload). The value is exactly what the config's `icon`
- * field stores (`lucide:play`, `si:obsstudio`, `library/images/ab12_logo.png`). onChange(value) fires on user picks.
+ * field stores (`lucide:play`, `si:obsstudio`, `wow:inv_misc_rune_01`, `library/images/ab12_logo.png`).
+ * onChange(value) fires on user picks.
  */
 
-import { isIconUri, normalizeHex, parseIconValue, rankItems } from "./helpers.js";
+import { WOW_NAME, isIconUri, normalizeHex, parseIconValue, rankItems } from "./helpers.js";
 import { el, nextId, onLanguageChange, renderIcon, tr } from "./common.js";
 
 const ICONS_URL = new URL("./icons.json", import.meta.url).href;
+const WOW_URL = new URL("./wow-icons.json", import.meta.url).href;
 const CATEGORIES = ["media", "audio", "stream", "home", "comm", "arrows", "system", "status", "fun", "shapes"];
 const BRANDS = ["obsstudio", "twitch", "youtube", "spotify", "discord", "github", "homeassistant", "steam", "x", "tiktok", "elgato", "philipshue", "netflix", "vlc", "reddit", "kick", "instagram", "facebook", "whatsapp", "telegram"];
 
@@ -27,13 +31,25 @@ function loadIcons() {
   return iconsPromise;
 }
 
+// Names only (no images): the WoW tab previews them from Wowhead's CDN, like the other tabs do with theirs.
+let wowPromise = null;
+function loadWow() {
+  if (!wowPromise) {
+    wowPromise = fetch(WOW_URL)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return wowPromise;
+}
+
 export function createIconGallery(container, opts = {}) {
   const { onChange = () => {} } = opts;
   let value = opts.value || "";
-  let tab = "common";
+  let tab = /^wow:/i.test(value) ? "wow" : "common";
   let cat = "all";
   let query = "";
   let icons = [];
+  let wowData = null;
   const id = nextId("pk-ig");
 
   const current = el("div", { class: "pk-current" });
@@ -45,6 +61,7 @@ export function createIconGallery(container, opts = {}) {
   const TABS = [
     ["common", "picker.icon.tab.common", "Common"],
     ["brand", "picker.icon.tab.brand", "Brand"],
+    ["wow", "picker.icon.tab.wow", "WoW"],
     ["other", "picker.icon.tab.other", "Other…"],
   ];
 
@@ -132,6 +149,13 @@ export function createIconGallery(container, opts = {}) {
     search.addEventListener("input", () => {
       query = search.value;
       const q = query.trim();
+      if (/^wow:/i.test(q)) {
+        wowDraft = q.replace(/^wow:/i, "");
+        tab = "wow";
+        query = "";
+        paintTabs();
+        return paintBody();
+      }
       if (isIconUri(q) && /^[a-z]+:/i.test(q)) {
         // Typed a URI: hand it over to the right tab.
         brandDraft = /^(si|simpleicons):/i.test(q) ? q.replace(/^[a-z]+:/i, "") : brandDraft;
@@ -305,10 +329,133 @@ export function createIconGallery(container, opts = {}) {
     sync();
   }
 
+  /* ---------------------------------------------------------------- WoW */
+
+  let wowDraft = "";
+  let wowCat = "misc";
+  let wowQuery = "";
+  const WOW_SEARCH_MAX = 96;
+
+  /** A bare name, `wow:<name>` or a Wowhead icon URL -> `wow:<name>` (or "" when it is not a valid name). */
+  function wowValue(input) {
+    let s = String(input || "").trim();
+    const fromUrl = s.match(/\/icons\/(?:tiny|small|medium|large)\/([A-Za-z0-9_]+)\.(?:jpg|png)/i);
+    if (fromUrl) s = fromUrl[1];
+    s = s.replace(/^wow:/i, "").trim().toLowerCase();
+    return WOW_NAME.test(s) && s.length <= 96 ? `wow:${s}` : "";
+  }
+
+  /** Load a tile's image only when it scrolls into view, so opening a category never floods the CDN. */
+  function lazyIcon(host, v) {
+    if (typeof IntersectionObserver !== "function") return renderIcon(host, v);
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      renderIcon(host, v);
+    });
+    io.observe(host);
+  }
+
+  function wowTile(name) {
+    const v = `wow:${name}`;
+    const b = el("button", { type: "button", class: "pk-ic", "data-value": v, "aria-pressed": v === value ? "true" : "false", title: name, "aria-label": name });
+    lazyIcon(b, v);
+    b.addEventListener("click", () => choose(v));
+    return b;
+  }
+
+  function paintWow() {
+    const data = wowData || { categories: [], keywords: {} };
+    const catLabel = (cid) => tr(`picker.icon.wow.cat.${cid}`, cid);
+    const searchLabel = tr("picker.icon.wow.search", "Search WoW icons (hearthstone, fireball, mount…)");
+    const search = el("input", { type: "search", class: "pk-search", autocomplete: "off", spellcheck: "false", value: wowQuery, "aria-label": searchLabel, placeholder: searchLabel });
+    const chips = el("div", { class: "chips pk-chips", role: "group", "aria-label": tr("picker.icon.categories", "Categories") });
+    for (const c of data.categories) {
+      const b = el("button", { type: "button", "aria-pressed": wowCat === c.id ? "true" : "false", text: catLabel(c.id) });
+      b.addEventListener("click", () => {
+        wowCat = c.id;
+        wowQuery = search.value = "";
+        chips.querySelectorAll("button").forEach((n) => n.setAttribute("aria-pressed", n === b ? "true" : "false"));
+        fill();
+      });
+      chips.append(b);
+    }
+    const grid = el("div", { class: "pk-grid", role: "group", "aria-label": tr("picker.icon.tab.wow", "WoW") });
+    const count = el("div", { class: "hint pk-count", "aria-live": "polite" });
+
+    const input = el("input", { type: "text", class: "pk-input mono", value: wowDraft, placeholder: "inv_misc_rune_01", autocomplete: "off", spellcheck: "false", "aria-label": tr("picker.icon.wow.paste", "Icon name or Wowhead icon link") });
+    const preview = el("span", { class: "pk-ic-big" });
+    const use = el("button", { type: "button", class: "btn btn-primary btn-sm", text: tr("picker.icon.use", "Use this icon") });
+    const hint = el("p", { class: "hint", text: tr("picker.icon.wow.hint", "Icons are Blizzard's: they are downloaded when needed and kept on this PC, never bundled. To use any other icon, paste its name: the file name in a Wowhead icon link (…/icons/large/inv_misc_rune_01.jpg gives inv_misc_rune_01).") });
+    let previewed = null;
+    const sync = () => {
+      const v = wowValue(input.value);
+      use.disabled = !v;
+      if (v === previewed) return;
+      previewed = v;
+      preview.className = "pk-ic-big";
+      if (v) renderIcon(preview, v);
+      else {
+        preview.textContent = "";
+        preview.classList.add("is-empty");
+      }
+    };
+    input.addEventListener("input", () => {
+      wowDraft = input.value;
+      sync();
+    });
+    const go = () => {
+      const v = wowValue(input.value);
+      if (v) choose(v);
+    };
+    use.addEventListener("click", go);
+    input.addEventListener("keydown", (e) => e.key === "Enter" && (e.preventDefault(), go()));
+
+    function fill() {
+      grid.textContent = "";
+      let names;
+      let capped = false;
+      if (wowQuery.trim()) {
+        const all = data.categories.flatMap((c) => c.icons.map((name) => ({ name, cat: c.id })));
+        names = rankItems(all, wowQuery, (i) => ({ label: i.name.replace(/_/g, " "), category: catLabel(i.cat), keywords: data.keywords[i.name] || [] })).map((i) => i.name);
+        if (names.length > WOW_SEARCH_MAX) {
+          names = names.slice(0, WOW_SEARCH_MAX);
+          capped = true;
+        }
+      } else {
+        names = (data.categories.find((c) => c.id === wowCat) || { icons: [] }).icons;
+      }
+      for (const n of names) grid.append(wowTile(n));
+      const note = capped ? ` — ${tr("picker.icon.wow.capped", "refine your search to see more")}` : "";
+      count.textContent = names.length ? tr("picker.icon.count", `${names.length} icons`, { count: names.length }) + note : "";
+      if (!names.length) {
+        grid.append(el("div", { class: "pk-empty" }, el("strong", { text: tr("picker.icon.empty.title", "No icon found") }), el("span", { text: tr("picker.icon.wow.empty", "Paste the icon name below instead.") })));
+      }
+    }
+    search.addEventListener("input", () => {
+      wowQuery = search.value;
+      fill();
+    });
+    search.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const first = grid.querySelector(".pk-ic");
+        if (first) (e.preventDefault(), first.click());
+      } else if (e.key === "Escape" && wowQuery) {
+        e.stopPropagation();
+        search.value = wowQuery = "";
+        fill();
+      }
+    });
+    body.append(search, chips, grid, count, el("div", { class: "pk-gname", text: tr("picker.icon.wow.other", "Any other icon") }), el("div", { class: "pk-form-row" }, preview, input, use), hint);
+    sync();
+    fill();
+  }
+
   function paintBody() {
     body.textContent = "";
     body.setAttribute("role", "tabpanel");
-    if (tab === "brand") paintBrand();
+    if (tab === "wow") paintWow();
+    else if (tab === "brand") paintBrand();
     else if (tab === "other") paintOther();
     else paintCommon();
   }
@@ -325,6 +472,10 @@ export function createIconGallery(container, opts = {}) {
   loadIcons().then((list) => {
     icons = Array.isArray(list) ? list : [];
     if (tab === "common" && root.isConnected) paintBody();
+  });
+  loadWow().then((data) => {
+    wowData = data && Array.isArray(data.categories) ? data : null;
+    if (tab === "wow" && root.isConnected) paintBody();
   });
 
   return {

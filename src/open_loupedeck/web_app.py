@@ -22,7 +22,7 @@ from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile, WebSo
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import autostart, sound_library, sound_player
+from . import autostart, sound_library, sound_player, wow_icons
 from .action_catalog import merged_catalog
 from .button_render import (
     PreviewCache,
@@ -55,7 +55,7 @@ from .live_message import (
     prune_stale_live_message_keys,
     twitch_live_params_from_entry,
 )
-from .logging_setup import reapply_logging_from_config
+from .logging_setup import default_icon_cache_dir, reapply_logging_from_config
 from .look_defaults import proposed_entry, resolve_look
 from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unused_library_media
 from .package_paths import package_root
@@ -354,6 +354,14 @@ def create_web_app(
         except Exception as exc:
             raise HTTPException(500, t("error.open_folder", error=exc)) from exc
         return JSONResponse({"ok": True, "path": str(folder)})
+
+    @app.post("/api/wow_icons/clear")
+    async def clear_wow_icons() -> JSONResponse:
+        """Delete the downloaded World of Warcraft icons (they are fetched again on demand)."""
+
+        removed = await asyncio.to_thread(wow_icons.clear_cache, default_icon_cache_dir())
+        preview_cache.clear()
+        return JSONResponse({"ok": True, "removed": removed})
 
     @app.get("/api/autostart")
     async def get_autostart() -> JSONResponse:
@@ -897,6 +905,13 @@ def create_web_app(
 
     preview_cache = PreviewCache()
 
+    def _wow_icon_pending(entry: dict[str, Any]) -> bool:
+        spec = str(entry.get("icon") or entry.get("image") or "").strip()
+        if not spec.lower().startswith("wow:"):
+            return False
+        name = wow_icons.normalize_name(spec[4:])
+        return name is not None and not wow_icons.cached_path(default_icon_cache_dir(), name).is_file()
+
     @app.post("/api/preview_key")
     async def preview_key(
         body: dict[str, Any] = Body(...),
@@ -1027,7 +1042,8 @@ def create_web_app(
         cached = preview_cache.get(ckey) if cacheable else None
         if cached is None:
             cached = await asyncio.to_thread(_render)
-            if cacheable:
+            # A WoW icon that could not be downloaded (offline...) must not be frozen into the cache.
+            if cacheable and not _wow_icon_pending(entry):
                 preview_cache.put(ckey, cached)
         png, measure = cached
         if not png:

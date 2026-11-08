@@ -6,6 +6,7 @@
 import { apiGet } from "./api.js";
 import { renderDeck } from "./deck.js";
 import "./pickers/sound-picker.js";
+import "./wow-chord.js";
 import { loadCopiedControlFromStorage } from "./inspector/clipboard.js";
 import { initInspector, openControl, refreshInspector } from "./inspector/index.js";
 import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
@@ -21,7 +22,7 @@ import {
 import { renderOnboarding, wireOnboarding } from "./onboarding.js";
 import { scheduleAutosave, setSaveStatus } from "./save.js";
 import { refreshBackupsList, wireBackupButtons } from "./services/backups.js";
-import { initBrightnessCard, setServiceState, wireConfigureButtons } from "./services/cards.js";
+import { initBrightnessCard, setServiceState, wireConfigureButtons, wireWowCacheButton } from "./services/cards.js";
 import { ensureHa, syncHaFromCfg, wireHaFields } from "./services/ha.js";
 import { ensureLogging, syncLoggingFromCfg, wireLogLevelSelect } from "./services/logging.js";
 import { ensureObs, syncObsFromCfg, wireObsFields } from "./services/obs.js";
@@ -132,6 +133,7 @@ async function init() {
   syncObsFromCfg();
   wireObsFields();
   wireOpenConfigFolderButton();
+  wireWowCacheButton();
   await initAutostartToggle();
   await initBrightnessCard();
   const loadedPageCount = Array.isArray(state.cfg.pages) ? state.cfg.pages.length : 0;

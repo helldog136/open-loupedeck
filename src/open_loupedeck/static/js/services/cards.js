@@ -46,6 +46,29 @@ export function wireConfigureButtons() {
 }
 
 /**
+ * Services > General: "Clear WoW icon cache" deletes the downloaded World of Warcraft icons (they are
+ * downloaded again on demand). The result is announced in the row's status line.
+ */
+export function wireWowCacheButton() {
+  const btn = $("#btnClearWowCache");
+  const status = $("#wowCacheStatus");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const r = await fetch("/api/wow_icons/clear", { method: "POST" });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
+      if (status) status.textContent = t("svc.general.wow_cache_cleared", { count: data.removed ?? 0 });
+    } catch (e) {
+      if (status) status.textContent = t("svc.general.wow_cache_error", { error: String(e.message || e) });
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+/**
  * Turn a destructive button into a two-step action: the first click swaps it for "Are you sure?" with
  * a confirm and a cancel button (auto-cancels after 10 s). `promptKey` / `confirmKey` are i18n keys.
  */

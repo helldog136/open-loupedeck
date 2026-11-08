@@ -1,0 +1,658 @@
+{
+ "categories": [
+  {
+   "id": "warrior",
+   "icons": [
+    "classicon_warrior",
+    "ability_warrior_charge",
+    "ability_warrior_victoryrush",
+    "ability_warrior_rampage",
+    "ability_warrior_shieldwall",
+    "ability_warrior_bladestorm",
+    "ability_warrior_battleshout",
+    "ability_warrior_commandingshout",
+    "ability_warrior_warcry",
+    "ability_warrior_sunder",
+    "ability_warrior_cleave",
+    "ability_warrior_revenge",
+    "ability_warrior_devastate",
+    "ability_warrior_defensivestance",
+    "ability_warrior_offensivestance",
+    "ability_warrior_innerrage",
+    "ability_warrior_endlessrage",
+    "ability_whirlwind",
+    "ability_warrior_colossussmash",
+    "ability_warrior_savageblow",
+    "ability_warrior_intervene",
+    "ability_heroicleap",
+    "ability_warrior_shockwave",
+    "ability_warrior_disarm",
+    "ability_warrior_rallyingcry",
+    "ability_warrior_swordandboard",
+    "ability_warrior_warbringer",
+    "ability_warrior_strengthofarms",
+    "ability_warrior_focusedrage",
+    "ability_warrior_improveddisciplines",
+    "ability_warrior_punishingblow"
+   ]
+  },
+  {
+   "id": "paladin",
+   "icons": [
+    "classicon_paladin",
+    "spell_holy_holybolt",
+    "spell_holy_divineshield",
+    "spell_holy_sealofprotection",
+    "spell_holy_layonhands",
+    "spell_holy_sealofvengeance",
+    "spell_holy_righteousfury",
+    "spell_holy_devotionaura",
+    "spell_holy_crusade",
+    "spell_holy_greaterblessingofkings",
+    "spell_holy_greaterblessingofwisdom",
+    "spell_holy_flashheal",
+    "spell_holy_sealofwisdom",
+    "spell_holy_sealofblood",
+    "spell_holy_retributionaura",
+    "spell_holy_fistofjustice",
+    "spell_holy_auraoflight",
+    "spell_holy_crusaderaura",
+    "spell_holy_divineintervention",
+    "spell_holy_healingfocus",
+    "spell_holy_excorcism",
+    "spell_holy_holysmite",
+    "spell_holy_purify",
+    "spell_holy_resurrection",
+    "spell_holy_heal",
+    "spell_holy_heal02"
+   ]
+  },
+  {
+   "id": "hunter",
+   "icons": [
+    "classicon_hunter",
+    "ability_hunter_snipershot",
+    "ability_hunter_aimedshot",
+    "ability_hunter_markedfordeath",
+    "ability_hunter_mendpet",
+    "ability_hunter_beastcall",
+    "ability_hunter_camouflage",
+    "ability_hunter_focusfire",
+    "ability_hunter_misdirection",
+    "ability_hunter_beasttaming",
+    "ability_hunter_pet_wolf",
+    "ability_hunter_pet_bear",
+    "ability_hunter_pet_cat",
+    "ability_hunter_pet_turtle",
+    "ability_hunter_pet_boar",
+    "ability_hunter_pet_hyena",
+    "ability_hunter_pet_gorilla",
+    "ability_hunter_pet_raptor",
+    "ability_hunter_pet_spider",
+    "ability_hunter_pet_devilsaur",
+    "ability_hunter_carve",
+    "ability_hunter_rapidkilling",
+    "ability_hunter_survivalinstincts",
+    "ability_hunter_swiftstrike",
+    "ability_hunter_criticalshot",
+    "ability_hunter_mastermarksman",
+    "ability_hunter_beastwithin",
+    "ability_hunter_killcommand",
+    "ability_hunter_readiness",
+    "ability_hunter_longshots",
+    "ability_hunter_quickshot",
+    "ability_trueshot",
+    "ability_marksmanship",
+    "spell_frost_chainsofice",
+    "spell_fire_selfdestruct",
+    "ability_ensnare",
+    "spell_nature_ravenform"
+   ]
+  },
+  {
+   "id": "rogue",
+   "icons": [
+    "classicon_rogue",
+    "ability_stealth",
+    "ability_rogue_sprint",
+    "ability_rogue_shadowstrike",
+    "ability_rogue_eviscerate",
+    "ability_rogue_ambush",
+    "ability_rogue_kidneyshot",
+    "ability_rogue_feint",
+    "ability_rogue_rupture",
+    "ability_rogue_slicedice",
+    "ability_rogue_fanofknives",
+    "ability_rogue_shadowdance",
+    "ability_rogue_rollthebones",
+    "ability_rogue_garrote",
+    "ability_rogue_distract",
+    "ability_rogue_preparation",
+    "ability_rogue_murderspree",
+    "ability_rogue_sealfate",
+    "ability_rogue_nervesofsteel",
+    "ability_vanish",
+    "ability_cheapshot",
+    "ability_gouge",
+    "ability_backstab",
+    "ability_sap",
+    "ability_poisons",
+    "ability_kick",
+    "spell_shadow_nethercloak"
+   ]
+  },
+  {
+   "id": "priest",
+   "icons": [
+    "classicon_priest",
+    "spell_holy_powerwordshield",
+    "spell_holy_renew",
+    "spell_holy_guardianspirit",
+    "spell_holy_mindvision",
+    "spell_holy_dispelmagic",
+    "spell_holy_prayerofhealing",
+    "spell_holy_wordfortitude",
+    "spell_holy_innerfire",
+    "spell_holy_circleofrenewal",
+    "spell_holy_divinehymn",
+    "spell_holy_painsupression",
+    "spell_holy_symbolofhope",
+    "spell_holy_surgeoflight",
+    "spell_holy_holynova",
+    "spell_holy_powerinfusion",
+    "spell_holy_borrowedtime",
+    "spell_holy_greaterheal",
+    "spell_holy_lesserheal",
+    "spell_holy_lesserheal02",
+    "spell_holy_prayerofmendingtga",
+    "spell_holy_prayeroffortitude",
+    "spell_holy_prayerofspirit",
+    "spell_shadow_shadowwordpain",
+    "spell_shadow_shadowform",
+    "spell_holy_mindsooth",
+    "spell_shadow_psychicscream",
+    "spell_shadow_unholyfrenzy",
+    "spell_shadow_dispersion",
+    "spell_shadow_shadowfiend",
+    "spell_shadow_chilltouch",
+    "spell_shadow_antishadow",
+    "spell_priest_voidform"
+   ]
+  },
+  {
+   "id": "deathknight",
+   "icons": [
+    "classicon_deathknight",
+    "spell_deathknight_frostpresence",
+    "spell_deathknight_bloodpresence",
+    "spell_deathknight_unholypresence",
+    "spell_deathknight_icetouch",
+    "spell_deathknight_empowerruneblade",
+    "spell_deathknight_iceboundfortitude",
+    "spell_deathknight_armyofthedead",
+    "spell_deathknight_gnaw_ghoul",
+    "spell_deathknight_runetap",
+    "spell_deathknight_bloodtap",
+    "spell_deathknight_strangulate",
+    "spell_deathknight_mindfreeze",
+    "spell_shadow_deathcoil",
+    "spell_shadow_animatedead",
+    "spell_shadow_deathanddecay"
+   ]
+  },
+  {
+   "id": "shaman",
+   "icons": [
+    "classicon_shaman",
+    "spell_nature_lightning",
+    "spell_nature_chainlightning",
+    "spell_nature_healingwavelesser",
+    "spell_nature_healingwavegreater",
+    "spell_fire_flameshock",
+    "spell_frost_frostshock",
+    "spell_nature_earthshock",
+    "spell_nature_bloodlust",
+    "ability_shaman_heroism",
+    "spell_nature_spiritwolf",
+    "spell_nature_reincarnation",
+    "spell_nature_windfury",
+    "spell_nature_stoneclawtotem",
+    "spell_nature_manaregentotem",
+    "spell_nature_purge",
+    "spell_nature_cyclone",
+    "spell_nature_thunderclap",
+    "spell_nature_ancestralguardian",
+    "spell_nature_riptide",
+    "spell_nature_astralrecal",
+    "spell_nature_lightningshield",
+    "spell_nature_slow",
+    "spell_nature_groundingtotem"
+   ]
+  },
+  {
+   "id": "mage",
+   "icons": [
+    "classicon_mage",
+    "spell_fire_fireball02",
+    "spell_fire_fireball",
+    "spell_frost_frostbolt02",
+    "spell_frost_frostbolt",
+    "spell_nature_polymorph",
+    "spell_frost_frostnova",
+    "spell_holy_magicalsentry",
+    "spell_arcane_blink",
+    "spell_arcane_blast",
+    "spell_fire_flamebolt",
+    "spell_fire_sealoffire",
+    "spell_fire_fire",
+    "spell_fire_flare",
+    "spell_frost_icestorm",
+    "spell_frost_manarecharge",
+    "spell_frost_frostblast",
+    "spell_frost_frostarmor02",
+    "spell_frost_frost",
+    "spell_fire_burningspeed",
+    "spell_fire_incinerate",
+    "spell_fire_playingwithfire",
+    "spell_fire_moltenblood",
+    "spell_frost_frostward",
+    "spell_fire_firearmor",
+    "spell_arcane_starfire",
+    "spell_arcane_mindmastery",
+    "ability_mage_timewarp",
+    "spell_arcane_teleportstormwind",
+    "spell_arcane_teleportorgrimmar",
+    "spell_arcane_teleportironforge",
+    "spell_arcane_teleportundercity",
+    "spell_arcane_teleportdarnassus",
+    "spell_arcane_teleportthunderbluff",
+    "spell_arcane_teleportexodar",
+    "spell_arcane_teleportsilvermoon",
+    "spell_arcane_teleportshattrath",
+    "spell_arcane_portalstormwind",
+    "spell_arcane_portalorgrimmar",
+    "spell_nature_wispsplode"
+   ]
+  },
+  {
+   "id": "warlock",
+   "icons": [
+    "classicon_warlock",
+    "spell_shadow_shadowbolt",
+    "spell_shadow_curseofsargeras",
+    "spell_shadow_summonvoidwalker",
+    "spell_shadow_summonimp",
+    "spell_shadow_summonsuccubus",
+    "spell_shadow_summonfelhunter",
+    "spell_shadow_summoninfernal",
+    "spell_shadow_lifedrain",
+    "spell_shadow_lifedrain02",
+    "spell_shadow_siphonmana",
+    "spell_shadow_fingerofdeath",
+    "spell_shadow_rainoffire",
+    "spell_shadow_ritualofsacrifice",
+    "spell_shadow_demonicempathy",
+    "spell_shadow_demonform",
+    "spell_shadow_enslavedemon",
+    "spell_shadow_possession",
+    "spell_shadow_haunting",
+    "spell_shadow_shadowfury",
+    "spell_shadow_gathershadows",
+    "spell_shadow_burningspirit",
+    "spell_shadow_antimagicshell",
+    "spell_fire_immolation",
+    "spell_fire_soulburn",
+    "spell_shadow_carrionswarm"
+   ]
+  },
+  {
+   "id": "monk",
+   "icons": [
+    "classicon_monk",
+    "ability_monk_roundhousekick",
+    "ability_monk_tigerpalm",
+    "ability_monk_jab",
+    "ability_monk_blackoutkick",
+    "ability_monk_risingsunkick",
+    "ability_monk_expelharm",
+    "ability_monk_roll",
+    "ability_monk_zenmeditation",
+    "ability_monk_legsweep",
+    "ability_monk_touchofdeath",
+    "ability_monk_chiwave"
+   ]
+  },
+  {
+   "id": "druid",
+   "icons": [
+    "classicon_druid",
+    "spell_nature_healingtouch",
+    "spell_nature_rejuvenation",
+    "spell_nature_regeneration",
+    "spell_nature_starfall",
+    "spell_nature_moonglow",
+    "ability_druid_catform",
+    "ability_racial_bearform",
+    "ability_druid_travelform",
+    "ability_druid_aquaticform",
+    "ability_druid_flightform",
+    "ability_druid_treeoflife",
+    "ability_druid_ravage",
+    "ability_druid_maul",
+    "ability_druid_swipe",
+    "ability_druid_skinteeth",
+    "ability_druid_enrage",
+    "ability_druid_dash",
+    "ability_ambush",
+    "ability_druid_bash",
+    "ability_druid_rake",
+    "ability_druid_ferociousbite",
+    "ability_druid_berserk",
+    "ability_druid_mangle2",
+    "spell_nature_stranglevines",
+    "spell_nature_sleep",
+    "spell_nature_forceofnature",
+    "spell_nature_naturetouchgrow",
+    "spell_nature_resistnature",
+    "spell_nature_abolishmagic",
+    "spell_nature_tranquility"
+   ]
+  },
+  {
+   "id": "demonhunter",
+   "icons": [
+    "classicon_demonhunter",
+    "ability_demonhunter_metamorphasisdps",
+    "ability_demonhunter_eyebeam",
+    "ability_demonhunter_chaosstrike",
+    "ability_demonhunter_felrush",
+    "ability_demonhunter_spectralsight",
+    "ability_demonhunter_darkness"
+   ]
+  },
+  {
+   "id": "evoker",
+   "icons": [
+    "classicon_evoker",
+    "ability_evoker_firebreath",
+    "ability_evoker_livingflame",
+    "ability_evoker_azurestrike",
+    "ability_evoker_hover",
+    "ability_evoker_dragonrage",
+    "ability_evoker_emeraldblossom",
+    "ability_evoker_disintegrate"
+   ]
+  },
+  {
+   "id": "professions",
+   "icons": [
+    "trade_alchemy",
+    "trade_blacksmithing",
+    "trade_engraving",
+    "trade_engineering",
+    "trade_herbalism",
+    "inv_inscription_tradeskill01",
+    "inv_misc_gem_01",
+    "trade_leatherworking",
+    "trade_mining",
+    "trade_fishing",
+    "inv_misc_pelt_wolf_01",
+    "trade_tailoring",
+    "trade_archaeology",
+    "inv_misc_food_15",
+    "spell_holy_sealofsacrifice",
+    "inv_ore_copper_01",
+    "inv_ore_iron_01",
+    "inv_ore_mithril_01",
+    "inv_ore_thorium_01",
+    "inv_ingot_01",
+    "inv_fabric_linen_01",
+    "inv_fabric_wool_01",
+    "inv_fabric_silk_01",
+    "inv_fabric_mageweave_01",
+    "inv_pick_02",
+    "inv_hammer_20",
+    "inv_fishingpole_02"
+   ]
+  },
+  {
+   "id": "mounts",
+   "icons": [
+    "ability_mount_ridinghorse",
+    "ability_mount_mountainram",
+    "ability_mount_blackpanther",
+    "ability_mount_whitetiger",
+    "ability_mount_jungletiger",
+    "ability_mount_rocketmount",
+    "ability_mount_undeadhorse",
+    "ability_mount_warhippogryph",
+    "ability_mount_gryphon_01",
+    "ability_mount_kodo_01",
+    "ability_mount_dreadsteed",
+    "ability_mount_charger",
+    "ability_mount_raptor",
+    "ability_mount_cockatricemount",
+    "ability_mount_redfrostwyrm_01",
+    "ability_mount_bigblizzardbear"
+   ]
+  },
+  {
+   "id": "consumables",
+   "icons": [
+    "inv_potion_01",
+    "inv_potion_24",
+    "inv_potion_27",
+    "inv_potion_51",
+    "inv_potion_54",
+    "inv_potion_72",
+    "inv_potion_76",
+    "inv_potion_92",
+    "inv_alchemy_elixir_01",
+    "inv_alchemy_elixir_02",
+    "inv_alchemy_elixir_05",
+    "inv_drink_04",
+    "inv_drink_05",
+    "inv_misc_food_33",
+    "inv_misc_food_60",
+    "inv_scroll_01",
+    "inv_scroll_02",
+    "inv_scroll_03",
+    "inv_scroll_05",
+    "inv_scroll_06",
+    "inv_misc_bandage_01",
+    "inv_misc_bandage_03",
+    "inv_stone_sharpeningstone_01",
+    "inv_stone_weightstone_02"
+   ]
+  },
+  {
+   "id": "items",
+   "icons": [
+    "inv_misc_rune_01",
+    "inv_misc_key_01",
+    "inv_misc_key_03",
+    "inv_misc_key_14",
+    "inv_misc_bag_08",
+    "inv_misc_bag_10",
+    "inv_misc_coin_01",
+    "inv_misc_coin_02",
+    "inv_jewelry_trinketpvp_01",
+    "inv_jewelry_talisman_01",
+    "inv_jewelry_talisman_12",
+    "inv_jewelry_ring_03",
+    "inv_jewelry_necklace_01",
+    "inv_sword_04",
+    "inv_sword_27",
+    "inv_axe_01",
+    "inv_mace_01",
+    "inv_shield_04",
+    "inv_staff_08",
+    "inv_weapon_bow_07",
+    "inv_helmet_01",
+    "inv_shoulder_01",
+    "inv_belt_01",
+    "inv_boots_01",
+    "inv_gauntlets_01",
+    "inv_banner_01",
+    "inv_misc_book_09",
+    "inv_misc_book_11",
+    "inv_letter_15",
+    "inv_misc_note_01",
+    "inv_misc_map_01",
+    "inv_box_01",
+    "inv_misc_gift_01",
+    "inv_misc_gem_ruby_01",
+    "inv_misc_gem_sapphire_01",
+    "inv_misc_gem_emerald_01",
+    "inv_misc_gem_diamond_01",
+    "inv_misc_gem_amethyst_01",
+    "inv_misc_pocketwatch_01",
+    "inv_misc_gear_01",
+    "inv_misc_dice_01",
+    "inv_misc_dice_02",
+    "inv_misc_eye_01",
+    "inv_misc_eye_02",
+    "inv_misc_bone_humanskull_01",
+    "inv_misc_spyglass_03"
+   ]
+  },
+  {
+   "id": "misc",
+   "icons": [
+    "inv_misc_questionmark",
+    "inv_misc_grouplooking",
+    "inv_misc_groupneedmore",
+    "ability_spy",
+    "ability_dualwield",
+    "ability_parry",
+    "ability_defend",
+    "ability_seal",
+    "ability_ghoulfrenzy",
+    "spell_shadow_charm",
+    "spell_shadow_teleport",
+    "spell_misc_emotionhappy",
+    "spell_misc_emotionsad",
+    "spell_misc_emotionangry",
+    "achievement_boss_ragnaros",
+    "achievement_boss_illidan",
+    "achievement_boss_lichking",
+    "achievement_pvp_a_01",
+    "achievement_pvp_h_01",
+    "inv_bannerpvp_01",
+    "inv_bannerpvp_02",
+    "racial_orc_berserkerstrength",
+    "racial_troll_berserk",
+    "ability_racial_shadowmeld",
+    "racial_dwarf_findtreasure",
+    "ability_racial_cannibalize"
+   ]
+  }
+ ],
+ "keywords": {
+  "inv_misc_rune_01": [
+   "hearthstone",
+   "hearth",
+   "home"
+  ],
+  "inv_misc_questionmark": [
+   "unknown",
+   "default",
+   "question"
+  ],
+  "ability_mount_ridinghorse": [
+   "mount",
+   "horse"
+  ],
+  "inv_jewelry_trinketpvp_01": [
+   "trinket",
+   "pvp",
+   "gladiator"
+  ],
+  "inv_jewelry_talisman_01": [
+   "trinket"
+  ],
+  "inv_jewelry_talisman_12": [
+   "trinket"
+  ],
+  "inv_potion_54": [
+   "healing",
+   "potion"
+  ],
+  "inv_potion_76": [
+   "mana",
+   "potion"
+  ],
+  "inv_misc_grouplooking": [
+   "lfg",
+   "group finder"
+  ],
+  "inv_misc_groupneedmore": [
+   "lfg",
+   "group finder"
+  ],
+  "spell_shadow_nethercloak": [
+   "cloak of shadows"
+  ],
+  "ability_vanish": [
+   "vanish"
+  ],
+  "ability_stealth": [
+   "stealth"
+  ],
+  "spell_holy_sealofsacrifice": [
+   "first aid"
+  ],
+  "inv_misc_food_15": [
+   "cooking",
+   "food"
+  ],
+  "inv_misc_gem_01": [
+   "jewelcrafting"
+  ],
+  "inv_inscription_tradeskill01": [
+   "inscription"
+  ],
+  "trade_engraving": [
+   "enchanting"
+  ],
+  "inv_misc_pelt_wolf_01": [
+   "skinning"
+  ],
+  "ability_ambush": [
+   "prowl"
+  ],
+  "spell_fire_fireball02": [
+   "fireball"
+  ],
+  "ability_warrior_charge": [
+   "charge"
+  ],
+  "spell_holy_holybolt": [
+   "holy light"
+  ],
+  "spell_frost_frost": [
+   "ice block"
+  ],
+  "ability_shaman_heroism": [
+   "heroism"
+  ],
+  "spell_nature_bloodlust": [
+   "bloodlust"
+  ],
+  "ability_mage_timewarp": [
+   "time warp"
+  ],
+  "spell_nature_spiritwolf": [
+   "ghost wolf"
+  ],
+  "spell_shadow_demonform": [
+   "metamorphosis"
+  ],
+  "spell_holy_layonhands": [
+   "lay on hands"
+  ],
+  "spell_holy_divineshield": [
+   "divine shield"
+  ]
+ }
+}

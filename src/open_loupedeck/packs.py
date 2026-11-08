@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Live S touch grid; the original Live (4x3) only uses the first 12 indices (the UI skips the others).
 KEY_COUNT = 15
 PREVIEW_MAX = 8
-ORDER = ("streamer", "music", "smart_home", "blank")
+ORDER = ("streamer", "music", "smart_home", "wow", "blank")
 
 
 def packs_dir() -> Path:

@@ -333,6 +333,14 @@ ACTION_CATALOG: list[dict[str, Any]] = [
         ],
     },
     {
+        "type": "wow.keybind",
+        "category": "wow",
+        "fields": [
+            {"name": "key", "input": "text"},
+            {"name": "macro_name", "input": "text", "optional": True},
+        ],
+    },
+    {
         "type": "command.run",
         "category": "shell",
         "fields": [
@@ -348,6 +356,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
 #   OBS scenes / OBS overlay  blue     #1f6fe0 / #2b4a8f      OBS audio            violet  #33266f
 #   Twitch (incl. display)    purple   #9146ff                 Spotify              green   #1a9a48
 #   Sound (local + overlay)   amber    #e08a00                 Home Assistant       cyan    #0f8fb8
+#   World of Warcraft         gold-brown #7a5418
 #   Deck / pages, HTTP, shell slate    #2a3345 / #3a3f4b       Display (live info)  indigo  #4a4f8f
 # Text keys (white, big) are the default; transport controls are icon-only. ``live`` gives the
 # offline look of keys whose text comes from a runtime source. Labels live in the locale files
@@ -355,6 +364,7 @@ ACTION_CATALOG: list[dict[str, Any]] = [
 _LIVE_OFFLINE = {"offline_bg": "#2b2f45", "offline_fg": "#9aa0bd"}
 _OBS_SCENE, _OBS_AUDIO, _OBS_OVERLAY = "#1f6fe0", "#33266f", "#2b4a8f"
 _TWITCH, _SPOTIFY, _SOUND, _HA = "#9146ff", "#1a9a48", "#e08a00", "#0f8fb8"
+_WOW = "#7a5418"
 _SLATE, _SLATE2, _DISPLAY = "#2a3345", "#3a3f4b", "#4a4f8f"
 
 # action type -> (icon, bg, mode, label_from or None, live offline colours or None)
@@ -416,6 +426,7 @@ _LOOK_SPECS: dict[str, tuple[str, str, str, str | None, dict[str, str] | None]] 
     "twitch.cancel_raid": ("lucide:circle-x", _TWITCH, "text", None, None),
     "twitch.shoutout": ("lucide:megaphone", _TWITCH, "text", None, None),
     "keyboard.play_sequence": ("lucide:keyboard", _SLATE2, "text", None, None),
+    "wow.keybind": ("wow:inv_misc_questionmark", _WOW, "both", "macro_name", None),
     "command.run": ("lucide:terminal", _SLATE2, "text", None, None),
 }
 
