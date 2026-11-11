@@ -4,18 +4,17 @@
   "description_key": "pack.music.desc",
   "icon": "si:spotify",
   "services": ["spotify"],
+  "grid": [5, 3],
   "pages": [
     {
-      "keys": {
-        "7": {"action": {"type": "spotify.previous"}},
-        "8": {"action": {"type": "spotify.play_pause"}},
-        "9": {"action": {"type": "spotify.next"}},
-        "13": {"action": {"type": "sound.mute_toggle"}},
-        "14": {"action": {"type": "display.clock", "time_format": "%H:%M", "date_format": "%a %d %b"}}
-      },
-      "knobs": {
-        "knobTL": {"rotate": {"duo": "spotify_volume", "params": {"step": 5}}, "press": {"type": "spotify.play_pause"}},
-        "knobCL": {"rotate": {"duo": "spotify_track"}}
+      "controls": {
+        "key_2_1": {"action": {"type": "spotify.previous"}},
+        "key_3_1": {"action": {"type": "spotify.play_pause"}},
+        "key_4_1": {"action": {"type": "spotify.next"}},
+        "key_3_2": {"action": {"type": "sound.mute_toggle"}},
+        "key_4_2": {"action": {"type": "display.clock", "time_format": "%H:%M", "date_format": "%a %d %b"}},
+        "knob_0": {"rotate": {"duo": "spotify_volume", "params": {"step": 5}}, "press": {"type": "spotify.play_pause"}},
+        "knob_1": {"rotate": {"duo": "spotify_track"}}
       }
     }
   ]

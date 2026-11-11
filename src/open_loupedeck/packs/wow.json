@@ -4,21 +4,21 @@
   "description_key": "pack.wow.desc",
   "icon": "wow:inv_misc_rune_01",
   "services": [],
+  "grid": [5, 3],
   "pages": [
     {
-      "keys": {
-        "0": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f13", "macro_name": "Hearthstone"}, "icon": "wow:inv_misc_rune_01"},
-        "1": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f14", "macro_name": "Mount"}, "icon": "wow:ability_mount_ridinghorse"},
-        "2": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f15", "macro_name": "Health potion"}, "icon": "wow:inv_potion_54"},
-        "3": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f16", "macro_name": "Mana potion"}, "icon": "wow:inv_potion_76"},
-        "4": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f17", "macro_name": "Trinket"}, "icon": "wow:inv_jewelry_trinketpvp_01"},
-        "5": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f18", "macro_name": "Food"}, "icon": "wow:inv_misc_food_15"},
-        "6": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f19", "macro_name": "Bandage"}, "icon": "wow:inv_misc_bandage_01"},
-        "7": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f20", "macro_name": "Flask"}, "icon": "wow:inv_alchemy_elixir_01"},
-        "8": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f21", "macro_name": "Group finder"}, "icon": "wow:inv_misc_grouplooking"},
-        "9": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f22", "macro_name": "Macro"}, "icon": "wow:inv_misc_questionmark"}
-      },
-      "knobs": {}
+      "controls": {
+        "key_0_0": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f13", "macro_name": "Hearthstone"}, "icon": "wow:inv_misc_rune_01"},
+        "key_1_0": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f14", "macro_name": "Mount"}, "icon": "wow:ability_mount_ridinghorse"},
+        "key_2_0": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f15", "macro_name": "Health potion"}, "icon": "wow:inv_potion_54"},
+        "key_3_0": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f16", "macro_name": "Mana potion"}, "icon": "wow:inv_potion_76"},
+        "key_4_0": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f17", "macro_name": "Trinket"}, "icon": "wow:inv_jewelry_trinketpvp_01"},
+        "key_0_1": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f18", "macro_name": "Food"}, "icon": "wow:inv_misc_food_15"},
+        "key_1_1": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f19", "macro_name": "Bandage"}, "icon": "wow:inv_misc_bandage_01"},
+        "key_2_1": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f20", "macro_name": "Flask"}, "icon": "wow:inv_alchemy_elixir_01"},
+        "key_3_1": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f21", "macro_name": "Group finder"}, "icon": "wow:inv_misc_grouplooking"},
+        "key_4_1": {"action": {"type": "wow.keybind", "key": "ctrl+shift+f22", "macro_name": "Macro"}, "icon": "wow:inv_misc_questionmark"}
+      }
     }
   ]
 }

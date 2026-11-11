@@ -4,5 +4,6 @@
   "description_key": "pack.blank.desc",
   "icon": "lucide:layout-grid",
   "services": [],
+  "grid": [5, 3],
   "pages": []
 }
