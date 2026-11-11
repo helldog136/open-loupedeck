@@ -4,74 +4,73 @@ import asyncio
 
 import pytest
 
-from open_loupedeck.events import NormalizedEvent
-from open_loupedeck.page_runtime import PageNavigator, actions_for_page_event
-
-
-def _touch(idx: int) -> NormalizedEvent:
-    return NormalizedEvent(kind="touch", id=idx, edge="down", raw={})
-
-
-def _button(bid: str) -> NormalizedEvent:
-    return NormalizedEvent(kind="button", id=bid, edge="down", raw={})
-
+from open_loupedeck.bindings import actions_of, iter_bindings, resolve_binding, resolve_in
+from open_loupedeck.page_runtime import PageNavigator, actions_for_control
 
 PAGES = [
     {
         "id": 0,
         "name": "Main",
-        "buttons": {
-            "touch_0": {"action": {"type": "obs.set_scene", "scene": "A"}},
-            "touch_1": {"actions": []},  # empty list must not shadow a sibling `action`
+        "controls": {
+            "key_0_0": {"action": {"type": "obs.set_scene", "scene": "A"}},
+            "key_1_0": {"actions": [], "action": {"type": "b"}},  # empty list must not shadow `action`
+            "button_1": {"action": {"type": "page.override"}},
+            "knob_0": {"rotate": {"duo": "system_volume"}},
         },
     },
-    {"id": 1, "name": "Second", "buttons": {}},
+    {"id": 1, "name": "Second", "controls": {}},
 ]
+GLOBAL = {
+    "button_1": {"action": {"type": "agent.next_page"}},
+    "button_2": {"action": {"type": "agent.prev_page"}},
+    "key_0_0": {"text": "global key"},
+    "knob_0": {"press": {"type": "sound.mute_toggle"}},
+}
+RAW = {"global": GLOBAL, "pages": PAGES}
 
 
-def test_page_button_matches_by_control_id():
-    cid, actions, entry = actions_for_page_event(PAGES, 0, _touch(0))
-    assert cid == "touch_0"
+def test_page_binding_matches_by_control_id():
+    b, actions = actions_for_control(RAW, 0, "key_0_0")
+    assert b is not None and b.scope == "page" and b.storage_key == "p0:key_0_0"
     assert actions == [{"type": "obs.set_scene", "scene": "A"}]
-    assert entry == {"action": {"type": "obs.set_scene", "scene": "A"}}
+    assert b.entry == PAGES[0]["controls"]["key_0_0"]
+    assert actions_for_control(RAW, 0, "key_1_0")[1] == [{"type": "b"}]
 
 
-def test_no_match_returns_empty():
-    cid, actions, entry = actions_for_page_event(PAGES, 0, _touch(5))
-    assert cid is None
-    assert actions == []
-    assert entry is None
+def test_no_binding_returns_empty():
+    assert actions_for_control(RAW, 0, "key_4_2") == (None, [])
+    assert actions_for_control({"pages": []}, 0, "key_0_0") == (None, [])
 
 
 def test_page_index_wraps_modulo_page_count():
-    # index 2 with 2 pages -> page 0
-    cid, actions, _entry = actions_for_page_event(PAGES, 2, _touch(0))
-    assert cid == "touch_0"
-    assert actions
+    b, actions = actions_for_control(RAW, 2, "key_0_0")  # index 2 with 2 pages -> page 0
+    assert b is not None and b.page_index == 0 and actions
 
 
-def test_global_buttons_preferred_for_non_touch_controls():
-    gb = {"btn_1": {"action": {"type": "agent.next_page"}}}
-    cid, actions, entry = actions_for_page_event(PAGES, 0, _button("btn_1"), global_buttons=gb)
-    assert cid == "btn_1"
-    assert actions == [{"type": "agent.next_page"}]
-    assert entry == gb["btn_1"]
+def test_page_overrides_global_and_global_is_the_fallback():
+    # Same rule for every kind of control.
+    assert resolve_binding(RAW, 0, "button_1").entry == {"action": {"type": "page.override"}}
+    assert resolve_binding(RAW, 1, "button_1").entry == GLOBAL["button_1"]
+    assert resolve_binding(RAW, 1, "button_1").storage_key == "g:button_1"
+    assert resolve_binding(RAW, 0, "button_2").scope == "global"
+    assert resolve_binding(RAW, 1, "key_0_0").entry == {"text": "global key"}
+    assert resolve_binding(RAW, 0, "knob_0").entry == {"rotate": {"duo": "system_volume"}}
+    assert resolve_binding(RAW, 1, "knob_0").entry == GLOBAL["knob_0"]
+    assert resolve_binding(RAW, 1, "button_3") is None
+    assert resolve_in(None, GLOBAL, "button_2").scope == "global"
 
 
-def test_empty_global_entry_does_not_shadow_per_page_button_entry():
-    # An empty {} global_buttons entry (e.g. left over from UI normalization) must not hide
-    # a real per-page binding for the same non-touch control id.
-    pages = [{"id": 0, "name": "Main", "buttons": {"btn_1": {"action": {"type": "agent.next_page"}}}}]
-    gb = {"btn_1": {}}
-    cid, actions, _entry = actions_for_page_event(pages, 0, _button("btn_1"), global_buttons=gb)
-    assert cid == "btn_1"
-    assert actions == [{"type": "agent.next_page"}]
+def test_iter_bindings_covers_global_and_pages():
+    keys = [sk for sk, _cid, _e in iter_bindings(RAW)]
+    assert keys[:4] == ["g:button_1", "g:button_2", "g:key_0_0", "g:knob_0"]
+    assert "p0:knob_0" in keys and "p0:button_1" in keys
 
 
-def test_actions_from_entry_rejects_non_list_actions():
-    bad_pages = [{"id": 0, "name": "X", "buttons": {"touch_0": {"actions": "not-a-list"}}}]
+def test_actions_of_rejects_non_list_actions():
     with pytest.raises(ValueError, match="must be a list"):
-        actions_for_page_event(bad_pages, 0, _touch(0))
+        actions_of({"actions": "not-a-list"})
+    with pytest.raises(ValueError, match="mapping"):
+        actions_of({"action": "nope"})
 
 
 class _Navigator:

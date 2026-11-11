@@ -26,11 +26,9 @@ from open_loupedeck.knob_duos import (
     missing_params,
 )
 from open_loupedeck.knob_flash import flash_knob_feedback
-from open_loupedeck.knob_pages import KNOB_ENCODER_IDS, feedback_duration_sec
+from open_loupedeck.knob_pages import KNOB_ENCODER_IDS, feedback_duration_sec, feedback_key_for_knob
 from open_loupedeck.knob_roles import (
     LEGACY_KEY,
-    effective_model,
-    feedback_touch_key,
     migrate_legacy_knob_pages,
     resolve_knob_event,
     validate_knobs_config,
@@ -65,7 +63,7 @@ knob_pages:
 
 
 def _legacy_config(model: str = "live_s") -> dict[str, Any]:
-    raw = load_raw_config(ROOT / "config.example.yaml")
+    raw = load_raw_config(ROOT / "tests" / "fixtures" / "legacy_config_example.yaml")
     raw.update(copy.deepcopy(LEGACY_EXAMPLE_KNOBS))
     raw.setdefault("device", {})["model"] = model
     raw["pages"] = [*(raw.get("pages") or []), {"name": "Second", "buttons": {}}]
@@ -195,8 +193,14 @@ def test_api_knob_duos_lists_translated_labels(tmp_path: Path):
 # --- schema -----------------------------------------------------------------------------------
 
 
+KNOB_IDS = {"knobTL": "knob_0", "knobCL": "knob_1", "knobBL": "knob_2"}
+
+
 def _pages_with(knobs: Any) -> dict[str, Any]:
-    return {"pages": [{"name": "P", "buttons": {}, "knobs": knobs}]}
+    """A version-2 config whose first page binds ``knobs`` (legacy knob ids renamed)."""
+
+    controls = {KNOB_IDS.get(k, k): v for k, v in knobs.items()} if isinstance(knobs, dict) else knobs
+    return {"config_version": 2, "pages": [{"name": "P", "controls": controls}]}
 
 
 def test_valid_knobs_schema():
@@ -223,7 +227,6 @@ def test_valid_knobs_schema():
     "knobs, fragment",
     [
         ([], "must be an object"),
-        ({"knobXX": {}}, "unknown knob"),
         ({"knobTL": "volume"}, "must be an object"),
         ({"knobTL": {"rotate": {"duo": "nope"}}}, "unknown duo"),
         ({"knobTL": {"rotate": {"duo": "system_volume", "left": {"type": "a"}}}}, "not both"),
@@ -239,23 +242,30 @@ def test_invalid_knobs_schema(knobs: Any, fragment: str):
     assert errors and any(fragment in e for e in errors), errors
 
 
+def test_knob_bindings_are_validated_globally_too_and_unknown_ids_are_kept():
+    raw = {"config_version": 2, "global": {"knob_3": {"rotate": {"duo": "nope"}}}, "pages": []}
+    assert any("global.knob_3" in e and "unknown duo" in e for e in validate_knobs_config(raw))
+    # Not a knob id: not a knob binding (kept as is, inactive), so no knob error.
+    assert validate_knobs_config(_pages_with({"knobXX": {"rotate": 1}})) == []
+
+
 def test_put_config_validates_and_round_trips_knobs(tmp_path: Path):
     cfg = tmp_path / "config.yaml"
     state = ConfigState(cfg)
     client = TestClient(create_web_app(cfg, state, asyncio.Lock()))
-    raw = client.get("/api/config").json()
+    raw = client.get("/api/config").json()  # the UI view: legacy knob ids on each page
     assert "knob_pages" not in raw
     raw["pages"][0]["knobs"] = {"knobTL": {"rotate": {"duo": "spotify_volume", "params": {"step": 10}}}}
     assert client.put("/api/config", json=raw).status_code == 200
     again = client.get("/api/config").json()
     assert again["pages"][0]["knobs"] == raw["pages"][0]["knobs"]
-    assert load_raw_config(cfg)["pages"][0]["knobs"] == raw["pages"][0]["knobs"]
+    assert load_raw_config(cfg)["pages"][0]["controls"]["knob_0"] == raw["pages"][0]["knobs"]["knobTL"]
 
     raw["pages"][0]["knobs"] = {"knobTL": {"rotate": {"duo": "no_such_duo"}}}
     r = client.put("/api/config", json=raw)
     assert r.status_code == 400
     assert "no_such_duo" in r.json()["detail"]
-    assert load_raw_config(cfg)["pages"][0]["knobs"]["knobTL"]["rotate"]["duo"] == "spotify_volume"
+    assert load_raw_config(cfg)["pages"][0]["controls"]["knob_0"]["rotate"]["duo"] == "spotify_volume"
 
 
 # --- migration --------------------------------------------------------------------------------
@@ -271,9 +281,9 @@ def test_migration_from_config_example():
     assert len(out["pages"]) >= 2
     for page in out["pages"]:
         # first knob page "Volume" (delta ±2) is recognised as the system volume duo
-        assert page["knobs"]["knobTL"] == {"rotate": {"duo": "system_volume", "params": {"step": 2}}}
+        assert page["controls"]["knob_0"] == {"rotate": {"duo": "system_volume", "params": {"step": 2}}}
         # "Scroll" with command.run is not a duo: split left / right, actions verbatim
-        assert page["knobs"]["knobCL"] == {
+        assert page["controls"]["knob_1"] == {
             "rotate": {
                 "left": [{"type": "command.run", "argv": ["xdotool", "click", "4"]}],
                 "right": [{"type": "command.run", "argv": ["xdotool", "click", "5"]}],
@@ -320,13 +330,13 @@ def test_migration_drops_empty_and_keeps_malformed_knob_pages():
 # --- resolution -------------------------------------------------------------------------------
 
 ROLES = {
+    "config_version": 2,
     "device": {"model": "live_s"},
     "pages": [
         {
             "name": "Main",
-            "buttons": {},
-            "knobs": {
-                "knobTL": {
+            "controls": {
+                "knob_0": {
                     "rotate": {"duo": "system_volume", "params": {"step": 5}},
                     "press": {"type": "sound.mute_toggle"},
                 },
@@ -334,49 +344,56 @@ ROLES = {
         },
         {
             "name": "Music",
-            "buttons": {},
-            "knobs": {
-                "knobTL": {"rotate": {"duo": "spotify_track"}, "feedback_sec": 0.5},
-                "knobCL": {"rotate": {"left": {"type": "agent.prev_page"}, "right": {"type": "spotify.next"}}},
+            "controls": {
+                "knob_0": {"rotate": {"duo": "spotify_track"}, "feedback_sec": 0.5},
+                "knob_1": {"rotate": {"left": {"type": "agent.prev_page"}, "right": {"type": "spotify.next"}}},
             },
         },
-        {"name": "Empty", "buttons": {}},
+        {"name": "Empty", "controls": {}},
     ],
 }
 
 
 def test_roles_differ_per_page():
-    r0 = resolve_knob_event(ROLES, 0, "knobTL", "right")
+    r0 = resolve_knob_event(ROLES, 0, "knob_0", "right")
     assert r0.actions == [{"type": "sound.volume_delta", "delta": 5}]
     assert r0.feedback == "Volume +5"
     assert r0.feedback_sec is None
-    r1 = resolve_knob_event(ROLES, 1, "knobTL", "left")
+    r1 = resolve_knob_event(ROLES, 1, "knob_0", "left")
     assert r1.actions == [{"type": "spotify.previous"}]
     assert r1.feedback == "Previous track"
     assert r1.feedback_sec == 0.5
     # page index wraps like the deck does
-    assert resolve_knob_event(ROLES, 3, "knobTL", "right").actions == r0.actions
+    assert resolve_knob_event(ROLES, 3, "knob_0", "right").actions == r0.actions
 
 
 def test_press_is_independent_and_split_rotation_uses_action_labels():
-    press = resolve_knob_event(ROLES, 0, "knobTL", "press")
+    press = resolve_knob_event(ROLES, 0, "knob_0", "press")
     assert press.actions == [{"type": "sound.mute_toggle"}]
     assert press.feedback == i18n.t("action.sound.mute_toggle.label")
-    split = resolve_knob_event(ROLES, 1, "knobCL", "right")
+    split = resolve_knob_event(ROLES, 1, "knob_1", "right")
     assert split.actions == [{"type": "spotify.next"}]
     assert split.feedback == i18n.t("action.spotify.next.label")
 
 
 def test_no_role_is_a_noop():
-    assert resolve_knob_event(ROLES, 2, "knobTL", "left") is None  # page without knobs
-    assert resolve_knob_event(ROLES, 0, "knobCL", "left") is None  # knob without role
-    assert resolve_knob_event(ROLES, 1, "knobTL", "press") is None  # no press action
-    assert resolve_knob_event({"pages": []}, 0, "knobTL", "left") is None
+    assert resolve_knob_event(ROLES, 2, "knob_0", "left") is None  # page without knobs
+    assert resolve_knob_event(ROLES, 0, "knob_1", "left") is None  # knob without role
+    assert resolve_knob_event(ROLES, 1, "knob_0", "press") is None  # no press action
+    assert resolve_knob_event({"pages": []}, 0, "knob_0", "left") is None
+
+
+def test_global_knob_binding_is_the_fallback_of_every_page():
+    raw = copy.deepcopy(ROLES)
+    raw["global"] = {"knob_1": {"rotate": {"duo": "system_volume"}}}
+    assert resolve_knob_event(raw, 0, "knob_1", "right").actions[0]["type"] == "sound.volume_delta"
+    assert resolve_knob_event(raw, 2, "knob_1", "left").actions[0]["type"] == "sound.volume_delta"
+    assert resolve_knob_event(raw, 1, "knob_1", "right").actions == [{"type": "spotify.next"}]  # page wins
 
 
 def test_duo_missing_required_param_runs_nothing_but_says_so():
     raw = _pages_with({"knobTL": {"rotate": {"duo": "obs_input_volume"}}})
-    res = resolve_knob_event(raw, 0, "knobTL", "right")
+    res = resolve_knob_event(raw, 0, "knob_0", "right")
     assert res.actions == []
     assert res.feedback == "OBS source volume: needs setup"
 
@@ -384,33 +401,20 @@ def test_duo_missing_required_param_runs_nothing_but_says_so():
 # --- feedback target key + duration ------------------------------------------------------------
 
 
-def test_feedback_touch_key_per_model():
-    assert feedback_touch_key("knobTL", "live_s") == "touch_0"
-    assert feedback_touch_key("knobCL", "live_s") == "touch_5"
-    assert feedback_touch_key("knobBL", "live_s") is None
-    assert feedback_touch_key("knobCL", "live") == "touch_4"
-    assert feedback_touch_key("knobBR", "live") == "touch_11"
-    assert {feedback_touch_key(k, "live") for k in KNOB_ENCODER_IDS} == {
-        "touch_0",
-        "touch_4",
-        "touch_8",
-        "touch_3",
-        "touch_7",
-        "touch_11",
+def test_feedback_key_per_model():
+    assert feedback_key_for_knob("knobTL", "live_s") == "key_0_0"
+    assert feedback_key_for_knob("knob_1", "live_s") == "key_0_1"
+    assert feedback_key_for_knob("knobBL", "live_s") is None
+    assert feedback_key_for_knob("knobCL", "live") == "key_0_1"
+    assert feedback_key_for_knob("knobBR", "live") == "key_3_2"
+    assert {feedback_key_for_knob(k, "live") for k in KNOB_ENCODER_IDS} == {
+        "key_0_0",
+        "key_0_1",
+        "key_0_2",
+        "key_3_0",
+        "key_3_1",
+        "key_3_2",
     }
-
-
-def test_effective_model_from_driver_class():
-    class LoupedeckLive:  # same names as the real driver classes
-        pass
-
-    class LoupedeckLiveS:
-        pass
-
-    assert effective_model("auto", LoupedeckLive()) == "live"
-    assert effective_model("auto", LoupedeckLiveS()) == "live_s"
-    assert effective_model("live", LoupedeckLiveS()) == "live"
-    assert effective_model("auto", None) == "auto"
 
 
 def test_feedback_duration_accepts_zero_to_two_seconds():
@@ -437,8 +441,8 @@ def test_flash_draws_on_neighbour_and_only_latest_restores(tmp_path: Path):
             flash_knob_feedback(deck, tmp_path, {}, "live_s", "knobCL", "Volume +10", redraw, 0.1),
         )
 
-    assert asyncio.run(go()) == ["touch_5", "touch_5"]
-    assert deck.images == ["touch_5", "touch_5"]
+    assert asyncio.run(go()) == ["key_0_1", "key_0_1"]
+    assert deck.images == ["key_0_1", "key_0_1"]
     assert redraws == ["knob_feedback_restore"]  # the first flash did not wipe the second one
 
     deck.images.clear()
@@ -517,7 +521,7 @@ def test_agent_runs_role_of_current_page_and_flashes_neighbour(tmp_path: Path):
     ]
     recorded, deck, redraws, _ = _run_agent_with(tmp_path, raw, msgs, page_index=1)
     assert [r["tag"] for r in recorded] == ["B-right", "B-press"]
-    assert deck.images == ["touch_5", "touch_5"]  # Live S: knobCL -> touch_5
+    assert deck.images == ["key_0_1", "key_0_1"]  # Live S: knobCL (knob_1) -> key_0_1, ex touch_5
     assert redraws.count("knob_feedback_restore") >= 1  # overlapping flashes restore once
 
 
@@ -563,7 +567,7 @@ def test_agent_without_deck_pages_keeps_legacy_knob_pages_behaviour(tmp_path: Pa
     ]
     recorded, deck, _, _ = _run_agent_with(tmp_path, raw, msgs)
     assert [r["tag"] for r in recorded] == ["one", "two"]
-    assert deck.images == ["touch_0"]  # page name "Two" flashed on touch_0
+    assert deck.images == ["key_0_0"]  # page name "Two" flashed on key_0_0 (ex touch_0)
 
 
 def test_obs_scene_names_follow_dock_order_and_scene_step_switches():
