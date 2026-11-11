@@ -1,13 +1,9 @@
-"""Normalize Loupedeck callback dicts into matchable events."""
+"""Device-neutral input events (what every device backend delivers to the agent)."""
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from typing import Any, Literal
-
-logger = logging.getLogger(__name__)
-
 
 Edge = Literal["down", "up", "left", "right"]
 EventKind = Literal["button", "touch", "knob"]
@@ -23,56 +19,11 @@ class NormalizedEvent:
     raw: dict[str, Any]
 
 
-def normalize_loupedeck_message(msg: dict[str, Any]) -> NormalizedEvent | None:
-    """Map python-loupedeck-live callback payload to NormalizedEvent."""
+def __getattr__(name: str) -> Any:
+    # Backward compatibility: the Loupedeck normaliser moved into the Loupedeck backend. Lazy, so
+    # importing this module does not import the backend (and no import cycle is created).
+    if name == "normalize_loupedeck_message":
+        from .devices.loupedeck.events import normalize_loupedeck_message
 
-    action = msg.get("action")
-    ident = msg.get("id")
-    logger.debug("Raw Loupedeck message action=%s id=%s keys=%s", action, ident, list(msg.keys()))
-
-    if action == "push":
-        state = msg.get("state")
-        if state not in ("down", "up"):
-            return None
-        bid = str(ident)
-        if bid == "btn_0":
-            bid = "btn_circle"
-        ev = NormalizedEvent(
-            kind="button",
-            id=bid,
-            edge=state,  # type: ignore[assignment]
-            raw=msg,
-        )
-        logger.debug("Normalized button %s %s", ev.id, ev.edge)
-        return ev
-
-    if action == "rotate":
-        state = msg.get("state")
-        if state not in ("left", "right"):
-            return None
-        ev = NormalizedEvent(
-            kind="knob",
-            id=str(ident),
-            edge=state,  # type: ignore[assignment]
-            raw=msg,
-        )
-        logger.debug("Normalized knob %s %s", ev.id, ev.edge)
-        return ev
-
-    if action in ("touchstart", "touchend"):
-        screen = msg.get("screen")
-        key = msg.get("key")
-        if screen != "center" or key is None:
-            return None
-        edge: Edge = "down" if action == "touchstart" else "up"
-        ev = NormalizedEvent(
-            kind="touch",
-            id=int(key),
-            edge=edge,
-            raw=msg,
-        )
-        logger.debug("Normalized touch key=%s %s", key, edge)
-        return ev
-
-    logger.debug("Unrecognized Loupedeck message (ignored): %s", msg)
-    return None
+        return normalize_loupedeck_message
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
