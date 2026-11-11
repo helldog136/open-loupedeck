@@ -1,0 +1,256 @@
+/*
+ * virtual.css — the virtual device page and component (js/virtual/*). Needs tokens.css + components.css.
+ * Everything is sized from one variable, --u (px per layout unit), set by device.js to fit the viewport.
+ */
+
+/* --- page ----------------------------------------------------------------------------------- */
+.vd-page {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+}
+.vd-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.vd-header-text h1 { margin: 0; font-size: var(--fs-lg); line-height: 1.2; }
+.vd-header-text .hint { margin: 2px 0 0; }
+.vd-editor-link { margin-left: auto; text-decoration: none; white-space: nowrap; }
+.vd-logo {
+  position: relative;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), var(--shadow);
+}
+.vd-logo::after {
+  content: "";
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  background: var(--knob-face);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.08);
+}
+.vd-main { padding: var(--sp-4); }
+.vd-host { max-width: 1500px; margin: 0 auto; }
+
+/* --- component ------------------------------------------------------------------------------ */
+.vd {
+  --pad: 0.45;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+}
+.vd-stage-host { display: flex; justify-content: center; width: 100%; min-height: 120px; }
+
+/* the device body: bezel, recessed key bed, controls */
+.vd-stage {
+  --u: 64px;
+  --dim: 1;
+  position: relative;
+  flex: none;
+  width: calc((var(--lw) + 2 * var(--pad)) * var(--u));
+  height: calc((var(--lh) + 2 * var(--pad)) * var(--u));
+  border-radius: calc(var(--u) * 0.42);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.05), transparent 38%),
+    linear-gradient(180deg, #1b2130, #0e1118);
+  border: 1px solid var(--line-strong);
+  box-shadow:
+    0 calc(var(--u) * 0.3) calc(var(--u) * 0.9) rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    inset 0 0 0 calc(var(--u) * 0.045) #080a0f;
+}
+.vd-bed,
+.vd-ctl {
+  position: absolute;
+  left: calc((var(--x) + var(--pad)) * var(--u));
+  top: calc((var(--y) + var(--pad)) * var(--u));
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+}
+.vd-bed {
+  border-radius: calc(var(--u) * 0.2);
+  background: #05070a;
+  box-shadow: inset 0 calc(var(--u) * 0.04) calc(var(--u) * 0.14) rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* every control: no component-button chrome; the visible part is .vd-face */
+.vd-ctl {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+.vd-ctl:hover { border-color: transparent; }
+.vd-face { position: absolute; display: block; }
+.vd-ctl:focus-visible .vd-face { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* display key / strip */
+.vd-key .vd-face,
+.vd-strip .vd-face {
+  inset: calc(var(--u) * 0.05);
+  border-radius: calc(var(--u) * 0.13);
+  background: var(--screen-bg);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  transition: transform 0.06s ease-out, box-shadow 0.12s;
+}
+.vd-key:hover .vd-face,
+.vd-strip:hover .vd-face { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 0 0 1px var(--muted); }
+.vd-key.is-down .vd-face,
+.vd-strip.is-down .vd-face { transform: scale(0.94); }
+.vd-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  filter: brightness(var(--dim));
+  transition: filter 0.2s;
+}
+.vd-img[hidden] { display: none; }
+
+/* LED button */
+.vd-btn .vd-face {
+  inset: calc(var(--u) * 0.04);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 38%, var(--led, #20202a) 0 38%, transparent 62%),
+    radial-gradient(circle at 35% 28%, #333d52, #0f131b 78%);
+  border: 1px solid #000;
+  box-shadow:
+    0 calc(var(--u) * 0.05) calc(var(--u) * 0.1) rgba(0, 0, 0, 0.7),
+    0 0 calc(var(--u) * 0.5) calc(var(--u) * 0.04) var(--glow, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition: transform 0.06s ease-out, box-shadow 0.2s;
+}
+.vd-btn.is-down .vd-face { transform: scale(0.92); }
+.vd-btn-num {
+  font: 600 calc(var(--u) * 0.2) / 1 var(--mono);
+  color: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+.vd-btn.is-lit .vd-btn-num { color: rgba(0, 0, 0, 0.55); }
+
+/* knob */
+.vd-knob { cursor: grab; }
+.vd-knob:active { cursor: grabbing; }
+.vd-knob .vd-face {
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, #1a2030 0 4deg, #0b0e15 4deg 8deg);
+  border: 1px solid #000;
+  box-shadow:
+    0 calc(var(--u) * 0.07) calc(var(--u) * 0.16) rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  display: grid;
+  place-items: center;
+  transition: transform 0.06s ease-out;
+}
+.vd-knob.is-down .vd-face { transform: scale(0.95); }
+.vd-dial {
+  --a: 0deg;
+  position: relative;
+  width: 76%;
+  height: 76%;
+  border-radius: 50%;
+  background: var(--knob-face);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 calc(var(--u) * 0.03) calc(var(--u) * 0.06) rgba(255, 255, 255, 0.1);
+  transform: rotate(var(--a));
+  transition: transform 0.09s ease-out;
+}
+.vd-mark {
+  position: absolute;
+  left: 50%;
+  top: 7%;
+  width: calc(var(--u) * 0.06);
+  height: 24%;
+  min-width: 2px;
+  transform: translateX(-50%);
+  border-radius: 99px;
+  background: var(--accent);
+  box-shadow: 0 0 calc(var(--u) * 0.1) rgba(255, 176, 32, 0.6);
+}
+
+/* slider */
+.vd-slider { --v: 0; }
+.vd-track {
+  position: absolute;
+  background: #05070a;
+  border-radius: 99px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.vd-slider.is-vertical .vd-track { left: 50%; top: calc(var(--u) * 0.15); bottom: calc(var(--u) * 0.15); width: calc(var(--u) * 0.1); transform: translateX(-50%); }
+.vd-slider.is-horizontal .vd-track { top: 50%; left: calc(var(--u) * 0.15); right: calc(var(--u) * 0.15); height: calc(var(--u) * 0.1); transform: translateY(-50%); }
+.vd-thumb {
+  position: absolute;
+  border-radius: calc(var(--u) * 0.08);
+  background: var(--knob-face);
+  border: 1px solid #000;
+  box-shadow: 0 calc(var(--u) * 0.05) calc(var(--u) * 0.1) rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+.vd-thumb::after { content: ""; position: absolute; background: var(--accent); border-radius: 99px; }
+.vd-slider.is-vertical .vd-thumb { left: 50%; width: calc(var(--u) * 0.5); height: calc(var(--u) * 0.3); margin: calc(var(--u) * -0.15) 0 0 calc(var(--u) * -0.25); top: calc(var(--u) * 0.15 + (var(--h) * var(--u) - var(--u) * 0.3) * (1 - var(--v))); }
+.vd-slider.is-vertical .vd-thumb::after { left: 20%; right: 20%; top: calc(50% - 1px); height: 2px; }
+.vd-slider.is-horizontal .vd-thumb { top: 50%; width: calc(var(--u) * 0.3); height: calc(var(--u) * 0.5); margin: calc(var(--u) * -0.25) 0 0 calc(var(--u) * -0.15); left: calc(var(--u) * 0.15 + (var(--w) * var(--u) - var(--u) * 0.3) * var(--v)); }
+.vd-slider.is-horizontal .vd-thumb::after { top: 20%; bottom: 20%; left: calc(50% - 1px); width: 2px; }
+.vd-slider .vd-track, .vd-slider .vd-thumb { pointer-events: none; }
+.vd-slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: calc(var(--u) * 0.2); }
+
+/* --- status bar and empty state ------------------------------------------------------------- */
+.vd-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-4);
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+.vd-status[hidden] { display: none; }
+.vd-model { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.vd-model strong { font-weight: 600; }
+.vd-select { width: auto; min-width: 9rem; padding-top: 5px; padding-bottom: 5px; }
+.vd-meta { color: var(--muted); font-size: var(--fs-xs); }
+.vd-last { min-width: 14ch; }
+.vd-empty { max-width: 34rem; margin-top: var(--sp-5); text-align: center; display: grid; gap: var(--sp-2); }
+.vd-empty h2 { margin: 0; font-size: var(--fs-lg); }
+.vd-empty p { margin: 0; font-size: var(--fs-sm); }
+.vd-cmd { display: inline-block; justify-self: center; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 10px; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+
+@media (max-width: 520px) {
+  .vd-main { padding: var(--sp-3) var(--sp-4); }
+  .vd-header-text .hint { display: none; }
+  .vd-last { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vd-face, .vd-dial, .vd-img { transition: none; }
+}

@@ -29,7 +29,7 @@ from .deck_brightness import make_deck_brightness
 from .deck_skin import apply_page_skin, page_needs_animated_skin
 from .devices.base import DeviceBackend
 from .devices.model import DeviceModel, control_kind_from_id
-from .devices.registry import normalize_native_message, open_backend, resolve_model
+from .devices.registry import force_model, model_by_name, normalize_native_message, open_backend, resolve_model
 from .events import ControlEvent
 from .ha_client import HaClient
 from .i18n import set_language_from_raw, t
@@ -501,6 +501,7 @@ async def _async_main(
     no_device: bool,
     log_dir: Path | None,
     handle: AgentHandle | None = None,
+    virtual: str | None = None,
 ) -> None:
     shutdown_requested = asyncio.Event()
 
@@ -532,6 +533,10 @@ async def _async_main(
     runtime.log_dir_override = log_dir
     runtime.overlay_hub = OverlayHub()
     runtime.no_device = no_device
+    # ``--virtual`` selects the browser-rendered device; never together with ``--no-device``.
+    if virtual and no_device:
+        logger.warning("--virtual ignored: --no-device is set")
+    force_model(None if no_device else (virtual or None))
     deck: DeviceBackend | None = None
     if not no_device:
         try:
@@ -747,6 +752,7 @@ def start_agent_in_background_thread(
     web: str | None = DEFAULT_WEB_ADDR,
     no_device: bool = False,
     log_dir: Path | None = None,
+    virtual: str | None = None,
 ) -> AgentHandle:
     """Run the agent (and optional web UI) on a dedicated thread with its own event loop.
 
@@ -758,7 +764,7 @@ def start_agent_in_background_thread(
 
     def _runner() -> None:
         try:
-            asyncio.run(_async_main(config_path, verbose, web, no_device, log_dir, handle=handle))
+            asyncio.run(_async_main(config_path, verbose, web, no_device, log_dir, handle=handle, virtual=virtual))
         except Exception:
             logger.exception("Agent thread crashed")
 
@@ -793,6 +799,15 @@ def main() -> None:
         help="Do not open Loupedeck (useful with --web for offline editing)",
     )
     parser.add_argument(
+        "--virtual",
+        nargs="?",
+        const="virtual",
+        default=None,
+        metavar="MODEL",
+        help="Use the virtual device rendered in the browser (/assets/ui/virtual.html) instead of "
+        "hardware; MODEL: virtual (default), virtual_mega, virtual_mini. Needs --web.",
+    )
+    parser.add_argument(
         "--log-dir",
         type=Path,
         default=None,
@@ -800,9 +815,15 @@ def main() -> None:
         help="Write open-loupedeck.log here (overrides logging.dir in config)",
     )
     args = parser.parse_args()
+    if args.virtual:
+        vm = model_by_name(args.virtual)
+        if vm is None or vm.family != "virtual":
+            parser.error(f"--virtual: unknown virtual model {args.virtual!r}")
+        if not args.web:
+            parser.error("--virtual needs --web (the virtual device is shown in the browser)")
 
     async def runner() -> None:
-        await _async_main(args.config, args.verbose, args.web, args.no_device, args.log_dir)
+        await _async_main(args.config, args.verbose, args.web, args.no_device, args.log_dir, virtual=args.virtual)
 
     try:
         asyncio.run(runner())

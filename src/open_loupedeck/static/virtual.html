@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open-Loupedeck virtual device</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+    <link rel="stylesheet" href="/assets/ui/tokens.css" />
+    <link rel="stylesheet" href="/assets/ui/components.css" />
+    <link rel="stylesheet" href="/assets/ui/css/virtual.css" />
+  </head>
+  <body class="vd-page">
+    <header class="vd-header">
+      <span class="vd-logo" aria-hidden="true"></span>
+      <div class="vd-header-text">
+        <h1 data-i18n="virtual.title">Virtual device</h1>
+        <p class="hint" data-i18n="virtual.subtitle">The device, drawn in your browser.</p>
+      </div>
+      <a class="btn btn-sm btn-ghost vd-editor-link" href="/" data-i18n="virtual.open_editor">Open the editor</a>
+    </header>
+    <main class="vd-main">
+      <div id="virtualDevice" class="vd-host"></div>
+    </main>
+    <script src="/assets/ui/i18n.js"></script>
+    <script type="module" src="/assets/ui/js/virtual/main.js"></script>
+  </body>
+</html>
