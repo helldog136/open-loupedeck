@@ -37,6 +37,7 @@ from .config_state import ConfigState
 from .control_ids import is_page_scoped_control
 from .deck_brightness import make_deck_brightness, parse_hhmm
 from .devices.base import device_model_of
+from .devices.registry import known_models, model_by_name
 from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
 from .knob_duos import list_duos
 from .knob_roles import validate_knobs_config
@@ -332,6 +333,27 @@ def create_web_app(
                 "deck_layout": deck_layout,
                 "overlay": overlay_paths,
                 "touch_errors": touch_errors,
+            }
+        )
+
+    @app.get("/api/device_model")
+    async def api_device_model() -> JSONResponse:
+        """Descriptor of the connected device, else of the configured ``device.model`` (``auto``: none)."""
+
+        async with lock:
+            configured = state.settings().device.model or "auto"
+        dm = device_model_of(rt.deck)
+        source: str | None = "device" if dm is not None else None
+        if dm is None:
+            dm = model_by_name(configured)
+            source = "config" if dm is not None else None
+        return JSONResponse(
+            {
+                "source": source,
+                "connected": rt.deck is not None and bool(getattr(rt.deck, "is_open", False)),
+                "configured_model": configured,
+                "known_models": [m.id for m in known_models()],
+                "model": dm.to_dict() if dm is not None else None,
             }
         )
 

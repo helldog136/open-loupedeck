@@ -239,3 +239,32 @@ def test_web_simulate_press_and_status_use_the_backend(tmp_path: Path):
     assert st["usb"] == {"connected": True, "disabled": False, "detail": "/dev/fake0", "path": "/dev/fake0"}
     rt.deck = FakeBackend(LOUPEDECK_LIVE)
     assert client.get("/api/status").json()["deck_layout"] == "live"
+
+
+def test_api_device_model(tmp_path: Path):
+    from fastapi.testclient import TestClient
+
+    from open_loupedeck.web_app import create_web_app
+
+    path = tmp_path / "config.yaml"
+    save_raw_config(path, {"device": {"model": "live"}})
+    state = ConfigState(path)
+    rt = AgentRuntimeRefs(no_device=True)
+    client = TestClient(create_web_app(path, state, asyncio.Lock(), runtime=rt))
+
+    body = client.get("/api/device_model").json()
+    assert body["source"] == "config" and body["connected"] is False and body["configured_model"] == "live"
+    assert body["model"] == LOUPEDECK_LIVE.to_dict()
+    assert {"loupedeck_live", "loupedeck_live_s"} <= set(body["known_models"])
+
+    dev = FakeBackend(LOUPEDECK_LIVE_S)
+    dev.open()
+    rt.deck = dev  # the connected device wins over the config
+    body = client.get("/api/device_model").json()
+    assert body["source"] == "device" and body["connected"] is True
+    assert body["model"]["id"] == "loupedeck_live_s" and body["model"]["grid"]["count"] == 15
+
+    rt.deck = None
+    state.raw["device"] = {"model": "auto"}
+    body = client.get("/api/device_model").json()
+    assert body["source"] is None and body["model"] is None
