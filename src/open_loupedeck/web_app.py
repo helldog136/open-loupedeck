@@ -527,10 +527,11 @@ def create_web_app(
     @app.get("/api/packs")
     async def starter_packs(
         lang: str | None = Query(None, description="Language code; default = the app's current language"),
+        model: str | None = Query(None, description="Model id the packs are fitted to; default = the UI's model"),
     ) -> JSONResponse:
         code = resolve_language(lang) if lang else get_language()
         async with lock:
-            pm = ui_model(state.raw, rt.deck)
+            pm = model_by_name(model) or ui_model(state.raw, rt.deck)
         return JSONResponse({"lang": code, "packs": list_packs(code, pm)})
 
     @app.get("/api/knob_duos")
@@ -1034,7 +1035,8 @@ def create_web_app(
         if not isinstance(entry, dict):
             raise HTTPException(400, t("error.entry_object"))
         async with lock:
-            pv_model = ui_model(state.raw, rt.deck)
+            # The editor names the model it lays out (its key size); else the UI's model.
+            pv_model = model_by_name(str(body.get("model") or "")) or ui_model(state.raw, rt.deck)
         raw_cid = str(body.get("control_id") or "key_0_0")
         cid = to_control_id(raw_cid, pv_model) or raw_cid
         size = pv_model.image_size(cid) or key_size_for_control(cid)
