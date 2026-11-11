@@ -290,7 +290,13 @@ def test_web_simulate_press_and_status_use_the_backend(tmp_path: Path):
 
     st = client.get("/api/status").json()
     assert st["deck_layout"] == "live_s"
-    assert st["usb"] == {"connected": True, "disabled": False, "detail": "/dev/fake0", "path": "/dev/fake0"}
+    assert st["usb"] == {
+        "connected": True,
+        "disabled": False,
+        "detail": "/dev/fake0",
+        "path": "/dev/fake0",
+        "name": "Loupedeck Live S",
+    }
     rt.deck = FakeBackend(LOUPEDECK_LIVE)
     assert client.get("/api/status").json()["deck_layout"] == "live"
 

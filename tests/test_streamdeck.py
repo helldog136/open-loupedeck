@@ -535,7 +535,7 @@ def test_reader_thread_closing_the_deck_counts_as_unplug():
     assert fired.wait(2.0)
 
 
-def test_failed_write_on_a_gone_deck_signals_unplug():
+def test_failed_write_on_a_gone_deck_signals_unplug(lib: FakeLib):
     b, deck = _backend("original", watch=60)
     fired: list[int] = []
     b.set_unplugged_callback(lambda: fired.append(1))
