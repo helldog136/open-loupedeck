@@ -1,13 +1,13 @@
 /*
- * pages.js — Page tabs and page header: the four hardware pages (page N = round button N, coloured with
- * that button's LED), extra pages 5+, inline rename, add/remove, and keeping the UI's page in sync with
- * the agent's page_index (both directions).
+ * pages.js — Page tabs: at least four pages (renamable, not deletable), extra pages, inline rename,
+ * add/remove, and keeping the UI's page in sync with the agent's page_index (both directions). A tab's
+ * dot and the hint show the button of the edited model whose global binding opens that page
+ * (`agent.goto_page`), lit with its LED colour when it has one.
  */
 
 import { postAgentPageIndex } from "./api.js";
 import { renderDeck } from "./deck.js";
-import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
-import { HARDWARE_PAGE_COUNT, clampPageIndex, currentPage, ensurePages } from "./model.js";
+import { MIN_PAGES, clampPageIndex, controlLabel, ensurePages, pageButton, pageName } from "./model.js";
 import { flushAutosave, scheduleAutosave } from "./save.js";
 import { emit, state } from "./state.js";
 import { snapshotBeforeAction } from "./undo.js";
@@ -28,25 +28,11 @@ function muteAgentPagePollBriefly() {
   pageIndexPollMutedUntil = Date.now() + PAGE_INDEX_POLL_COOLDOWN_MS;
 }
 
-/** Round buttons bound to pages 1-4, and the LED colour used when the config has none yet. */
-const PAGE_BUTTON_IDS = ["btn_circle", "btn_1", "btn_2", "btn_3"];
-const DEFAULT_PAGE_LEDS = ["#3b6bff", "#ff8a2b", "#e040c8", "#2de0c0"];
-
+/** LED colour of the button that opens page `i` ("" when it has none, null without such a button). */
 function pageLedColor(i) {
-  if (i >= HARDWARE_PAGE_COUNT) return null;
-  const e = state.cfg.global_buttons && state.cfg.global_buttons[PAGE_BUTTON_IDS[i]];
-  const raw = e && e.button_color && String(e.button_color).trim();
-  return raw ? cssColorForLedPreview(raw) : DEFAULT_PAGE_LEDS[i];
-}
-
-function pageLabel(i) {
-  const p = state.cfg.pages[i];
-  return (p && p.name) || t("pages.default_name", { number: i + 1 });
-}
-
-function resetSelectionLabel() {
-  const sl = $("#selLabel");
-  if (sl) sl.textContent = t("shell.select_control");
+  const b = pageButton(i);
+  if (!b) return null;
+  return b.color ? cssColorForLedPreview(b.color) : "";
 }
 
 export function syncUiToAgentPage(agentIndex) {
@@ -56,56 +42,35 @@ export function syncUiToAgentPage(agentIndex) {
   state.pageIndex = target;
   const sel = $("#pageSelect");
   if (sel) sel.value = String(state.pageIndex);
-  $("#pageName").textContent = currentPage().name || pageLabel(state.pageIndex);
   if (changed) {
     renderDeck();
     renderPageRail();
-    state.selectedControl = null;
-    resetSelectionLabel();
-    syncTestPressButton();
-    syncCopyPasteButtons();
+    emit("inspector:sync");
   }
 }
 
-/** One-shot GET /api/status: adopt the agent's resolved deck layout and current page. */
-export async function pullAgentLayoutAndPage() {
+/** One-shot GET /api/status: adopt the agent's current page. */
+export async function pullAgentPage() {
   try {
     const sr = await fetch("/api/status");
+    ensurePages();
     if (sr.ok) {
       const sj = await sr.json();
-      if (sj.deck_layout === "live" || sj.deck_layout === "live_s") {
-        state.agentDeckLayout = sj.deck_layout;
-      } else {
-        state.agentDeckLayout = null;
-      }
-      ensurePages();
-      if (typeof sj.page_index === "number") {
-        syncUiToAgentPage(sj.page_index);
-      }
-    } else {
-      ensurePages();
+      if (typeof sj.page_index === "number") syncUiToAgentPage(sj.page_index);
     }
   } catch {
     ensurePages();
   }
 }
 
-/** Kept for callers that re-lay out the deck: the tabs are the same for every model. */
-export function updateLiveSPageChrome() {
-  renderPageRail();
-}
-
 function addPage() {
   snapshotBeforeAction();
   ensurePages();
-  state.cfg.pages.push({
-    id: state.cfg.pages.length,
-    name: t("pages.default_name", { number: state.cfg.pages.length + 1 }),
-    buttons: {},
-  });
+  state.cfg.pages.push({ name: t("pages.default_name", { number: state.cfg.pages.length + 1 }), controls: {} });
   state.pageIndex = state.cfg.pages.length - 1;
   syncPageSelect();
   renderDeck();
+  emit("inspector:sync");
   scheduleAutosave();
   syncAgentPageIndex();
 }
@@ -117,7 +82,7 @@ export function syncPageSelect() {
   state.cfg.pages.forEach((p, i) => {
     const o = document.createElement("option");
     o.value = String(i);
-    o.textContent = p.name || pageLabel(i);
+    o.textContent = pageName(i);
     sel.appendChild(o);
   });
   sel.value = String(state.pageIndex);
@@ -156,7 +121,7 @@ export async function syncAgentPageIndex() {
 
 function removePageAt(i) {
   ensurePages();
-  if (i < HARDWARE_PAGE_COUNT || state.cfg.pages.length <= HARDWARE_PAGE_COUNT) return;
+  if (i < MIN_PAGES || state.cfg.pages.length <= MIN_PAGES) return;
   snapshotBeforeAction(); // no confirmation: Undo brings the page back
   const prevIndex = state.pageIndex;
   state.cfg.pages.splice(i, 1);
@@ -165,8 +130,10 @@ function removePageAt(i) {
   syncPageSelect();
   renderDeck();
   scheduleAutosave();
-  if (state.pageIndex !== prevIndex) void syncAgentPageIndex();
-  else void flushAutosave();
+  if (state.pageIndex !== prevIndex) {
+    emit("inspector:sync");
+    void syncAgentPageIndex();
+  } else void flushAutosave();
 }
 
 /** Commit (or cancel) an inline rename. */
@@ -180,7 +147,7 @@ function finishRename(i, nameEl, commit) {
     scheduleAutosave();
   }
   syncPageSelect();
-  $("#pageName").textContent = currentPage().name || pageLabel(state.pageIndex);
+  renderDeck(); // captions of the buttons that open this page
 }
 
 function startRename(nameEl) {
@@ -193,6 +160,18 @@ function startRename(nameEl) {
   sel.addRange(range);
 }
 
+/** Roving focus between tabs (Left / Right / Home / End), like a tab list should. */
+function moveTabFocus(from, key) {
+  const tabs = Array.from(document.querySelectorAll("#pageRail .pagetab"));
+  const i = tabs.indexOf(from);
+  let j = i;
+  if (key === "ArrowLeft") j = Math.max(0, i - 1);
+  else if (key === "ArrowRight") j = Math.min(tabs.length - 1, i + 1);
+  else if (key === "Home") j = 0;
+  else if (key === "End") j = tabs.length - 1;
+  if (tabs[j]) tabs[j].focus();
+}
+
 function renderPageRail() {
   const rail = $("#pageRail");
   if (!rail || !Array.isArray(state.cfg.pages)) return;
@@ -200,17 +179,17 @@ function renderPageRail() {
   if (rail.querySelector('.nm[contenteditable="true"]')) return;
   rail.innerHTML = "";
   state.cfg.pages.forEach((p, i) => {
-    const hardware = i < HARDWARE_PAGE_COUNT;
+    const kept = i < MIN_PAGES;
     const tab = document.createElement("div");
     tab.className = "pagetab";
     tab.setAttribute("role", "tab");
-    tab.tabIndex = 0;
+    tab.tabIndex = i === state.pageIndex ? 0 : -1;
     tab.setAttribute("aria-selected", i === state.pageIndex ? "true" : "false");
+    const btn = pageButton(i);
     const led = pageLedColor(i);
     if (led) tab.style.setProperty("--led", led);
-    tab.title = hardware
-      ? t("pages.tab.hardware", { number: i + 1 })
-      : t("pages.tab.extra");
+    tab.classList.toggle("has-button", !!btn);
+    tab.title = btn ? t("pages.tab.button", { button: controlLabel(btn.cid) }) : t("pages.tab.extra");
 
     const dot = document.createElement("i");
     dot.className = "dot";
@@ -219,13 +198,14 @@ function renderPageRail() {
     num.textContent = String(i + 1);
     const nm = document.createElement("b");
     nm.className = "nm";
-    nm.textContent = pageLabel(i);
+    nm.textContent = pageName(i);
     tab.append(dot, num, nm);
 
     const pencil = document.createElement("button");
     pencil.type = "button";
     pencil.className = "tab-icon-btn pencil";
     pencil.textContent = "✎";
+    pencil.tabIndex = -1;
     pencil.title = t("pages.rename");
     pencil.setAttribute("aria-label", t("pages.rename"));
     pencil.addEventListener("click", (e) => {
@@ -234,11 +214,12 @@ function renderPageRail() {
     });
     tab.appendChild(pencil);
 
-    if (!hardware) {
+    if (!kept) {
       const del = document.createElement("button");
       del.type = "button";
       del.className = "tab-icon-btn del";
       del.textContent = "×";
+      del.tabIndex = -1;
       del.title = t("pages.delete");
       del.setAttribute("aria-label", t("pages.delete"));
       del.addEventListener("click", (e) => {
@@ -257,6 +238,15 @@ function renderPageRail() {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         if (i !== state.pageIndex) selectPageIndex(i);
+      } else if (e.key === "F2") {
+        e.preventDefault();
+        startRename(nm);
+      } else if (e.key === "Delete" && !kept) {
+        e.preventDefault();
+        removePageAt(i);
+      } else if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) {
+        e.preventDefault();
+        moveTabFocus(tab, e.key);
       }
     });
     tab.addEventListener("dblclick", () => startRename(nm));
@@ -278,22 +268,22 @@ function renderPageRail() {
 
   const hint = $("#pagesHint");
   if (hint) {
-    hint.textContent =
-      state.pageIndex < HARDWARE_PAGE_COUNT
-        ? t("pages.hint.hardware", { number: state.pageIndex + 1 })
-        : t("pages.hint.extra");
+    const btn = pageButton(state.pageIndex);
+    hint.textContent = btn ? t("pages.hint.button", { button: controlLabel(btn.cid) }) : t("pages.hint.extra");
   }
 }
 
-/** Refresh the tab dots after a button's LED colour changed (cheap; no re-render). */
+/** Refresh the tab dots after a button's LED colour or binding changed (cheap; no re-render). */
 export function syncPageLedColors() {
   document.querySelectorAll("#pageRail .pagetab").forEach((tab, i) => {
     const led = pageLedColor(i);
     if (led) tab.style.setProperty("--led", led);
+    else tab.style.removeProperty("--led");
+    tab.classList.toggle("has-button", led !== null);
   });
 }
 
-/** Re-render the tabs (language change). */
+/** Re-render the tabs (language change, model change, a binding changed). */
 export function refreshPageTabs() {
   renderPageRail();
 }
@@ -307,10 +297,7 @@ export function wirePageSelect() {
     void syncAgentPageIndex();
     renderDeck();
     renderPageRail();
-    state.selectedControl = null;
-    emit("inspector:sync"); // an open knob shows its role on the new page
-    resetSelectionLabel();
-    syncTestPressButton();
+    emit("inspector:sync");
   });
 
   $("#btnAddPage").addEventListener("click", addPage);

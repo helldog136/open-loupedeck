@@ -1,16 +1,18 @@
 /*
  * api.js — Thin fetch wrappers for the agent's HTTP API that several modules share (config, page
- * index, simulate press, upload, skin refresh).
+ * index, simulate press, upload, skin refresh). The config travels in its stored shape,
+ * `config_version: 2` (`global` + `pages[].controls`, keyed by control id).
  */
 
 export async function apiGet() {
-  const r = await fetch("/api/config");
+  const r = await fetch("/api/config?format=v2");
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 
 export async function apiPut(body) {
-  const r = await fetch("/api/config", {
+  if (!body.config_version) body.config_version = 2;
+  const r = await fetch("/api/config?format=v2", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

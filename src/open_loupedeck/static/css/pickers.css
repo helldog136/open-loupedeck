@@ -29,7 +29,8 @@
 .pk-dot { width: 28px; height: 28px; border-radius: 8px; flex: none; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset; }
 .pk-act-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .pk-act-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pk-act-cat { font-size: var(--fs-xs); color: var(--muted); }
+.pk-act-cat { font-size: var(--fs-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-dot > .pk-ico-txt { display: grid; place-items: center; width: 100%; height: 100%; font: 600 12px var(--font); }
 .pk-star { background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; width: 30px; height: 30px; border-radius: var(--r-sm); padding: 0; flex: none; }
 .pk-star:hover { color: var(--fg); background: var(--surface-2); }
 .pk-star[aria-pressed="true"] { color: var(--accent); }

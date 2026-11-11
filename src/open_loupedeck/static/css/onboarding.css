@@ -1,9 +1,12 @@
 /* First launch (see js/onboarding.js): welcome card with starter packs inside the deck area, then the
    "next steps" checklist. Tokens come from tokens.css. */
 
+/* Under the deck (the welcome card replaces the deck: then it starts at the top). */
 .ob-mount {
-  max-width: 640px;
-  margin: 0 auto var(--sp-4);
+  margin: var(--sp-4) 0 0;
+}
+#deckRoot[hidden] + .ob-mount {
+  margin-top: 0;
 }
 .ob-mount[hidden] {
   display: none;

@@ -1,28 +1,22 @@
 /*
- * main.js — Entry point (loaded as <script type="module">): boots every module in the original order
- * on DOMContentLoaded and hosts the cross-module reactions (config replaced, device model change).
+ * main.js — Entry point (loaded as <script type="module">): boots every module in order on
+ * DOMContentLoaded and hosts the cross-module reactions (config replaced, edited device model changed).
  */
 
 import { apiGet } from "./api.js";
 import { renderDeck } from "./deck.js";
+import "./page-field.js";
 import "./pickers/sound-picker.js";
 import "./wow-chord.js";
 import { loadCopiedControlFromStorage } from "./inspector/clipboard.js";
-import { initInspector, openControl, refreshInspector } from "./inspector/index.js";
-import { syncCopyPasteButtons, syncTestPressButton } from "./inspector/panel.js";
-import { currentPage, ensureDevice, ensureGlobalButtons, ensurePages, liveKnobEncoderIds } from "./model.js";
-import {
-  pullAgentLayoutAndPage,
-  refreshPageTabs,
-  syncAgentPageIndex,
-  syncPageSelect,
-  updateLiveSPageChrome,
-  wirePageSelect,
-} from "./pages.js";
+import { initInspector, refreshInspector } from "./inspector/index.js";
+import { ensureDevice, ensureGlobal, ensurePages, loadDeviceModels, resolveEditorModel } from "./model.js";
+import { pullAgentPage, refreshPageTabs, syncAgentPageIndex, syncPageSelect, wirePageSelect } from "./pages.js";
 import { renderOnboarding, wireOnboarding } from "./onboarding.js";
 import { scheduleAutosave, setSaveStatus } from "./save.js";
 import { refreshBackupsList, wireBackupButtons } from "./services/backups.js";
 import { initBrightnessCard, setServiceState, wireConfigureButtons, wireWowCacheButton } from "./services/cards.js";
+import { renderModelSelect, syncModelHint, wireModelSelect } from "./services/device.js";
 import { ensureHa, syncHaFromCfg, wireHaFields } from "./services/ha.js";
 import { ensureLogging, syncLoggingFromCfg, wireLogLevelSelect } from "./services/logging.js";
 import { ensureObs, syncObsFromCfg, wireObsFields } from "./services/obs.js";
@@ -47,43 +41,48 @@ import { renderStatusChips, startConnectionStatusPolling } from "./status.js";
 import { wireUndoRedoKeyboard } from "./undo.js";
 import { $ } from "./util.js";
 
+/** The edited model changed (device plugged, model select, undo of it): re-lay out everything. */
+function onModelChanged() {
+  if (state.selectedControl && !(state.model && state.model.controls.some((c) => c.id === state.selectedControl))) {
+    state.selectedControl = null;
+  }
+  state.editScopes.clear();
+  renderModelSelect();
+  syncPageSelect();
+  renderDeck();
+  renderOnboarding();
+  refreshInspector({ rebuild: true });
+}
+
 /** Re-sync every view after `cfg`/`pageIndex` were replaced wholesale (undo/redo, backup restore). */
 function onConfigReplaced(prevPageIndex) {
   ensurePages();
   ensureDevice();
+  ensureGlobal();
   ensureLogging();
   ensureHa();
   ensureObs();
   ensureTwitch();
-  ensureGlobalButtons();
   if (state.pageIndex >= state.cfg.pages.length) state.pageIndex = Math.max(0, state.cfg.pages.length - 1);
   syncSpotifyFromCfg();
   syncLoggingFromCfg();
   syncHaFromCfg();
   syncObsFromCfg();
   renderTwitchAccounts();
+  if (resolveEditorModel()) onModelChanged();
+  else renderModelSelect();
   syncPageSelect();
   renderDeck();
   renderOnboarding();
-  if (state.pageIndex !== prevPageIndex) state.selectedControl = null;
   refreshInspector();
   scheduleAutosave();
   if (state.pageIndex !== prevPageIndex) void syncAgentPageIndex();
 }
 
-/** Services toolbar: device model select (auto / Live S / Live) re-lays out the deck and editors. */
-function onModelChange() {
-  ensureDevice();
-  const sel = $("#deviceModel");
-  if (sel) state.cfg.device.model = sel.value;
-  ensurePages();
-  updateLiveSPageChrome();
-  renderDeck();
-  if (state.selectedKnobEncoder && !liveKnobEncoderIds().includes(state.selectedKnobEncoder)) {
-    openControl(null);
-  } else {
-    refreshInspector();
-  }
+/** Services > General > Hardware changed `device.model`. */
+function onModelSelected() {
+  if (resolveEditorModel()) onModelChanged();
+  else syncModelHint();
   scheduleAutosave();
 }
 
@@ -107,9 +106,8 @@ async function loadCatalogAndConfig() {
 }
 
 /**
- * Boot sequence. The order is the historical one from the single-file app.js: keep it unless you
- * know why (e.g. listeners on the same element run in registration order, autosave stays
- * suppressed until the very end).
+ * Boot sequence. Keep the order unless you know why (e.g. listeners on the same element run in
+ * registration order, autosave stays suppressed until the very end).
  */
 async function init() {
   // Strings: wait for the language to be loaded so the first render is already translated.
@@ -118,13 +116,15 @@ async function init() {
   wireUndoRedoKeyboard();
   void refreshBackupsList();
   if (!(await loadCatalogAndConfig())) return;
+  ensureDevice();
+  ensureGlobal();
+  await loadDeviceModels();
   loadCopiedControlFromStorage();
   syncSpotifyFromCfg();
   void refreshSpotifyStatus();
   handleSpotifyReturnQuery();
   ensureTwitch();
   renderTwitchAccounts();
-  ensureDevice();
   ensureLogging();
   syncLoggingFromCfg();
   wireLogLevelSelect();
@@ -134,26 +134,21 @@ async function init() {
   wireObsFields();
   wireOpenConfigFolderButton();
   wireWowCacheButton();
+  renderModelSelect();
+  wireModelSelect(onModelSelected);
   await initAutostartToggle();
   await initBrightnessCard();
   const loadedPageCount = Array.isArray(state.cfg.pages) ? state.cfg.pages.length : 0;
-  await pullAgentLayoutAndPage();
-  updateLiveSPageChrome();
-  const dm = $("#deviceModel");
-  if (dm) dm.value = state.cfg.device.model || "auto";
+  await pullAgentPage();
 
-  $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
   syncPageSelect();
   renderDeck();
   renderOnboarding();
   wireOnboarding();
-  syncTestPressButton();
-  syncCopyPasteButtons();
 
   wirePageSelect();
   wireBackupButtons();
   initInspector();
-  if (dm) dm.addEventListener("change", onModelChange);
 
   startConnectionStatusPolling();
 
@@ -181,6 +176,7 @@ document.addEventListener("i18n:change", () => {
   if (!state.cfg || !state.cfg.pages) return;
   refreshLanguageCard();
   refreshPageTabs();
+  renderModelSelect();
   renderStatusChips();
   redrawSpotifyState();
   redrawTwitchState();
@@ -190,5 +186,6 @@ document.addEventListener("i18n:change", () => {
 });
 
 on("config:replaced", onConfigReplaced);
-// "control:open" / "knob:open" are handled by the inspector (inspector/index.js).
+on("model:changed", onModelChanged);
+// "control:open" is handled by the inspector (inspector/index.js).
 document.addEventListener("DOMContentLoaded", init);

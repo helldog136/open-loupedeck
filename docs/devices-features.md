@@ -73,16 +73,21 @@ bindings: []                   # optional flat rules, last resort (legacy form s
 * Kept as is: any id that is not a control of the device (another model's control, a legacy id
   that was inactive, an unknown key) stays in its map and never resolves.
 
-### Web UI compatibility (until lot 3)
-The current front-end still edits the legacy shape. `GET /api/config` returns a *view* of the v2
-config in that shape (`config_migrate.to_ui_view`, for the model the UI lays out: `device.model`,
-else the connected device, else Live S); `PUT /api/config` accepts that view (converted back by
-the migration, `migrate_config(to_ui_view(c)) == c`), a legacy config, or a v2 one as is
-(`config_version: 2`). Bindings without a legacy equivalent ride along in the view under their
-control id, `_v2_inactive` (inactive ids), `_v2_action(s)` (a page button whose action is not its
-default) and `_v2_unbound` (page buttons without a global binding). `GET /api/config?format=v2`
-returns the stored document. The other endpoints (`simulate_press`, `preview_key`, `/api/packs`,
-`touch_errors` in `/api/status`) accept or emit legacy ids for the UI and accept control ids.
+### Web UI (lot 3)
+The editor works on the stored document: `GET /api/config?format=v2` and `PUT /api/config?format=v2`
+(`config_version: 2`, `global` + `pages[].controls`, control ids). It lays out the model of the
+connected device, else `device.model`, else the Live S (`GET /api/device_model`, every known model
+including the virtual ones; Services > General saves the choice in `device.model`), and asks
+`POST /api/preview_key` / `GET /api/packs` for that model (`model`). The inspector is chosen by
+capability (rotation -> knob role, press -> action, + appearance with an image output, + LED colour
+with an LED output, anything else "not supported yet"), and every control has a scope bar ("This page /
+Every page") showing whether the page overrides or inherits the global binding. Defaults: keys and
+unbound knobs edit the page, other controls edit where their binding resolves (unbound: every page).
+
+Kept for older clients and tests only: `GET /api/config` without `format` still returns the legacy
+*view* (`config_migrate.to_ui_view`) and `PUT /api/config` still accepts it or a legacy config;
+`simulate_press`, `preview_key` and `/api/packs` still accept legacy ids, and `/api/status` still has
+`touch_errors` (the editor reads `control_errors`).
 
 ## Migration
 Config gets a `config_version`. Legacy configs (`touch_N`, `knobTL`, `btn_circle`, `global_buttons`,

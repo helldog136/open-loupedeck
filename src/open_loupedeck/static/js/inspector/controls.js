@@ -1,51 +1,24 @@
 /*
- * inspector/controls.js — What kind of control an id is (touch key, side screen, page button, plain
- * button, knob) and its plain-language name and scope for the inspector header.
+ * inspector/controls.js — Which inspector view a control gets, from its capabilities in the device
+ * model (not from its id): a rotation -> the knob view; a press -> the action view (with Appearance when
+ * it shows an image, with Light when it has an LED); anything else -> "not supported yet". Also the
+ * control's plain-language name.
  */
 
-import { BTNS_LIVE_S } from "../constants.js";
-import { currentPage, isKnobEncoderId, isLiveSPageSwitchButton } from "../model.js";
-import { state } from "../state.js";
+import { controlLabel, hasImage, hasInput, hasLed, kindOf } from "../model.js";
 
-/** "touch" | "strip" | "pageButton" | "button" | "knob" */
-export function controlKind(cid) {
-  if (typeof cid !== "string") return "touch";
-  if (isKnobEncoderId(cid)) return "knob";
-  if (cid.startsWith("touch_")) return "touch";
-  if (cid === "strip_left" || cid === "strip_right") return "strip";
-  if (isLiveSPageSwitchButton(cid)) return "pageButton";
-  return "button";
+/** "knob" | "action" | "unsupported" */
+export function viewKind(cid) {
+  if (hasInput(cid, "rotate")) return "knob";
+  if (hasInput(cid, "press")) return "action";
+  return "unsupported";
 }
 
-/** Page number (1-4) opened by a Live S round button. */
-export function pageButtonNumber(cid) {
-  return BTNS_LIVE_S.indexOf(cid) + 1;
+/** What the action view shows for this control. */
+export function capabilities(cid) {
+  return { press: hasInput(cid, "press"), image: hasImage(cid), led: hasLed(cid), kind: kindOf(cid) };
 }
 
 export function controlName(cid) {
-  const kind = controlKind(cid);
-  if (kind === "touch") return t("inspector.name.key", { number: Number(cid.slice(6)) + 1 });
-  if (cid === "strip_left") return t("inspector.name.strip_left");
-  if (cid === "strip_right") return t("inspector.name.strip_right");
-  if (kind === "pageButton") return t("inspector.name.page_button", { number: pageButtonNumber(cid) });
-  if (cid === "btn_circle") return t("inspector.name.round_button");
-  const m = /^btn_(\d+)$/.exec(cid);
-  if (m) return t("inspector.name.button", { number: m[1] });
-  return cid;
-}
-
-/** "On page “Main”" for per-page keys, "Same on every page" for the others. */
-export function controlScope(cid) {
-  if (typeof cid === "string" && cid.startsWith("touch_")) {
-    const p = currentPage();
-    const name = (p && p.name) || t("pages.default_name", { number: state.pageIndex + 1 });
-    return t("inspector.scope.page", { page: name });
-  }
-  return t("inspector.scope.global");
-}
-
-/** Controls with a screen (their look can be edited). */
-export function hasScreen(cid) {
-  const k = controlKind(cid);
-  return k === "touch" || k === "strip";
+  return controlLabel(cid);
 }
