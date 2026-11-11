@@ -1,9 +1,9 @@
 """The interface every device backend implements (no driver imports here).
 
 The agent (``app.py``), the skin renderer and the web UI only talk to a :class:`DeviceBackend`:
-open/close it, draw images by control id, set the brightness / button LEDs, and receive
-:class:`~open_loupedeck.events.NormalizedEvent` objects. Driver specifics (pixel formats, serial
-threads, protocol names) stay inside the backend package.
+open/close it, draw images and set LEDs by control id, set the brightness, and receive
+:class:`~open_loupedeck.events.ControlEvent` objects (``ControlEvent(control_id, type, value)``).
+Driver specifics (pixel formats, serial threads, protocol names) stay inside the backend package.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from ..events import NormalizedEvent
+from ..events import ControlEvent
 from .model import DeviceModel
 
 if TYPE_CHECKING:
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     from ..config import Settings
 
-EventCallback = Callable[[NormalizedEvent], None]
+EventCallback = Callable[[ControlEvent], None]
 """Called from the backend's own thread for every input event (schedule work, do not block)."""
 
 UnpluggedCallback = Callable[[], None]
@@ -62,16 +62,16 @@ class DeviceBackend(Protocol):
 
     def __exit__(self, *exc: Any) -> Any: ...
 
-    def set_key_image(self, control_id: str, image: Image.Image) -> None:
-        """Draw ``image`` (sized with ``model.key_size_for(control_id)``) on a drawable control."""
+    def set_image(self, control_id: str, image: Image.Image) -> None:
+        """Draw ``image`` (sized ``model.image_size(control_id)``) on a control with an image output."""
         ...
 
     def set_brightness(self, pct: int) -> None:
         """Screen brightness, 0..100."""
         ...
 
-    def set_button_color(self, control_id: str, rgb: tuple[int, int, int]) -> None:
-        """LED colour of an ``led_button`` (no-op on models without ``button_led``)."""
+    def set_led(self, control_id: str, rgb: tuple[int, int, int]) -> None:
+        """Colour of the LED of ``control_id`` (only controls with an ``led`` output)."""
         ...
 
     def set_event_callback(self, callback: EventCallback | None) -> None: ...
@@ -107,8 +107,8 @@ class BackendFactory(Protocol):
         """Open a device per ``settings.device`` (path/model/baudrate); raise when none answers."""
         ...
 
-    def normalize_message(self, msg: dict[str, Any]) -> NormalizedEvent | None:
-        """Map a driver-native message dict to an event (synthetic presses, tests)."""
+    def normalize_message(self, msg: dict[str, Any], model: DeviceModel | None = None) -> ControlEvent | None:
+        """Map a driver-native message dict to an event on ``model`` (synthetic presses, tests)."""
         ...
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..events import NormalizedEvent
+from ..events import ControlEvent
 from .base import BackendFactory, DeviceBackend, DiscoveredDevice
 from .model import DeviceModel
 
@@ -96,11 +96,11 @@ class DeviceRegistry:
         assert last is not None
         raise last
 
-    def normalize_message(self, msg: dict[str, Any]) -> NormalizedEvent | None:
+    def normalize_message(self, msg: dict[str, Any], model: DeviceModel | None = None) -> ControlEvent | None:
         """First backend that understands a driver-native message dict (synthetic presses)."""
 
         for f in self.factories():
-            ev = f.normalize_message(msg)
+            ev = f.normalize_message(msg, model)
             if ev is not None:
                 return ev
         return None
@@ -133,5 +133,31 @@ def open_backend(settings: Settings) -> DeviceBackend:
     return _default.open_backend(settings)
 
 
-def normalize_native_message(msg: dict[str, Any]) -> NormalizedEvent | None:
-    return _default.normalize_message(msg)
+def normalize_native_message(msg: dict[str, Any], model: DeviceModel | None = None) -> ControlEvent | None:
+    return _default.normalize_message(msg, model)
+
+
+def default_model() -> DeviceModel:
+    """Model assumed for ``device.model: auto`` without a connected device (the Live S)."""
+
+    from .loupedeck.models import DEFAULT_MODEL
+
+    return DEFAULT_MODEL
+
+
+def resolve_model(configured: str | None, device: Any = None) -> DeviceModel:
+    """The model the agent works with: the connected device's, else ``device.model`` from the
+    config, else (``auto``) :func:`default_model`."""
+
+    from .base import device_model_of
+
+    dm = device_model_of(device)
+    if dm is not None:
+        return dm
+    return model_by_name(configured) or default_model()
+
+
+def config_model(configured: str | None) -> DeviceModel:
+    """The model a config is written for: ``device.model``, ``auto`` -> :func:`default_model`."""
+
+    return model_by_name(configured) or default_model()

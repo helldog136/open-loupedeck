@@ -16,7 +16,9 @@ from Loupedeck.DeviceManager import DeviceManager
 from Loupedeck.Devices.constants import BAUD_RATE
 from Loupedeck.Devices.LoupedeckLive import LoupedeckLive
 
-from ...events import NormalizedEvent
+from ...control_ids import driver_name_for_button
+from ...devices.model import parse_key_id
+from ...events import ControlEvent
 from ..base import DiscoveredDevice, EventCallback, UnpluggedCallback
 from ..model import DeviceModel
 from .discovery import HardwareHint, list_loupedeck_usb_ports, usb_hint_for_port
@@ -43,20 +45,16 @@ def model_for_driver(driver: Any) -> DeviceModel:
 
 
 def led_protocol_name(control_id: str) -> str | None:
-    """Driver name for SET_COLOR of a physical button.
+    """Driver name for SET_COLOR of a round button.
 
     Upstream foxxyz/loupedeck maps the four Live S LEDs to button ids 0–3, i.e. BUTTONS keys
     0x07–0x0A (values 0, 1, 2, 3). python-loupedeck uses string names: 0x07 is "circle", then
     "1", "2", "3" for 0x08–0x0A. Do *not* use "1"–"4" (0x08–0x0B) for the Live S: that is the
     middle four of the eight Loupedeck Live side keys and shifts every Live S color to the wrong
-    LED. ``btn_circle`` -> ``circle``, ``btn_N`` -> ``N``.
+    LED. ``button_0`` -> ``circle``, ``button_N`` -> ``N``.
     """
 
-    if control_id == "btn_circle":
-        return "circle"
-    if control_id.startswith("btn_") and control_id[4:].isdigit():
-        return control_id[4:]
-    return None
+    return driver_name_for_button(control_id)
 
 
 class LoupedeckBackend:
@@ -104,47 +102,32 @@ class LoupedeckBackend:
 
     # --- output -------------------------------------------------------------------------------
 
-    def set_key_image(self, control_id: str, image: Image.Image) -> None:
+    def set_image(self, control_id: str, image: Image.Image) -> None:
         d = self.driver
         model = self.model
-        if control_id.startswith("touch_"):
-            n = int(control_id.split("_", 1)[1])
-            if n > model.grid.count - 1:
-                logger.warning(
-                    "%s has touch keys 0..%s only; skipping %s",
-                    model.name,
-                    model.grid.count - 1,
-                    control_id,
-                )
-                return
-            d.set_key_image(str(n), image)
-        elif control_id.startswith("btn_"):
-            rest = control_id[4:]
-            if rest == "circle":
-                logger.debug("Skipping image for btn_circle (not supported by set_key_image)")
-                return
-            # Loupedeck Live: the driver draws "1".."7" on the centre grid (historical behaviour).
-            d.set_key_image(rest, image)
-        elif control_id in ("strip_left", "left"):
-            if model.control("strip_left") is None:
-                logger.debug("%s has no side strip displays; skip %s", model.name, control_id)
-                return
+        ctl = model.control(control_id)
+        if ctl is None or ctl.image is None:
+            logger.debug("%s: %s takes no image; skipped", model.name, control_id)
+            return
+        if ctl.kind == "key":
+            cols, _rows = model.grid_of_keys()
+            col, row = parse_key_id(control_id) or (0, 0)
+            d.set_key_image(str(row * cols + col), image)
+        elif control_id == "strip_0":
             d.set_left_image(image)
-        elif control_id in ("strip_right", "right"):
-            if model.control("strip_right") is None:
-                logger.debug("%s has no side strip displays; skip %s", model.name, control_id)
-                return
+        elif control_id == "strip_1":
             d.set_right_image(image)
         else:
-            logger.debug("No drawable target for %s (knobs use colors only)", control_id)
+            logger.debug("No drawable target for %s", control_id)
 
     def set_brightness(self, pct: int) -> None:
         self.driver.set_brightness(pct)
 
-    def set_button_color(self, control_id: str, rgb: tuple[int, int, int]) -> None:
+    def set_led(self, control_id: str, rgb: tuple[int, int, int]) -> None:
+        ctl = self.model.control(control_id)
         name = led_protocol_name(control_id)
-        if name is None:
-            logger.warning("set_button_color: %s has no LED", control_id)
+        if ctl is None or ctl.led is None or name is None:
+            logger.warning("set_led: %s has no LED on %s", control_id, self.model.name)
             return
         self.driver.set_button_color(name, rgb)
 
@@ -164,7 +147,7 @@ class LoupedeckBackend:
         if cb is None:
             return
         try:
-            ev = normalize_loupedeck_message(msg)
+            ev = normalize_loupedeck_message(msg, self.model)
             if ev is not None:
                 cb(ev)
         except Exception:
@@ -294,5 +277,7 @@ class LoupedeckBackendFactory:
     def open(self, settings: Settings) -> LoupedeckBackend:
         return open_loupedeck(settings)
 
-    def normalize_message(self, msg: dict[str, Any]) -> NormalizedEvent | None:
-        return normalize_loupedeck_message(msg)
+    def normalize_message(self, msg: dict[str, Any], model: DeviceModel | None = None) -> ControlEvent | None:
+        if model is not None and model.family != FAMILY:
+            return None
+        return normalize_loupedeck_message(msg, model)

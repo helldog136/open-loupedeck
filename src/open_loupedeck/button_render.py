@@ -1170,6 +1170,6 @@ def preview_cache_key(
 
 
 def key_size_for_control(control_id: str) -> tuple[int, int]:
-    if control_id in ("strip_left", "strip_right", "left", "right"):
+    if control_id in ("strip_left", "strip_right", "left", "right") or control_id.startswith("strip_"):
         return STRIP_SIZE
     return DEFAULT_KEY_SIZE
