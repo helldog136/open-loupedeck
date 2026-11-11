@@ -39,7 +39,8 @@ from .control_ids import control_to_legacy_id, to_control_id
 from .deck_brightness import make_deck_brightness, parse_hhmm
 from .devices.base import device_model_of
 from .devices.model import DeviceModel, control_kind_from_id
-from .devices.registry import config_model, default_model, known_models, model_by_name
+from .devices.registry import config_model, default_model, force_model, known_models, model_by_name
+from .devices.virtual.transport import handle_virtual_socket, virtual_backend_of
 from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
 from .knob_duos import list_duos
 from .knob_roles import validate_knobs_config
@@ -176,6 +177,34 @@ def create_web_app(
             await ws.close(code=1011)
             return
         await hub.handle_connection(ws)
+
+    @app.websocket("/ws/virtual")
+    async def ws_virtual(ws: WebSocket) -> None:
+        await handle_virtual_socket(ws, lambda: rt.deck)
+
+    @app.get("/api/virtual/state")
+    async def api_virtual_state() -> JSONResponse:
+        """Snapshot of the virtual device (model, images as base64 PNG, LEDs, brightness)."""
+
+        vb = virtual_backend_of(rt.deck)
+        if vb is None:
+            raise HTTPException(status_code=404, detail="No virtual device is running (start with --virtual)")
+        return JSONResponse(vb.snapshot())
+
+    @app.post("/api/virtual/model")
+    async def api_virtual_model(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        """Switch the running virtual device to another virtual model (this run only, config untouched)."""
+
+        vb = virtual_backend_of(rt.deck)
+        if vb is None:
+            raise HTTPException(status_code=409, detail="No virtual device is running (start with --virtual)")
+        wanted = model_by_name(str(body.get("model") or ""))
+        if wanted is None or wanted.family != "virtual":
+            raise HTTPException(status_code=400, detail="Unknown virtual model")
+        if wanted.id != vb.model.id:
+            force_model(wanted.id)
+            vb.request_unplug()  # the agent's reconnect loop opens the new model
+        return JSONResponse({"ok": True, "model": wanted.id})
 
     @app.get("/api/locales")
     async def api_locales() -> JSONResponse:

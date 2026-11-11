@@ -24,19 +24,33 @@ def _builtin_models() -> tuple[DeviceModel, ...]:
     # Pure data, no driver import.
     from .loupedeck.models import LOUPEDECK_MODELS
 
-    return LOUPEDECK_MODELS
+    from .virtual.models import VIRTUAL_MODELS
+
+    return LOUPEDECK_MODELS + VIRTUAL_MODELS
 
 
 def _builtin_factories() -> list[BackendFactory]:
     from .loupedeck.backend import LoupedeckBackendFactory
 
-    return [LoupedeckBackendFactory()]
+    from .virtual.backend import VirtualBackendFactory
+
+    return [LoupedeckBackendFactory(), VirtualBackendFactory()]
 
 
 class DeviceRegistry:
     def __init__(self, factories: list[BackendFactory] | None = None) -> None:
         # None = the built-in backends, loaded on first use.
         self._factories: list[BackendFactory] | None = list(factories) if factories is not None else None
+        self._forced_model: str | None = None
+
+    def force_model(self, name: str | None) -> None:
+        """Open this model (a ``--virtual`` run) whatever ``device.model`` says; ``None`` clears it."""
+
+        self._forced_model = name
+
+    @property
+    def forced_model(self) -> str | None:
+        return self._forced_model
 
     def factories(self) -> list[BackendFactory]:
         if self._factories is None:
@@ -80,10 +94,19 @@ class DeviceRegistry:
         backend tried is raised unchanged (one backend = exactly its own message).
         """
 
+        forced = self.model_by_name(self._forced_model) if self._forced_model else None
+        if forced is not None:
+            for f in self.factories():
+                if f.family == forced.family and hasattr(f, "open_model"):
+                    return f.open_model(forced)
         wanted = self.model_by_name(settings.device.model)
         factories = self.factories()
         if wanted is not None:
             factories = [f for f in factories if f.family == wanted.family] or factories
+        else:
+            # ``auto``: a backend that is only chosen by name (the virtual device) never competes
+            # with real hardware.
+            factories = [f for f in factories if getattr(f, "auto_detect", True)]
         if not factories:
             raise RuntimeError("No device backend available.")
         last: Exception | None = None
@@ -123,6 +146,10 @@ def known_models() -> list[DeviceModel]:
 
 def model_by_name(name: str | None) -> DeviceModel | None:
     return _default.model_by_name(name)
+
+
+def force_model(name: str | None) -> None:
+    _default.force_model(name)
 
 
 def discover_devices() -> list[DiscoveredDevice]:
