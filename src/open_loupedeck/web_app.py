@@ -157,6 +157,13 @@ def create_web_app(
             return "<h1>Missing static/index.html</h1>"
         return p.read_text(encoding="utf-8")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Response:
+        icon = Path(__file__).parent / "icons" / "app.ico"
+        if not icon.is_file():
+            raise HTTPException(404, "no favicon")
+        return Response(content=icon.read_bytes(), media_type="image/x-icon")
+
     static = _static_dir()
     if static.is_dir():
         app.mount("/assets/ui", StaticFiles(directory=str(static)), name="ui_static")
