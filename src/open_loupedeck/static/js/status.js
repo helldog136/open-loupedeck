@@ -43,13 +43,16 @@ function serviceChip(id, svc) {
 }
 
 function updateDeviceChip(usb) {
-  const name = layoutMode() === "live" ? "Loupedeck Live" : "Loupedeck Live S";
+  const name = usb.name || (layoutMode() === "live" ? "Loupedeck Live" : "Loupedeck Live S");
   const nameEl = document.querySelector("#chipDevice .chip-name");
   if (nameEl) nameEl.textContent = name;
   if (usb.disabled) {
     setChip("chipDevice", { mode: "idle", action: t("status.device.simulation"), title: t("status.device.simulation_title") });
   } else if (usb.connected) {
-    setChip("chipDevice", { mode: "ok", title: t("status.device.connected", { path: usb.path || usb.detail || "" }) });
+    let title = t("status.device.connected", { path: usb.path || usb.detail || "" });
+    // Backends not verified on hardware yet (Stream Deck): say so in the chip tooltip.
+    if (usb.experimental) title += ` — ${t("status.device.experimental", { name })}`;
+    setChip("chipDevice", { mode: "ok", title });
   } else {
     setChip("chipDevice", { mode: "bad", action: t("status.device.not_found"), title: t("status.device.not_found_title") });
   }
