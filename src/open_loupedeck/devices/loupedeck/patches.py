@@ -28,8 +28,10 @@ def set_serial_fatal_callback(fn: Callable[[], None] | None) -> None:
     _serial_fatal_callback = fn
 
 
-def _notify_serial_fatal() -> None:
-    cb = _serial_fatal_callback
+def _notify_serial_fatal(driver: Any = None) -> None:
+    """Per-driver callback (set by ``LoupedeckBackend``) first, else the global one."""
+
+    cb = getattr(driver, "_open_loupedeck_on_fatal", None) or _serial_fatal_callback
     if cb is None:
         return
     try:
@@ -107,7 +109,7 @@ def _loupedeck_read_serial_patched(self: Any) -> None:
                 _log.warning("Loupedeck serial reader: connection is None; stopping")
                 self.reading_running = False
                 self.process_running = False
-                _notify_serial_fatal()
+                _notify_serial_fatal(self)
                 break
             raw_byte = self.connection.read()
             if raw_byte != b"":
@@ -119,7 +121,7 @@ def _loupedeck_read_serial_patched(self: Any) -> None:
             )
             self.reading_running = False
             self.process_running = False
-            _notify_serial_fatal()
+            _notify_serial_fatal(self)
             break
         except OSError as e:
             _log.warning(
@@ -128,7 +130,7 @@ def _loupedeck_read_serial_patched(self: Any) -> None:
             )
             self.reading_running = False
             self.process_running = False
-            _notify_serial_fatal()
+            _notify_serial_fatal(self)
             break
         except Exception:
             _log.exception("_read_serial: unexpected exception; backing off")
