@@ -139,7 +139,7 @@ class DeckBrightness:
         self._last_applied = level
         deck = getattr(self._runtime, "deck", None)
         model = device_model_of(deck)
-        if model is not None and not model.capabilities.brightness:
+        if model is not None and not model.brightness:
             return level
         if deck is not None and hasattr(deck, "set_brightness"):
             try:

@@ -57,21 +57,21 @@ def _refresh(runtime, raw):
 
 
 def test_refresh_sets_playing_then_paused():
-    raw = {"pages": [{"buttons": {"touch_0": KEY}}]}
+    raw = {"pages": [{"controls": {"key_0_0": KEY}}]}
     sm = _FakeSpotify()
     rt = AgentRuntimeRefs(spotify=sm)
 
     assert _refresh(rt, raw) is True
-    assert rt.live_message_text["p0:touch_0"] == "playing"
+    assert rt.live_message_text["p0:key_0_0"] == "playing"
 
     sm.response = _Resp(204)
     rt.spotify_last_fetch = 0.0  # poll again now
     assert _refresh(rt, raw) is True
-    assert rt.live_message_text["p0:touch_0"] == "paused"
+    assert rt.live_message_text["p0:key_0_0"] == "paused"
 
 
 def test_unknown_state_leaves_the_key_untouched():
-    raw = {"pages": [{"buttons": {"touch_0": KEY}}]}
+    raw = {"pages": [{"controls": {"key_0_0": KEY}}]}
     rt = AgentRuntimeRefs(spotify=None)
     assert _refresh(rt, raw) is False
-    assert "p0:touch_0" not in rt.live_message_text
+    assert "p0:key_0_0" not in rt.live_message_text

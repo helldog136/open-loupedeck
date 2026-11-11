@@ -7,7 +7,7 @@ from typing import Any
 from open_loupedeck.devices.base import DiscoveredDevice
 from open_loupedeck.devices.loupedeck.models import LOUPEDECK_LIVE_S
 from open_loupedeck.devices.model import DeviceModel
-from open_loupedeck.events import NormalizedEvent
+from open_loupedeck.events import ControlEvent
 
 
 class FakeBackend:
@@ -17,6 +17,7 @@ class FakeBackend:
         self.model = model
         self.path = path
         self.images: list[str] = []
+        self.last_images: dict[str, Any] = {}
         self.levels: list[int] = []
         self.colors: dict[str, tuple[int, int, int]] = {}
         self.opened = False
@@ -49,13 +50,14 @@ class FakeBackend:
         self.lock_depth -= 1
 
     # output
-    def set_key_image(self, control_id: str, _image: Any) -> None:
+    def set_image(self, control_id: str, image: Any) -> None:
         self.images.append(control_id)
+        self.last_images[control_id] = image
 
     def set_brightness(self, pct: int) -> None:
         self.levels.append(pct)
 
-    def set_button_color(self, control_id: str, rgb: tuple[int, int, int]) -> None:
+    def set_led(self, control_id: str, rgb: tuple[int, int, int]) -> None:
         self.colors[control_id] = rgb
 
     # input
@@ -66,9 +68,18 @@ class FakeBackend:
         self.unplugged_callback = callback
 
     # device side
-    def emit(self, ev: NormalizedEvent) -> None:
+    def emit(self, ev: ControlEvent) -> None:
         if self.event_callback is not None:
             self.event_callback(ev)
+
+    def press(self, control_id: str) -> None:
+        """Press + release of ``control_id``, as the device thread would deliver them."""
+
+        self.emit(ControlEvent(control_id, "press"))
+        self.emit(ControlEvent(control_id, "release"))
+
+    def turn(self, control_id: str, steps: int) -> None:
+        self.emit(ControlEvent(control_id, "rotate", steps))
 
     def unplug(self) -> None:
         self._unplugged = True
@@ -95,7 +106,7 @@ class FakeFactory:
             raise self.fail
         return FakeBackend(self.models[0])
 
-    def normalize_message(self, msg: dict[str, Any]) -> NormalizedEvent | None:
+    def normalize_message(self, msg: dict[str, Any], model: DeviceModel | None = None) -> ControlEvent | None:
         if msg.get("fake") == self.family:
-            return NormalizedEvent(kind="touch", id=int(msg.get("key", 0)), edge="down", raw=msg)
+            return ControlEvent(f"key_{int(msg.get('key', 0))}_0", "press", None, msg)
         return None

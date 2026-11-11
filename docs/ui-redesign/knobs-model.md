@@ -1,5 +1,11 @@
 # Knob model: roles per deck page
 
+> **Since `config_version: 2`** a knob role is an ordinary binding: `pages[].controls.knob_<n>`
+> (or `global.knob_<n>` for every page), with the same `rotate` / `press` / `feedback_sec` shape;
+> `knobTL`..`knobBR` are `knob_0`..`knob_5` and the feedback key comes from the device model. The
+> examples below use the legacy ids (`pages[].knobs.knobTL`), still what the current web UI edits.
+> See [`../devices-features.md`](../devices-features.md).
+
 Knobs (encoders) have **no pages of their own and no screen**. What a knob does depends on the **deck page being
 shown**: volume on page 1, microphone on page 3, nothing on page 4... For each deck page, each knob has:
 

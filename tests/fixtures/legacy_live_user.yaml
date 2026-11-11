@@ -1,0 +1,23 @@
+# Legacy (pre config_version 2) Loupedeck Live config: strips and round buttons in
+# global_buttons, a page-level round-button entry (used only when the global one has no action).
+device: {path: "", model: live}
+global_buttons:
+  strip_left: {text: "Left", background: "#202040"}
+  right: {text: "Right"}
+  btn_circle: {action: {type: agent.prev_page}}
+  btn_7: {action: {type: agent.next_page}}
+  btn_3: {text: "look only"}
+pages:
+  - name: Main
+    buttons:
+      touch_0: {action: {type: obs.set_scene, scene: A}}
+      touch_11: {action: {type: obs.set_scene, scene: B}}
+      touch_12: {text: "beyond the 4x3 grid"}
+      btn_3: {action: {type: sound.mute_toggle}}       # active: global btn_3 has no action
+      btn_7: {action: {type: obs.toggle_stream}}       # inactive: global btn_7 has one
+      strip_left: {text: "page strip"}                 # strips only read global_buttons
+    knobs:
+      knobBR: {rotate: {duo: system_volume}}
+      knobTR: {press: {type: sound.mute_toggle}}
+  - name: Second
+    buttons: {}

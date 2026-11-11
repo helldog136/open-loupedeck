@@ -1,86 +1,78 @@
 """Synthetic input for UI-driven test presses (same dispatch path as hardware).
 
-:func:`build_synthetic_event` builds the device-neutral :class:`NormalizedEvent` a backend would
-deliver for a press / turn of ``control_id``. :func:`build_synthetic_loupedeck_message` is the
-older Loupedeck-shaped callback dict, kept for callers of ``runtime.simulate_raw_message``.
+:func:`build_synthetic_event` builds the :class:`ControlEvent` a backend would deliver for a press
+/ turn of ``control_id`` (a control id such as ``key_0_0`` / ``knob_1``, or a legacy one such as
+``touch_0`` / ``knobCL`` / ``btn_circle``, mapped on the model). :func:`build_synthetic_loupedeck_message`
+is the older Loupedeck-shaped callback dict, kept for callers of ``runtime.simulate_raw_message``.
 """
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from .events import NormalizedEvent
-from .knob_pages import KNOB_ENCODER_IDS
+from .control_ids import control_to_legacy_id, driver_name_for_button, to_control_id
+from .devices.model import DeviceModel, control_kind_from_id
+from .devices.registry import default_model
+from .events import ControlEvent
 
-_TOUCH = re.compile(r"^touch_(\d+)$")
-_BTN_NUM = re.compile(r"^btn_(\d+)$")
+_SIMULATED_KINDS = ("key", "button", "knob")
+"""Strips (touch areas) have no press to simulate."""
+
+
+def _control(control_id: str, model: DeviceModel | None) -> tuple[str, str] | None:
+    model = model or default_model()
+    cid = to_control_id((control_id or "").strip(), model)
+    if cid is None:
+        return None
+    kind = control_kind_from_id(cid)
+    if kind not in _SIMULATED_KINDS:
+        return None
+    return cid, kind
+
+
+def build_synthetic_event(
+    control_id: str,
+    *,
+    direction: str | None = None,
+    model: DeviceModel | None = None,
+) -> ControlEvent | None:
+    """The event a device delivers for a press of ``control_id`` (or a turn, for a knob with a
+    ``direction``); ``None`` if unsupported (strips, unknown ids)."""
+
+    hit = _control(control_id, model)
+    if hit is None:
+        return None
+    cid, kind = hit
+    raw: dict[str, Any] = {"synthetic": True, "control_id": (control_id or "").strip()}
+    if kind == "knob" and direction in ("left", "right"):
+        return ControlEvent(cid, "rotate", 1 if direction == "right" else -1, raw)
+    return ControlEvent(cid, "press", None, raw)
 
 
 def build_synthetic_loupedeck_message(
     control_id: str,
     *,
     direction: str | None = None,
+    model: DeviceModel | None = None,
 ) -> dict[str, Any] | None:
-    """Return a dict shaped like the device callback payload, or ``None`` if unsupported."""
+    """Return a dict shaped like the Loupedeck driver callback payload, or ``None`` if unsupported."""
 
-    cid = (control_id or "").strip()
-    if not cid:
+    model = model or default_model()
+    hit = _control(control_id, model)
+    if hit is None:
         return None
-    low = cid.lower()
-    if low in ("strip_left", "strip_right", "left", "right"):
+    cid, kind = hit
+    if kind == "key":
+        lid = control_to_legacy_id(cid, model)
+        if lid is None:
+            return None
+        return {"action": "touchstart", "screen": "center", "key": int(lid[len("touch_") :])}
+    if kind == "button":
+        name = driver_name_for_button(cid)
+        return {"action": "push", "state": "down", "id": name} if name else None
+    lid = control_to_legacy_id(cid, model)
+    if lid is None:
         return None
-
-    m = _TOUCH.match(cid)
-    if m:
-        return {
-            "action": "touchstart",
-            "screen": "center",
-            "key": int(m.group(1)),
-        }
-
-    if cid == "btn_circle" or cid == "circle":
-        return {"action": "push", "state": "down", "id": "circle"}
-    if cid == "btn_0":
-        return {"action": "push", "state": "down", "id": "btn_0"}
-
-    m = _BTN_NUM.match(cid)
-    if m:
-        return {"action": "push", "state": "down", "id": m.group(1)}
-
-    if cid in KNOB_ENCODER_IDS:
-        if direction in ("left", "right"):
-            return {"action": "rotate", "state": direction, "id": cid}
-        return {"action": "push", "state": "down", "id": cid}
-
-    return None
-
-
-def build_synthetic_event(control_id: str, *, direction: str | None = None) -> NormalizedEvent | None:
-    """The event a device delivers for a press of ``control_id`` (or a turn, for a knob with a
-    ``direction``); ``None`` if unsupported. Button ids are the ones the Loupedeck backend reports
-    (``circle``, ``1``...), which :func:`~open_loupedeck.control_ids.control_ids_for_lookup` maps
-    to ``btn_*``."""
-
-    cid = (control_id or "").strip()
-    if not cid:
-        return None
-    low = cid.lower()
-    if low in ("strip_left", "strip_right", "left", "right"):
-        return None
-    raw: dict[str, Any] = {"synthetic": True, "control_id": cid}
-    m = _TOUCH.match(cid)
-    if m:
-        return NormalizedEvent(kind="touch", id=int(m.group(1)), edge="down", raw=raw)
-    if cid == "btn_circle" or cid == "circle":
-        return NormalizedEvent(kind="button", id="circle", edge="down", raw=raw)
-    if cid == "btn_0":
-        return NormalizedEvent(kind="button", id="btn_circle", edge="down", raw=raw)
-    m = _BTN_NUM.match(cid)
-    if m:
-        return NormalizedEvent(kind="button", id=m.group(1), edge="down", raw=raw)
-    if cid in KNOB_ENCODER_IDS:
-        if direction in ("left", "right"):
-            return NormalizedEvent(kind="knob", id=cid, edge=direction, raw=raw)  # type: ignore[arg-type]
-        return NormalizedEvent(kind="button", id=cid, edge="down", raw=raw)
-    return None
+    if direction in ("left", "right"):
+        return {"action": "rotate", "state": direction, "id": lid}
+    return {"action": "push", "state": "down", "id": lid}

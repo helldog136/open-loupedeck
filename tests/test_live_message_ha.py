@@ -34,7 +34,7 @@ def _run(coro):
 
 
 def _raw_with_button(action: dict) -> dict:
-    return {"pages": [{"id": 0, "name": "Page 1", "buttons": {"touch_0": {"action": action}}}]}
+    return {"pages": [{"id": 0, "name": "Page 1", "controls": {"key_0_0": {"action": action}}}]}
 
 
 def test_ha_sensor_params_from_entry_extracts_non_type_fields():
@@ -68,7 +68,7 @@ def test_refresh_live_messages_renders_ha_sensor_default_template():
     changed = _run(go())
 
     assert changed is True
-    assert runtime.live_message_text["p0:touch_0"] == "21.5°C"
+    assert runtime.live_message_text["p0:key_0_0"] == "21.5°C"
     assert ha.calls == ["sensor.temp"]
 
 
@@ -88,7 +88,7 @@ def test_refresh_live_messages_respects_custom_template_and_caches_between_calls
 
     _run(go())
 
-    assert runtime.live_message_text["p0:touch_0"] == "Humidity: 55%"
+    assert runtime.live_message_text["p0:key_0_0"] == "Humidity: 55%"
     assert ha.calls == ["sensor.hum"]
 
 
@@ -103,7 +103,7 @@ def test_refresh_live_messages_ha_sensor_unavailable_entity_shows_dash():
 
     _run(go())
 
-    assert runtime.live_message_text["p0:touch_0"] == "—"
+    assert runtime.live_message_text["p0:key_0_0"] == "—"
 
 
 def test_refresh_live_messages_ha_sensor_fetch_error_does_not_raise():
@@ -118,7 +118,7 @@ def test_refresh_live_messages_ha_sensor_fetch_error_does_not_raise():
 
     _run(go())  # must not raise
 
-    assert runtime.live_message_text["p0:touch_0"] == "—"
+    assert runtime.live_message_text["p0:key_0_0"] == "—"
 
 
 def test_refresh_live_messages_renders_ha_weather_default_template():
@@ -136,7 +136,7 @@ def test_refresh_live_messages_renders_ha_weather_default_template():
 
     _run(go())
 
-    assert runtime.live_message_text["p0:touch_0"] == "sunny\n21.5°C"
+    assert runtime.live_message_text["p0:key_0_0"] == "sunny\n21.5°C"
 
 
 def test_refresh_live_messages_ha_actions_without_ha_client_do_not_raise():
@@ -149,4 +149,4 @@ def test_refresh_live_messages_ha_actions_without_ha_client_do_not_raise():
 
     _run(go())  # ha=None must degrade gracefully, not raise
 
-    assert runtime.live_message_text["p0:touch_0"] == "—"
+    assert runtime.live_message_text["p0:key_0_0"] == "—"

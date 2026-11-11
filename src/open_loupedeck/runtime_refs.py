@@ -65,7 +65,7 @@ class AgentRuntimeRefs:
     simulate_event: Callable[[Any], Awaitable[None]] | None = None
     # Set by run_agent: same, from a driver-native message dict (Loupedeck callback shape); compatibility.
     simulate_raw_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None
-    # UI health markers: storage_key -> short reason (touch keys use "p{page}:touch_N").
+    # UI health markers: storage_key ("p{page}:<control id>" / "g:<control id>") -> short reason.
     control_error: dict[str, str] = field(default_factory=dict)
     control_error_updated_at: dict[str, float] = field(default_factory=dict)
     # control_id -> skin_animation_tick at the moment of press, for a control's `press_animation`.
