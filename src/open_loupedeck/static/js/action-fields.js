@@ -252,22 +252,6 @@ export function fillActionFieldsInContainer(container, action, type) {
   }
 }
 
-/** When Advanced JSON overrides the form, still copy non-empty asset path fields from the form (Browse… only updates inputs). */
-export function mergeAssetFieldValuesFromForm(container, type, action) {
-  if (!action || typeof action !== "object" || Array.isArray(action)) return action;
-  const spec = getSpec(type);
-  if (!spec || !spec.fields || !container) return action;
-  for (const f of spec.fields) {
-    if (f.input !== "asset") continue;
-    const el = actionFieldEl(container, f);
-    if (!el) continue;
-    const raw = String(el.value).trim();
-    if (!raw) continue;
-    action[f.name] = raw;
-  }
-  return action;
-}
-
 export function buildActionFromFormIn(container, type) {
   if (!type) return null;
   const spec = getSpec(type);
