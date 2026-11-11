@@ -2,7 +2,7 @@
 
 Starts nothing: point it at an already running instance, ideally on a scratch config
 (``python -m open_loupedeck --config <scratch>/config.yaml --web 127.0.0.1:8775 --no-device``).
-It loads the page, switches both tabs, selects a touch key, picks an action type in the action
+It loads the page, switches both tabs, selects a key, picks an action type in the action
 picker (which autosaves), then presses Ctrl+Z and checks the saved config is back to how it started.
 Any console error, uncaught page error or failed request fails the run (exit code 1); otherwise it
 prints ``OK``.
@@ -24,11 +24,14 @@ from urllib.parse import urlsplit
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-DEFAULT_CHROMIUM = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
+DEFAULT_CHROMIUMS = (
+    "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome",
+    "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+)
 
 
 def fetch_config(page) -> dict:
-    return page.evaluate("fetch('/api/config').then((r) => r.json())")
+    return page.evaluate("fetch('/api/config?format=v2').then((r) => r.json())")
 
 
 def main() -> int:
@@ -44,7 +47,7 @@ def main() -> int:
     args = ap.parse_args()
     base = args.base_url.rstrip("/")
     origin = "{0.scheme}://{0.netloc}".format(urlsplit(base))
-    chromium = args.chromium or (DEFAULT_CHROMIUM if os.path.exists(DEFAULT_CHROMIUM) else None)
+    chromium = args.chromium or next((c for c in DEFAULT_CHROMIUMS if os.path.exists(c)), None)
 
     errors: list[str] = []
 
@@ -103,9 +106,9 @@ def main() -> int:
             page.click("#tabBtnButtons")
             page.wait_for_selector("#tabPanelButtons:not([hidden])")
 
-            step("select touch_0")
-            page.click('.dk-key[data-cid="touch_0"]')
-            page.wait_for_selector('#keyEditorBlock .insp-view[data-control="touch_0"] .pk-act')
+            step("select key_0_0 (top-left key)")
+            page.click('.dk-key[data-cid="key_0_0"]')
+            page.wait_for_selector('#keyEditorBlock .insp-view[data-control="key_0_0"] .pk-act')
 
             step("pick an action type")
             selected = '#keyEditorBlock .pk-act[aria-selected="true"]'
