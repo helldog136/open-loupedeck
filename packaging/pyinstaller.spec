@@ -8,6 +8,8 @@ macOS output: dist/open-loupedeck.app (a proper double-clickable bundle, plus th
 dist/open-loupedeck/ onedir tree it was built from).
 """
 
+import ctypes.util
+import os
 import re
 import sys
 from pathlib import Path
@@ -63,12 +65,62 @@ hiddenimports = [
     "pynput.keyboard._uinput",
     # Device backends are imported lazily by open_loupedeck.devices.registry.
     "open_loupedeck.devices.loupedeck.backend",
+    "open_loupedeck.devices.streamdeck.backend",
+    "open_loupedeck.devices.virtual.backend",
+    # python-elgato-streamdeck, imported lazily by the Stream Deck backend.
+    "StreamDeck.DeviceManager",
+    "StreamDeck.ImageHelpers.PILHelper",
+    "StreamDeck.Transport.LibUSBHIDAPI",
 ]
+
+
+def _hidapi_binaries() -> list[tuple[str, str]]:
+    """The native hidapi library python-elgato-streamdeck loads with ctypes (Stream Deck backend).
+
+    Bundled at the root of the app under a name the library tries (``hidapi.dll`` on Windows,
+    ``libhidapi.dylib`` on macOS, ``libhidapi-libusb.so.0`` on Linux); PyInstaller's ctypes hook
+    retries a failed bare-name load from the bundle. ``OPEN_LOUPEDECK_HIDAPI`` names the file
+    explicitly (the Windows release job downloads it); otherwise the system's copy is used. Not
+    found: the build goes on and the Stream Deck backend then needs hidapi installed on the system.
+    """
+
+    names = {"win32": ("hidapi", "hidapi.dll"), "darwin": ("hidapi", "libhidapi.dylib")}
+    find, dest_name = names.get(sys.platform, ("hidapi-libusb", "libhidapi-libusb.so.0"))
+    src = os.environ.get("OPEN_LOUPEDECK_HIDAPI") or ""
+    if not src:
+        found = ctypes.util.find_library(find) or ""
+        if found and not os.path.isabs(found):
+            # Linux find_library returns a soname: look for it in the usual library directories.
+            for d in ("/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/usr/lib64", "/usr/lib"):
+                if os.path.exists(os.path.join(d, found)):
+                    found = os.path.join(d, found)
+                    break
+        if os.path.isabs(found):
+            src = found
+        elif sys.platform == "darwin":
+            for prefix in ("/opt/homebrew", "/usr/local"):
+                cand = os.path.join(prefix, "lib", "libhidapi.dylib")
+                if os.path.exists(cand):
+                    src = cand
+                    break
+    if not src or not os.path.isfile(src):
+        print("WARNING: hidapi not found; the Stream Deck backend will need it installed on the system.")
+        return []
+    real = os.path.realpath(src)
+    staged = Path(workpath) / "hidapi" / dest_name
+    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.write_bytes(Path(real).read_bytes())  # copied under the name the library looks for
+    print(f"Bundling hidapi: {real} as {dest_name}")
+    return [(str(staged), ".")]
+
+
+binaries = _hidapi_binaries()
 
 a = Analysis(
     [str(REPO_ROOT / "packaging" / "entrypoint.py")],
     pathex=[str(REPO_ROOT / "src")],
     datas=datas,
+    binaries=binaries,
     hiddenimports=hiddenimports,
     hookspath=[],
     noarchive=False,
