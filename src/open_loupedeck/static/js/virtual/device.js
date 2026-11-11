@@ -23,13 +23,10 @@
 
 import { connectVirtual } from "./connection.js";
 import { createControl } from "./controls.js";
+import { PAD, fitUnit, keyBed, keyCoord, placeAt, visualOrder } from "../device-layout.js";
 
-const PAD = 0.45; // bezel width around the layout, in units
-const BED_PAD = 0.07; // recessed bed around the key grid, in units
 const MAX_UNIT = 112; // px of one layout unit (a key) at most
 const MIN_UNIT = 12;
-
-const KIND_ORDER = { key: 0, strip: 1, knob: 2, slider: 3, button: 4 };
 
 function globalT() {
   return typeof window.t === "function" ? window.t : (k) => k;
@@ -40,16 +37,6 @@ function mk(tag, cls, text) {
   if (cls) node.className = cls;
   if (text !== undefined) node.textContent = text;
   return node;
-}
-
-/** Visual order (top to bottom, left to right) = Tab order. */
-function visualOrder(controls) {
-  return [...controls].sort((a, b) => {
-    const dy = Math.round(a.position.y * 4) - Math.round(b.position.y * 4);
-    if (dy) return dy;
-    const dx = Math.round(a.position.x * 4) - Math.round(b.position.x * 4);
-    return dx || (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9);
-  });
 }
 
 export function mountVirtualDevice(container, options = {}) {
@@ -136,8 +123,8 @@ export function mountVirtualDevice(container, options = {}) {
   function labelFor(kind, n, ctl) {
     if (kind === "key" && snap) {
       const cols = snap.model.grid.cols || 1;
-      const m = /^key_(\d+)_(\d+)$/.exec(ctl.id);
-      if (m) return tr("virtual.control.key", { n: Number(m[2]) * cols + Number(m[1]) + 1 });
+      const at = keyCoord(ctl.id);
+      if (at) return tr("virtual.control.key", { n: at[1] * cols + at[0] + 1 });
     }
     return tr(`virtual.control.${kind}`, { n });
   }
@@ -169,16 +156,9 @@ export function mountVirtualDevice(container, options = {}) {
     stage.style.setProperty("--lh", model.layout.height);
     ctrls.clear();
 
-    const keys = model.controls.filter((c) => c.kind === "key");
-    if (keys.length) {
-      const x0 = Math.min(...keys.map((c) => c.position.x));
-      const y0 = Math.min(...keys.map((c) => c.position.y));
-      const x1 = Math.max(...keys.map((c) => c.position.x + c.position.w));
-      const y1 = Math.max(...keys.map((c) => c.position.y + c.position.h));
-      bed.style.setProperty("--x", x0 - BED_PAD);
-      bed.style.setProperty("--y", y0 - BED_PAD);
-      bed.style.setProperty("--w", x1 - x0 + 2 * BED_PAD);
-      bed.style.setProperty("--h", y1 - y0 + 2 * BED_PAD);
+    const bedRect = keyBed(model);
+    if (bedRect) {
+      placeAt(bed, bedRect);
       stage.append(bed);
     }
 
@@ -203,8 +183,8 @@ export function mountVirtualDevice(container, options = {}) {
     const all = [...keyEls.values()];
     const at = new Map();
     for (const [id, node] of keyEls) {
-      const m = /^key_(\d+)_(\d+)$/.exec(id);
-      if (m) at.set(`${m[1]},${m[2]}`, node);
+      const c = keyCoord(id);
+      if (c) at.set(`${c[0]},${c[1]}`, node);
     }
     for (const node of all) node.tabIndex = -1;
     all[0].tabIndex = 0;
@@ -216,8 +196,8 @@ export function mountVirtualDevice(container, options = {}) {
       node.addEventListener("keydown", (e) => {
         const d = moves[e.key];
         if (!d) return;
-        const m = /^key_(\d+)_(\d+)$/.exec(node.dataset.control);
-        const next = m && at.get(`${Number(m[1]) + d[0]},${Number(m[2]) + d[1]}`);
+        const c = keyCoord(node.dataset.control);
+        const next = c && at.get(`${c[0] + d[0]},${c[1] + d[1]}`);
         e.preventDefault();
         if (next) next.focus();
       });
@@ -356,8 +336,6 @@ export function mountVirtualDevice(container, options = {}) {
 
   function fit() {
     if (!snap || !stage) return;
-    const W = snap.model.layout.width + 2 * PAD;
-    const H = snap.model.layout.height + 2 * PAD;
     const availW = root.clientWidth || container.clientWidth || 320;
     let availH = Infinity;
     if (opts.fit !== "container") {
@@ -365,7 +343,7 @@ export function mountVirtualDevice(container, options = {}) {
       const reserve = (opts.showStatus ? status.offsetHeight + 14 : 0) + 24;
       availH = Math.max(180, window.innerHeight - top - reserve);
     }
-    const u = Math.max(MIN_UNIT, Math.min(MAX_UNIT, availW / W, availH / H));
+    const u = fitUnit(snap.model, availW, availH, { min: MIN_UNIT, max: MAX_UNIT });
     stage.style.setProperty("--u", `${u.toFixed(2)}px`);
   }
 
