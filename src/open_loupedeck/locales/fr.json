@@ -938,6 +938,6 @@
   "inspector.field.goto_page.more": "Autres façons de désigner la page",
   "svc.general.family.loupedeck": "Loupedeck",
   "svc.general.family.virtual": "Virtuel (dans le navigateur)",
-  "svc.general.model_connected": "C’est le {name} branché qui est édité.",
-  "svc.general.model_editing": "Édition : {name}."
+  "svc.general.model_connected": "L’éditeur montre le {name} branché.",
+  "svc.general.model_editing": "Aucun appareil branché : l’éditeur montre un {name}."
 }

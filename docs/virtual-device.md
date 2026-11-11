@@ -74,6 +74,10 @@ the agent is not running a virtual device, 400 for a non-virtual model).
 * Buttons glow with their LED colour; sliders drag or use arrows, Page Up/Down, Home/End.
 * Screen brightness dims the key images. The layout scales to the window (down to 400 px wide).
 
+The editor (`/`) draws the same model with the shared geometry of `static/js/device-layout.js`; set
+`device.model: virtual_mega` (Services > General > Hardware) to edit a mega deck without hardware.
+`scripts/ui_models_check.py` drives the editor on the three virtual models.
+
 ## Tests
 
 `tests/test_virtual_device.py`: model sanity, the backend over the protocol, input validation, the

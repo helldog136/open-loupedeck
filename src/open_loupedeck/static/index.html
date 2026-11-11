@@ -208,10 +208,11 @@
             </div>
             <div class="svc-rows">
               <div class="svc-row">
-                <span class="svc-row-label"><label for="deviceModel" data-i18n="svc.general.model">Hardware</label> <span class="hint svc-row-hint" id="deviceModelHint" role="status"></span></span>
+                <label class="svc-row-label" for="deviceModel" data-i18n="svc.general.model">Hardware</label>
                 <select id="deviceModel" aria-describedby="deviceModelHint">
                   <option value="auto" data-i18n="svc.general.model_auto">Detect automatically</option>
                 </select>
+                <p class="hint svc-row-hint" id="deviceModelHint" role="status"></p>
               </div>
               <label class="svc-row">
                 <span class="svc-row-label" data-i18n="svc.general.autostart">Launch at startup</span>

@@ -938,6 +938,6 @@
   "inspector.field.goto_page.more": "Other ways to name the page",
   "svc.general.family.loupedeck": "Loupedeck",
   "svc.general.family.virtual": "Virtual (in the browser)",
-  "svc.general.model_connected": "The connected {name} is the one being edited.",
-  "svc.general.model_editing": "Editing: {name}."
+  "svc.general.model_connected": "The editor shows the connected {name}.",
+  "svc.general.model_editing": "No device connected: the editor shows a {name}."
 }

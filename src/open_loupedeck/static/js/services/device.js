@@ -47,11 +47,10 @@ export function syncModelHint() {
   const hint = $("#deviceModelHint");
   if (!hint) return;
   const dev = connectedModel();
-  hint.textContent = dev
-    ? t("svc.general.model_connected", { name: dev.name })
-    : state.model
-      ? t("svc.general.model_editing", { name: state.model.name })
-      : "";
+  const auto = !state.cfg.device || !state.cfg.device.model || state.cfg.device.model === "auto";
+  if (dev) hint.textContent = t("svc.general.model_connected", { name: dev.name });
+  else if (auto && state.model) hint.textContent = t("svc.general.model_editing", { name: state.model.name });
+  else hint.textContent = "";
 }
 
 /** `onChange()` after `device.model` changed (the caller re-lays out the editor and saves). */
