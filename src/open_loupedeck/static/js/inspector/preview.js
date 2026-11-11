@@ -14,6 +14,8 @@ import { state } from "../state.js";
 export async function fetchKeyPreview(entry, cid, opts = {}) {
   // The edited model gives the control's pixel size (keys of a mega deck are smaller than a Live S one's).
   const body = { entry: entry || {}, control_id: cid || "key_0_0", model: state.model ? state.model.id : undefined };
+  const lang = window.i18n && window.i18n.lang;
+  if (lang) body.lang = lang;
   if (opts.offline) body.offline = true;
   if (opts.liveValue != null) body.live_value = String(opts.liveValue);
   if (opts.animationFrame != null) body.animation_frame = opts.animationFrame;
