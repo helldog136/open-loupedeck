@@ -37,10 +37,12 @@ device:
   path: ""
   model: auto
 
+config_version: 2
+global: {}
 pages:
   - name: Main
-    buttons:
-      touch_0:
+    controls:
+      key_0_0:
         text: BRB
         background: "#222238"
         text_color: "#ffffff"
@@ -48,7 +50,6 @@ pages:
           type: obs.set_scene
           scene: "Starting Soon"
 
-global_buttons: {}
 bindings: []
 plugin_modules: []
 ```
@@ -57,11 +58,18 @@ plugin_modules: []
 
 ## Dispatch order (how an input picks actions)
 
-1. **Knob rotation** — the role of that knob on the **current deck page** (`pages[].knobs.<id>.rotate`) runs; no role = nothing happens. No `global_buttons` / `bindings` lookup for knobs. (Only for a config without deck pages: a legacy `knob_pages` stack is used.)
-2. **Knob push** — `pages[].knobs.<id>.press` of the current page (no role = nothing); feedback text flashes on the neighbouring touch key (`knob_page_feedback`).
-3. **Loupedeck Live S physical keys** — a short press on `btn_circle`, `btn_1`, `btn_2`, `btn_3` switches the deck page **index** (0–3 only) and redraws the skin. This path does **not** run `pages[].buttons` actions for those keys — the hardware is reserved for page switching, and only the first four pages are reachable this way (the config window's page rail marks them ①–④).
-4. **Otherwise** — `actions_for_page_event`: for `touch_*`, only the current page's `buttons` map is used; for non-touch controls (strips, side buttons), `global_buttons` is tried first if it has real actions, then the current page's `buttons` for that id.
-5. If still nothing — `bindings` (legacy): first matching rule wins.
+Every control is identified by a model-independent id: `key_<col>_<row>` (display keys,
+zero-based, `key_0_0` = top-left), `knob_<n>`, `button_<n>`, `strip_<n>` (see
+[`devices-features.md`](devices-features.md)). One rule for every control: **the binding of the
+current page (`pages[].controls.<id>`) if there is one, else the global one (`global.<id>`)**.
+
+1. **Knob rotation / push** — the knob's binding (`rotate` / `press`); no binding = nothing
+   happens. A short feedback text flashes on the knob's feedback key (`knob_page_feedback`). (Only
+   for a config without deck pages: a legacy `knob_pages` stack is used.)
+2. **Key / button press** — the binding's `action` / `actions`. The Loupedeck Live S round buttons
+   open pages 1–4 because their default global binding is `agent.goto_page` (index 0–3): change it,
+   or override it on a page, like any other binding.
+3. If still nothing — `bindings` (flat rules): first matching rule wins.
 
 Then `run_actions` executes the list (OBS, Home Assistant, HTTP, sound, …) in order.
 
@@ -76,8 +84,9 @@ Then `run_actions` executes the list (OBS, Home Assistant, HTTP, sound, …) in 
 | `obs` | OBS WebSocket host, port, password. |
 | `ha` | Home Assistant base URL + long-lived access token. |
 | `device` | Serial port path, baud rate, hardware model. |
-| `pages` | Primary UI: list of pages, each with a `buttons` map and optional `knobs` roles. |
-| `global_buttons` | Controls shared across pages: knobs, strips, side buttons (not the center touch grid). |
+| `config_version` | Schema version (2). A config without it is migrated on load (backup: `open-loupedeck-backups/<name>.pre-v2`). |
+| `global` | Bindings active on every page (control id -> binding), unless the page overrides them. |
+| `pages` | List of pages, each with a `controls` map (control id -> binding) overriding `global`. |
 | `knob_page_feedback` | `duration_sec` (0–2 s) of the feedback text drawn next to a knob after a turn / push. |
 | `legacy_knob_pages` | Old per-knob page stacks kept after migration (not used at run time). |
 | `bindings` | Legacy event → actions list (fallback when `pages` matching fails). |
@@ -111,7 +120,7 @@ device:
   # baudrate: 460800  # optional; try if handshake fails
 ```
 
-`auto` picks the driver from USB VID `0x2ec2` + PID (`0x0006` = Live S, `0x0004` = Live) when possible. `live_s` = 5×3 touch, two knobs, four physical keys, any number of `pages` (only indices 0–3 reachable from hardware). `live` = original Loupedeck Live (4×3 touch + strips + more buttons/knobs).
+`auto` picks the driver from USB VID `0x2ec2` + PID (`0x0006` = Live S, `0x0004` = Live) when possible. `live_s` = 5×3 keys, two knobs (`knob_0`, `knob_1`), four round buttons (`button_0` = circle, `button_1`–`button_3` on the right), any number of `pages`. `live` = original Loupedeck Live (4×3 keys, `strip_0`/`strip_1`, `knob_0`–`knob_5`, `button_0`–`button_7`). The key coordinates of the config refer to this model's grid (`auto` = Live S).
 
 ### `pages`
 
@@ -119,11 +128,11 @@ device:
 pages:
   - id: 0
     name: Scenes
-    buttons:
-      touch_0:
+    controls:
+      key_0_0:
         text: Live
         action: { type: obs.set_scene, scene: "Live" }
-      touch_1:
+      key_1_0:
         text: BRB
         actions:
           - { type: http.request, method: GET, url: "https://example.com/alert" }
@@ -132,21 +141,24 @@ pages:
 
 `action` (single object) or `actions` (list, runs in order) — use a list for a macro.
 
-### `global_buttons`
+### `global`
 
-Strips and physical side buttons — same shape as under `pages[].buttons` (knobs: see `pages[].knobs` below). Touch cells (`touch_*`) always belong under `pages[].buttons`, never here.
+Same shapes as `pages[].controls`, active on every page that has no binding of its own for that
+control (keys, buttons, strips, knobs alike).
 
 ```yaml
-global_buttons:
-  strip_left: { text: Prev, action: { type: agent.prev_page } }
+global:
+  button_0: { action: { type: agent.goto_page, index: 0 }, button_color: "#3b6bff" }
+  strip_0: { text: Prev, action: { type: agent.prev_page } }   # Loupedeck Live
+  knob_0: { rotate: { duo: system_volume } }                    # a knob role on every page
 ```
 
-Lookup: for a non-touch control, `global_buttons.<id>` wins if it has an action; otherwise the current page's `buttons.<id>` is used.
+A binding for a control the connected device does not have is kept and simply inactive.
 
-### Knobs (`pages[].knobs`)
+### Knobs (`knob_<n>` bindings)
 
-Knobs have no pages of their own: their role depends on the deck page shown. Full model, duo list and
-migration: [`docs/ui-redesign/knobs-model.md`](ui-redesign/knobs-model.md).
+Knobs have no pages of their own: their role depends on the deck page shown (page binding, else
+global). Full model, duo list and migration: [`docs/ui-redesign/knobs-model.md`](ui-redesign/knobs-model.md).
 
 ```yaml
 knob_page_feedback:
@@ -154,11 +166,11 @@ knob_page_feedback:
 
 pages:
   - name: Main
-    knobs:
-      knobTL:
+    controls:
+      knob_0:
         rotate: { duo: system_volume, params: { step: 5 } }   # linked left/right (-/+)
         press: { type: sound.mute_toggle }                     # optional
-      knobCL:
+      knob_1:
         rotate:                                                # advanced: split left / right
           left: { type: agent.prev_page }
           right: { type: agent.next_page }
@@ -167,16 +179,27 @@ pages:
 A legacy top-level `knob_pages` is migrated on load: its first knob page becomes the knob's role on every deck page
 without one, and the original is kept under `legacy_knob_pages`.
 
-### `bindings` (legacy)
+### Legacy ids (configs without `config_version`)
+
+Older configs used `pages[].buttons` / `pages[].knobs` / `global_buttons` and Loupedeck ids. They
+are converted once on load (after a backup copy): `touch_N` -> `key_<N % cols>_<N // cols>` on the
+grid of `device.model` (`auto` = Live S, 5 columns), `knobTL`..`knobBR` -> `knob_0`..`knob_5`,
+`btn_circle` -> `button_0`, `btn_N` -> `button_N`, `strip_left` / `strip_right` -> `strip_0` /
+`strip_1`. Entries the old runtime ignored keep their old id (inactive, never deleted).
+
+### `bindings` (flat rules)
 
 ```yaml
 bindings:
-  - match: { type: touch, key: 0, edge: down }   # type: touch | button | knob
+  - match: { control: key_0_0 }                  # type: press (default) | rotate (+ direction)
+    actions:
+      - { type: obs.set_scene, scene: "Fallback scene" }
+  - match: { type: touch, key: 0, edge: down }   # legacy form, still read: touch | button | knob
     actions:
       - { type: obs.set_scene, scene: "Fallback scene" }
 ```
 
-Only used when `pages` matching returns nothing. First matching rule wins. Prefer `pages` + `global_buttons` for new configs.
+Only used when no page / global binding has actions. First matching rule wins. Prefer `pages` + `global` for new configs.
 
 ### `spotify`
 
@@ -220,7 +243,7 @@ Every value under `buttons` is a mapping of optional visuals plus one or more ac
 | `background`, `text_color` | Solid color (`#rrggbb` or CSS name). |
 | `font_size`, `font_file` | Optional typography (`.ttf`/`.otf`/`.ttc`, path under `library/fonts/`). |
 | `graphic_text_layout` | `split` (graphic on top, text below) or `overlay` (text on top of the graphic) — only relevant when both a graphic and text are set. |
-| `button_color` | Live S physical keys only: LED color for `btn_circle`, `btn_1`–`btn_3`. |
+| `button_color` | Buttons with an LED (Live S `button_0`–`button_3`): LED color. |
 
 ### Gradients and animations
 
@@ -422,7 +445,7 @@ Use `--no-device` until permissions work.
 
 | Symptom | Check |
 |---|---|
-| No actions on key | Wrong control id (canonical ids only); empty `action`/`actions`; Live S `btn_circle`/`btn_1-3` are reserved for page switching; knob rotation / push only via `pages[].knobs` (role of the page shown). |
+| No actions on key | Wrong control id (`key_<col>_<row>`, `button_<n>`, `knob_<n>`; a control the device lacks is inactive); empty `action`/`actions`; a page binding overrides the global one (e.g. a Live S round button overridden on a page no longer opens its page there). |
 | OBS errors | `obs.password`, firewall, WebSocket server enabled on `obs.port`. |
 | Home Assistant errors | `ha.base_url` reachable from this machine, `ha.token` valid (Services tab shows Connected/Offline). |
 | Overlay blank | Browser source URL/port; agent running with `--web`; file under `library/` and path correct in YAML. |

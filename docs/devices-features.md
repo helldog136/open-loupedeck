@@ -45,11 +45,66 @@ events delivered as `ControlEvent(control_id, type, value)` where `type` is `pre
 touch|value`; unplug signal. The virtual device backend implements the same protocol, with events
 coming from the browser and images going to the browser.
 
+## Config schema (`config_version: 2`, lot 1)
+```yaml
+config_version: 2
+device: {model: auto}          # auto | live_s | live: the grid key coordinates refer to
+global:                        # control id -> binding, active on every page
+  button_0: {action: {type: agent.goto_page, index: 0}, button_color: "#3b6bff"}
+  knob_0: {rotate: {duo: system_volume}}          # a knob role on every page
+pages:
+  - name: Main
+    controls:                  # control id -> binding, overrides `global` on this page
+      key_0_0: {text: BRB, action: {type: obs.set_scene, scene: BRB}}
+      knob_0: {rotate: {duo: spotify_volume}, press: {type: spotify.play_pause}}
+bindings: []                   # optional flat rules, last resort (legacy form still read)
+```
+* One map per scope, keyed by control id: `global` and `pages[].controls` (they replace
+  `global_buttons`, `pages[].buttons` and `pages[].knobs`). The entry shape follows the control's
+  kind: key / button / strip = `action`|`actions` + look fields (+ `button_color` for a button
+  LED); knob = `rotate` (duo or `left`/`right`) + `press` + `feedback_sec`.
+* Resolution (`bindings.resolve_binding`): the page entry if it is a mapping, else the global
+  one, for every kind (images, LEDs, presses, knob roles). Runtime caches use the binding's
+  storage key `p<page>:<id>` / `g:<id>`.
+* Default bindings: buttons with an LED output open pages 1..n (`agent.goto_page`), created when
+  a config is created or migrated. On the Live S that is `button_0..3`, as before.
+* Flat `bindings`: `match: {control: key_0_0, type: press}` (or `rotate` + `direction`), or the
+  legacy `type: touch|button|knob` rules, mapped on the device model.
+* Kept as is: any id that is not a control of the device (another model's control, a legacy id
+  that was inactive, an unknown key) stays in its map and never resolves.
+
+### Web UI compatibility (until lot 3)
+The current front-end still edits the legacy shape. `GET /api/config` returns a *view* of the v2
+config in that shape (`config_migrate.to_ui_view`, for the model the UI lays out: `device.model`,
+else the connected device, else Live S); `PUT /api/config` accepts that view (converted back by
+the migration, `migrate_config(to_ui_view(c)) == c`), a legacy config, or a v2 one as is
+(`config_version: 2`). Bindings without a legacy equivalent ride along in the view under their
+control id, `_v2_inactive` (inactive ids), `_v2_action(s)` (a page button whose action is not its
+default) and `_v2_unbound` (page buttons without a global binding). `GET /api/config?format=v2`
+returns the stored document. The other endpoints (`simulate_press`, `preview_key`, `/api/packs`,
+`touch_errors` in `/api/status`) accept or emit legacy ids for the UI and accept control ids.
+
 ## Migration
 Config gets a `config_version`. Legacy configs (`touch_N`, `knobTL`, `btn_circle`, `global_buttons`,
 per-knob legacy pages already migrated to `pages[].knobs`) are converted once at load, after a backup
 copy of the file, using the grid of `device.model` (`auto` → Live S). Idempotent, covered by tests on
 realistic configs (`config.example.yaml`, `examples/`, packs). The old ids stay readable forever.
+
+Implemented in `config_migrate.migrate_config` (lot 1), run by `ConfigState` when it loads a file
+without `config_version` (backup first: `open-loupedeck-backups/<name>.pre-v2`, never rotated nor
+overwritten), and in memory for any legacy body the API receives:
+* `touch_N` -> `key_<N % cols>_<N // cols>` on the grid of `device.model` (`auto` -> Live S);
+  `knobTL..knobBR` -> `knob_0..5`, `btn_circle` (and `btn_0`) -> `button_0`, `btn_N` ->
+  `button_N`, `strip_left`/`left` -> `strip_0`, `strip_right`/`right` -> `strip_1` (same on every
+  Loupedeck: a Live id in a Live S config becomes an inactive control there).
+* Legacy runtime rules are preserved, not reinterpreted: an entry the old runtime never used keeps
+  its old id (inactive): touch keys / knobs in `global_buttons`, strips / Live S page buttons in a
+  page, a page round-button entry whose global one had actions (the old global-first rule), keys
+  beyond the grid. The Live S page buttons get `action: agent.goto_page N`; an action they had
+  (never run) is kept as `legacy_action(s)`.
+* Legacy `knob_pages` are first turned into page knob roles (as before), then into `controls`.
+* Packs (`packs/*.json`) are written in control ids for a 5 x 3 grid (`grid`); on another device
+  a key keeps its coordinates and is dropped (with a note) when it is outside the grid.
 
 ## Plan (lots, in order)
 1. Model + ids + bindings core + migration + runtime on control ids (backend, no UI change beyond what

@@ -12,16 +12,16 @@ stays inside one backend package. Today there is one backend, `loupedeck` (Live 
 
 ```
 devices/
-  model.py        DeviceModel, KeyGrid, ControlSpec, Capabilities   (pure data)
+  model.py        DeviceModel, Control, Position, control id helpers   (pure data)
   base.py         DeviceBackend protocol, BackendFactory, DiscoveredDevice
   registry.py     registered backends, discover_devices(), open_backend(settings)
   loupedeck/
-    models.py     LOUPEDECK_LIVE, LOUPEDECK_LIVE_S descriptors
+    models.py     LOUPEDECK_LIVE, LOUPEDECK_LIVE_S descriptors (+ legacy-id tables)
     backend.py    LoupedeckBackend (wraps the driver), open_loupedeck(), factory
     live_s.py     Live S driver subclass (touch geometry, 480x270 framebuffer)
     patches.py    upstream driver fixes (init, serial reader exits on unplug)
     discovery.py  USB VID/PID lookup of serial ports
-    events.py     driver callback dict -> NormalizedEvent
+    events.py     driver callback dict -> ControlEvent
 ```
 
 The old module paths (`hardware/live_s_device.py`, `loupedeck_patch.py`,
@@ -29,25 +29,39 @@ The old module paths (`hardware/live_s_device.py`, `loupedeck_patch.py`,
 
 ## Model descriptor (`DeviceModel`)
 
+The feature model of `docs/devices-features.md`: a model declares the controls it has; nothing
+device-wide except `brightness`.
+
 | Field | Meaning |
 | --- | --- |
 | `id` | Stable model id (`loupedeck_live`, `loupedeck_live_s`). |
 | `family` | Backend that drives it (`loupedeck`). |
 | `name` | Display name. |
-| `grid` | `KeyGrid(rows, cols, key_size, id_prefix="touch_")`: key `n` is `touch_n`, numbered row by row. |
-| `controls` | `ControlSpec(id, kind, name, size)` for everything outside the grid; `kind` is `button`, `knob`, `strip` or `led_button`; `size` is set when the control takes an image. |
-| `capabilities` | `brightness`, `button_led`, `touch`, `knobs`. |
+| `layout` | Abstract size `(width, height)`; control positions use these units (a key is 1 x 1). |
+| `controls` | `Control(id, kind, name, position, inputs, image, led, default_led, feedback_key)`. |
+| `brightness` | The screen brightness can be set. |
 | `config_names` | `device.model` values that select it (`live`, `live_s`); the first is canonical. |
-| `knob_feedback_keys` | Knob id -> the grid key next to it, where knob feedback is flashed. |
-| `page_buttons` | Physical buttons that open deck page 0, 1, 2... directly. |
-| `default_button_rgb` | LED colour of an `led_button` without `button_color`. |
+| `legacy_ids` | `(legacy id, control id)` pairs read by the config migration (`touch_N`, `knobTL`...). |
 
-Control ids are the keys of `config.yaml` (`touch_N`, `knobTL`, `btn_circle`, `btn_1`,
-`strip_left`...). They are part of the config format: **never rename them** for an existing
-model, or existing configs stop working.
+A `Control` has a `kind` (`key`, `button`, `knob`, `slider`, `strip`, `pedal`), a `position`
+(`x, y, w, h`), the `inputs` it emits (`press`, `rotate`, `touch`, `value`) and its outputs:
+`image` (pixel size) and/or `led` (`rgb` | `mono`, with `default_led`). `feedback_key` names the
+display control showing feedback about it; without one, `model.feedback_key_for(id)` takes the
+nearest control with an image output.
 
-`GET /api/device_model` returns the descriptor (`DeviceModel.to_dict()`) of the connected device,
-else of the configured `device.model` (`null` for `auto` without a device).
+Control ids are stable and model-independent: `key_<col>_<row>` (zero-based, column first) for
+display keys, `knob_<n>`, `button_<n>`, `strip_<n>`... numbered by position (left to right, then
+top to bottom). They are the keys of `config.yaml` (`config_version: 2`): **never renumber them**
+for an existing model. `model.problems()` checks a descriptor (ids vs kinds and positions,
+layout bounds, feedback keys, legacy table); the tests run it on every model.
+
+Helpers: `keys()` (row by row), `control(id)`, `controls_of_kind()`, `grid_of_keys()` ->
+`(cols, rows)`, `image_controls()`, `led_controls()`, `image_size(id)`, `nearest_display(id)`,
+`feedback_key_for(id)`, `to_dict()`.
+
+`GET /api/device_model` returns `model` (the connected device's `to_dict()`, else the configured
+`device.model`'s, `null` for `auto` without a device), `config_model` (what the config's key
+coordinates refer to: `auto` -> Live S) and every known model under `models`.
 
 ## Backend (`DeviceBackend`)
 
@@ -57,20 +71,20 @@ backend.path                       # where it was opened (status page, logs)
 backend.is_open / backend.unplugged
 backend.open(); backend.close()
 with backend: ...                  # update lock for a batch of draws
-backend.set_key_image(control_id, pil_image)   # sized with model.key_size_for(control_id)
-backend.set_brightness(pct)                     # 0..100
-backend.set_button_color(control_id, (r, g, b)) # led_button controls
-backend.set_event_callback(fn)     # fn(NormalizedEvent), called from the backend's thread
+backend.set_image(control_id, pil_image)  # controls with an image output, sized model.image_size(id)
+backend.set_led(control_id, (r, g, b))    # controls with an led output
+backend.set_brightness(pct)               # 0..100
+backend.set_event_callback(fn)     # fn(ControlEvent), called from the backend's thread
 backend.set_unplugged_callback(fn) # fn(), once, from any thread (also fired late if already gone)
 ```
 
-Events are `open_loupedeck.events.NormalizedEvent(kind, id, edge, raw)`:
+Events are `open_loupedeck.events.ControlEvent(control_id, type, value, raw)` with `type`
+`press` / `release` (no value), `rotate` (`value` = signed steps, +1 = right), `touch`
+(`value` = `(x, y)`) or `value` (0..1). A knob press is a `press` of the knob. Long press is not
+a hardware capability; it is not derived yet.
 
-- `touch`: `id` is the key index (int), `edge` `down`/`up`;
-- `button`: `id` is a button id understood by `control_ids.control_ids_for_lookup`
-  (`btn_circle`, `btn_3`, or the Loupedeck's bare `circle` / `3`), `edge` `down`/`up`.
-  A knob press is a `button` event whose id is the knob id (`knobTL`);
-- `knob`: `id` is the knob id, `edge` `left`/`right`.
+The agent resolves every event through one rule (`bindings.resolve_binding`: page binding, else
+global) and draws every image / LED output from the same rule (`deck_skin.apply_page_skin`).
 
 The agent (`app.py`) opens the device with `devices.registry.open_backend(settings)`, registers
 the event and unplug callbacks, and on unplug the reconnect loop opens a fresh backend every 2 s.
@@ -79,7 +93,7 @@ the event and unplug callbacks, and on unplug the reconnect loop opens a fresh b
 ## Registry
 
 `devices.registry` keeps one `BackendFactory` per family (`family`, `models`, `discover()`,
-`open(settings)`, `normalize_message(msg)`). Built-in backends are registered lazily, so importing
+`open(settings)`, `normalize_message(msg, model)`). Built-in backends are registered lazily, so importing
 the registry imports no driver.
 
 - `discover_devices()` lists `DiscoveredDevice(backend, path, model)` from every backend.
@@ -87,22 +101,23 @@ the registry imports no driver.
   `auto` (or an unknown value) tries each backend in registration order. With one backend its
   error message is raised unchanged. `device.path` and `device.baudrate` are the backend's
   business (the Loupedeck backend honours them exactly as before).
+- `resolve_model(configured, device)`: the device's model, else `device.model`'s, else the
+  default (Live S); `config_model(configured)` ignores the device.
 - `DeviceRegistry([...])` builds a registry with injected factories (tests).
 
 ## Checklist: adding a device backend
 
-1. **Descriptor.** Create `devices/<family>/models.py` with one `DeviceModel` per model. Pick
-   control ids that match the existing scheme where the hardware matches (`touch_N` for the key
-   grid, `btn_*` for buttons, `knob*` for encoders) so pages, packs and the UI keep working.
-   Fill `capabilities`, `config_names`, `knob_feedback_keys` (if it has knobs) and `page_buttons`
-   (if physical buttons should switch pages).
+1. **Descriptor.** Create `devices/<family>/models.py` with one `DeviceModel` per model: every
+   control with its position, inputs and outputs, `config_names`, and `feedback_key` for knobs
+   whose nearest display is not the right one. Ids follow the model-independent scheme above, so
+   pages, packs and the UI work unchanged. `model.problems()` must be empty.
 2. **Backend class.** Implement every method of `DeviceBackend` (see `devices/base.py`). Keep all
-   driver imports inside the package. `set_key_image` receives an RGBA PIL image already sized
-   with `model.key_size_for(control_id)`; convert it to the device format there. Ignore (log)
-   ids the model cannot draw.
-3. **Events.** Translate native input to `NormalizedEvent` in the backend's thread and pass it to
-   the event callback; drop what is not a press / release / turn. Never block that thread on the
-   agent.
+   driver imports inside the package. `set_image` receives an RGBA PIL image already sized
+   with `model.image_size(control_id)`; convert it to the device format there. Ignore (log)
+   ids the model cannot draw or light.
+3. **Events.** Translate native input to `ControlEvent` in the backend's thread and pass it to
+   the event callback; drop what is not a press / release / turn / touch. Never block that thread
+   on the agent.
 4. **Unplug.** Detect disconnects (read errors, HID removal) and call the unplugged callback once;
    `close()` must be safe afterwards. The agent's reconnect loop does the rest.
 5. **Factory.** Provide a `BackendFactory` (`family`, `models`, `discover()`, `open(settings)`
@@ -112,7 +127,7 @@ the registry imports no driver.
    registry imports backends lazily).
 6. **Config.** Document the new `device.model` values. Existing `live` / `live_s` / `auto`
    configs must keep working untouched.
-7. **Tests.** Add descriptor tests (counts, ids, sizes), a backend test over a fake driver
+7. **Tests.** Add descriptor tests (counts, ids, positions, sizes), a backend test over a fake driver
    (key mapping, events, unplug), and run the agent tests with `tests/fake_backend.FakeBackend`
    built on the new model.
 8. **Hardware check.** Before building on it: every key draws in the right place, presses /

@@ -1,5 +1,8 @@
 # Copy to ~/.config/open-loupedeck/config.yaml
-#
+# Schema version (see docs/devices-features.md, "Config schema"). An older config without it is
+# converted on load; the file as it was is kept in open-loupedeck-backups/<name>.pre-v2.
+config_version: 2
+
 # Web UI: open-loupedeck --config thisfile --web 127.0.0.1:8765
 # Optional: extra Python files that call register_action (see examples/custom_action.py)
 # plugin_modules: []
@@ -39,38 +42,60 @@ obs:
 #   # access_token: ""
 
 # device.model: auto | live_s | live — auto uses USB vendor 0x2ec2 + product id when possible
-# Live S = USB PID 0x0006; original Live = 0x0004
-# With model live_s: you can define any number of touch pages; physical btn_circle + btn_1–btn_3 only switch among page indices 0–3 (LED color only in UI for those keys).
+# Live S = USB PID 0x0006; original Live = 0x0004. The key coordinates below follow the grid of
+# this model (auto = Live S, 5 x 3; Live = 4 x 3).
 device:
   path: ""
   model: auto
   # baudrate: 460800
 
-# Knob dials: no pages of their own. Each deck page gives each knob a role (pages[].knobs, below):
-# rotate = one linked "duo" (left/right = -/+) or split left/right actions; press = optional action.
-# No role on the page shown = the knob does nothing. After a turn/push a short text ("Volume +5")
-# flashes on the neighbouring touch key (Live S: knobTL->touch_0, knobCL->touch_5) for 0-2 s.
-# Duo ids: GET /api/knob_duos, see docs/ui-redesign/knobs-model.md. A legacy top-level
-# knob_pages is migrated automatically (kept under legacy_knob_pages).
+# Control ids (the same for every device; a control the connected device does not have is kept,
+# inactive):
+#   key_<col>_<row>  display keys, zero-based, column first: key_0_0 = top-left, key_4_2 = Live S
+#                    bottom-right
+#   knob_<n>         knobs: Live S knob_0 (top) knob_1 (middle); Live knob_0..2 left, knob_3..5 right
+#   button_<n>       round buttons: Live S button_0 = circle (bottom-left), button_1..3 on the right;
+#                    Live button_0 = circle, button_1..7 in the row below the screen
+#   strip_<n>        Live side touch strips: strip_0 left, strip_1 right
+#
+# One rule for every control: the binding on the page shown if there is one, else the global one.
+# Keys/buttons/strips: action(s) + look (+ button_color for a round button's LED);
+# knobs: rotate = one linked "duo" (left/right = -/+) or split left/right actions, press = optional
+# action. After a knob turn/push a short text ("Volume +5") flashes on its feedback key (Live S:
+# knob_0 -> key_0_0, knob_1 -> key_0_1) for 0-2 s. Duo ids: GET /api/knob_duos, see
+# docs/ui-redesign/knobs-model.md.
 # knob_page_feedback:
 #   duration_sec: 1.5
 
-# Multi-page layout (recommended). When `pages` is non-empty, it is used for input + images;
-# `bindings` below is only used if no page entry matches.
-# Control ids: touch_0..touch_11, btn_1..btn_7, btn_circle, strip_left, strip_right.
-# Knob rotation and push: pages[].knobs (role per deck page).
+# Global bindings: active on every page unless the page overrides them. The four Live S round
+# buttons open pages 1..4 by default (an ordinary binding: change it, or override it on a page).
+global:
+  button_0:
+    action: { type: agent.goto_page, index: 0 }
+    # button_color: "#3b6bff"
+  button_1:
+    action: { type: agent.goto_page, index: 1 }
+  button_2:
+    action: { type: agent.goto_page, index: 2 }
+  button_3:
+    action: { type: agent.goto_page, index: 3 }
+  # knob_0:                          # a knob role on every page (pages can still override it)
+  #   rotate: { duo: system_volume, params: { step: 5 } }
+  #   press: { type: sound.mute_toggle }
+
+# Pages: each page's `controls` override the global bindings while it is shown. `bindings` below
+# is only used if no page/global binding matched.
 pages:
   - name: Main
-    # knobs:
-    #   knobTL:
-    #     rotate: { duo: system_volume, params: { step: 5 } }
-    #     press: { type: sound.mute_toggle }
-    #   knobCL:
-    #     rotate:
-    #       left: { type: command.run, argv: ["xdotool", "click", "4"] }
-    #       right: { type: command.run, argv: ["xdotool", "click", "5"] }
-    buttons:
-      touch_0:
+    controls:
+      # knob_0:
+      #   rotate: { duo: system_volume, params: { step: 5 } }
+      #   press: { type: sound.mute_toggle }
+      # knob_1:
+      #   rotate:
+      #     left: { type: command.run, argv: ["xdotool", "click", "4"] }
+      #     right: { type: command.run, argv: ["xdotool", "click", "5"] }
+      key_0_0:
         text: "BRB"
         # Icon packs (SVG fetched, cached under ~/.cache/open-loupedeck/icons):
         #   si:slug / simpleicons:slug[/RRGGBB]  — https://simpleicons.org/
@@ -89,11 +114,12 @@ pages:
         action:
           type: obs.set_scene
           scene: "Scene A"
-      btn_7:
+      button_7:                        # a Loupedeck Live button (inactive on a Live S)
         action:
           type: agent.next_page
 
-# Legacy flat bindings (optional)
+# Flat bindings (optional, legacy form still read: touch key index on the model grid, button
+# driver ids, knob ids). Current form: - match: { control: key_0_0 }   (type: press by default)
 bindings:
   - match:
       type: touch

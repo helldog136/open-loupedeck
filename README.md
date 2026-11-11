@@ -111,7 +111,7 @@ The config lives at:
 | macOS | `~/Library/Application Support/open-loupedeck/config.yaml` |
 | Linux | `~/.config/open-loupedeck/config.yaml` |
 
-Editing it by hand is possible (it's plain YAML) but the config window covers everything and validates as you go — see **[docs/configuration.md](docs/configuration.md)** for the full schema (every action type and its parameters, dispatch order between pages/global_buttons/bindings, the button design fields, troubleshooting) if you want to script it directly or write a plugin.
+Editing it by hand is possible (it's plain YAML) but the config window covers everything and validates as you go — see **[docs/configuration.md](docs/configuration.md)** for the full schema (every action type and its parameters, dispatch order between page and global bindings, the button design fields, troubleshooting) if you want to script it directly or write a plugin.
 
 Languages: English and French are built in (setting `language: auto` follows your OS). Adding another is a single JSON file — see **[docs/translating.md](docs/translating.md)**.
 
