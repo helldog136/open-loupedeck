@@ -8,7 +8,8 @@ controller and the web UI only know two things about a device:
 - its **backend** (`DeviceBackend`): the opened device, addressed by control id.
 
 Everything driver-specific (pixel formats, serial threads, protocol names, upstream patches)
-stays inside one backend package. Today there is one backend, `loupedeck` (Live and Live S).
+stays inside one backend package. Today there are two backends: `loupedeck` (Live and Live S) and
+`virtual` (a browser-rendered device, see `docs/virtual-device.md`; chosen by name only, never by `auto`).
 
 ```
 devices/

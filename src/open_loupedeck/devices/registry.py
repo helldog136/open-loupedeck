@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 def _builtin_models() -> tuple[DeviceModel, ...]:
     # Pure data, no driver import.
     from .loupedeck.models import LOUPEDECK_MODELS
-
     from .virtual.models import VIRTUAL_MODELS
 
     return LOUPEDECK_MODELS + VIRTUAL_MODELS
@@ -31,7 +30,6 @@ def _builtin_models() -> tuple[DeviceModel, ...]:
 
 def _builtin_factories() -> list[BackendFactory]:
     from .loupedeck.backend import LoupedeckBackendFactory
-
     from .virtual.backend import VirtualBackendFactory
 
     return [LoupedeckBackendFactory(), VirtualBackendFactory()]
