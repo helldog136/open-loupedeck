@@ -13,7 +13,8 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from .button_render import render_tactile_key_image
+from .button_render import DEFAULT_KEY_SIZE, render_tactile_key_image
+from .devices.base import device_model_of
 from .knob_pages import feedback_duration_sec, feedback_touch_key_for_knob_page_name
 
 logger = logging.getLogger(__name__)
@@ -70,11 +71,14 @@ async def flash_knob_feedback(
     gen = _generation.get(touch_cid, 0) + 1
     _generation[touch_cid] = gen
 
+    model = device_model_of(deck)
+    size = model.key_size_for(touch_cid) if model is not None else DEFAULT_KEY_SIZE
+
     def _draw() -> None:
         with deck:
-            im = render_tactile_key_image({**FEEDBACK_ENTRY_BASE, "text": line}, config_dir, size=(90, 90))
+            im = render_tactile_key_image({**FEEDBACK_ENTRY_BASE, "text": line}, config_dir, size=size)
             if im is not None:
-                deck.set_key_image(str(n), im)
+                deck.set_key_image(touch_cid, im)
 
     try:
         await asyncio.to_thread(_draw)

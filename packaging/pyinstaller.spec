@@ -61,6 +61,8 @@ hiddenimports = [
     "pynput.keyboard._darwin",
     "pynput.keyboard._xorg",
     "pynput.keyboard._uinput",
+    # Device backends are imported lazily by open_loupedeck.devices.registry.
+    "open_loupedeck.devices.loupedeck.backend",
 ]
 
 a = Analysis(

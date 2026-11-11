@@ -13,3 +13,8 @@ Details, plural rules and how to test locally: [docs/translating.md](docs/transl
 
 `ruff format src tests`, `ruff check src tests` and `python -m pytest -q` must pass. User-visible strings go through
 `t()` (see `src/open_loupedeck/i18n.py` and `static/i18n.js`); log messages stay in English.
+
+## Device support
+
+Hardware access goes through a device layer (model descriptors + backends). How it fits together and the checklist
+for adding a device backend: [docs/devices.md](docs/devices.md).
