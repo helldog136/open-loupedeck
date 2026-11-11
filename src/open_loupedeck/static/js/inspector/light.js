@@ -43,7 +43,9 @@ export function createLightStep(ctx, number) {
 
   function sync() {
     const raw = stored();
-    paintTag(tag, !!raw, t("inspector.light.colour"), () => ctx.edit((e) => delete e.button_color));
+    paintTag(tag, !!raw, t("inspector.light.colour"), () => ctx.edit((e) => delete e.button_color), {
+      asDefault: true,
+    });
     led.style.setProperty("--led", raw ? cssColorForLedPreview(raw) : fallback);
     picker.setValue(sanitizeButtonColorHex(raw) || fallback);
     syncPageLedColors();

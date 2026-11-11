@@ -636,6 +636,8 @@
   "inspector.tag.modified": "Modified",
   "inspector.tag.reset": "reset",
   "inspector.tag.reset_label": "Reset “{field}” to the proposed value",
+  "inspector.tag.default": "Default",
+  "inspector.tag.reset_default_label": "Reset “{field}” to the default value",
   "inspector.field.mode": "Content",
   "inspector.mode.text": "Text",
   "inspector.mode.both": "Both",
