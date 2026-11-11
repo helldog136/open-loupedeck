@@ -37,6 +37,7 @@ from open_loupedeck.knob_roles import (
 )
 from open_loupedeck.runtime_refs import AgentRuntimeRefs
 from open_loupedeck.web_app import create_web_app
+from tests.fake_backend import FakeBackend
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -419,29 +420,8 @@ def test_feedback_duration_accepts_zero_to_two_seconds():
     assert feedback_duration_sec({"knob_page_feedback": {"duration_sec": 9}}) == 2.0
 
 
-class FakeDeck:
-    def __init__(self) -> None:
-        self.images: list[str] = []
-        self.started = False
-        self.callback = None
-
-    def __enter__(self) -> FakeDeck:
-        return self
-
-    def __exit__(self, *exc: Any) -> None:
-        return None
-
-    def set_key_image(self, key: str, _image: Any) -> None:
-        self.images.append(key)
-
-    def start(self) -> None:
-        self.started = True
-
-    def stop(self) -> None:
-        self.started = False
-
-    def set_callback(self, cb: Any) -> None:
-        self.callback = cb
+# The agent and knob flashes talk to a device backend (draws are addressed by control id).
+FakeDeck = FakeBackend
 
 
 def test_flash_draws_on_neighbour_and_only_latest_restores(tmp_path: Path):
@@ -458,7 +438,7 @@ def test_flash_draws_on_neighbour_and_only_latest_restores(tmp_path: Path):
         )
 
     assert asyncio.run(go()) == ["touch_5", "touch_5"]
-    assert deck.images == ["5", "5"]
+    assert deck.images == ["touch_5", "touch_5"]
     assert redraws == ["knob_feedback_restore"]  # the first flash did not wipe the second one
 
     deck.images.clear()
@@ -537,7 +517,7 @@ def test_agent_runs_role_of_current_page_and_flashes_neighbour(tmp_path: Path):
     ]
     recorded, deck, redraws, _ = _run_agent_with(tmp_path, raw, msgs, page_index=1)
     assert [r["tag"] for r in recorded] == ["B-right", "B-press"]
-    assert deck.images == ["5", "5"]  # Live S: knobCL -> touch_5
+    assert deck.images == ["touch_5", "touch_5"]  # Live S: knobCL -> touch_5
     assert redraws.count("knob_feedback_restore") >= 1  # overlapping flashes restore once
 
 
@@ -583,7 +563,7 @@ def test_agent_without_deck_pages_keeps_legacy_knob_pages_behaviour(tmp_path: Pa
     ]
     recorded, deck, _, _ = _run_agent_with(tmp_path, raw, msgs)
     assert [r["tag"] for r in recorded] == ["one", "two"]
-    assert deck.images == ["0"]  # page name "Two" flashed on touch_0
+    assert deck.images == ["touch_0"]  # page name "Two" flashed on touch_0
 
 
 def test_obs_scene_names_follow_dock_order_and_scene_step_switches():

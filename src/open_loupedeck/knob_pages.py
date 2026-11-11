@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from .devices.registry import model_by_name
+
+# Knob layout when the model is not known (``device.model: auto`` before a device is opened).
+DEFAULT_FEEDBACK_LAYOUT_MODEL = "live_s"
+
 KNOB_ENCODER_IDS = frozenset({"knobTL", "knobCL", "knobBL", "knobTR", "knobCR", "knobBR"})
 
 # Hard upper bound for on-screen page name after cycling (seconds).
@@ -43,21 +48,15 @@ def knob_page_feedback_label(page: dict[str, Any]) -> str:
 
 
 def feedback_touch_key_for_knob_page_name(knob_id: str, model: str) -> str | None:
-    """Touch cell that shows the knob page name when that encoder’s page is cycled."""
+    """Touch cell that shows the knob page name when that encoder’s page is cycled.
 
-    m = (model or "auto").lower()
-    if m == "live":
-        col_top = {
-            "knobTL": "touch_0",
-            "knobCL": "touch_4",
-            "knobBL": "touch_8",
-            "knobTR": "touch_3",
-            "knobCR": "touch_7",
-            "knobBR": "touch_11",
-        }
-        return col_top.get(knob_id)
-    # live_s (and auto default layout): top dial → touch_0, lower dial → touch_5
-    return {"knobTL": "touch_0", "knobCL": "touch_5"}.get(knob_id)
+    ``model`` is a ``device.model`` value (``live``, ``live_s``, ``auto``) or a model id; the
+    mapping comes from that model's descriptor (``DeviceModel.knob_feedback_keys``). Unknown
+    values and ``auto`` use the default layout (:data:`DEFAULT_FEEDBACK_LAYOUT_MODEL`).
+    """
+
+    dm = model_by_name(model) or model_by_name(DEFAULT_FEEDBACK_LAYOUT_MODEL)
+    return dm.feedback_touch_key(knob_id) if dm is not None else None
 
 
 def feedback_duration_sec(raw: dict[str, Any]) -> float:

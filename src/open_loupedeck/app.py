@@ -1,4 +1,8 @@
-"""Asyncio application + Loupedeck thread callback bridge + optional web UI."""
+"""Asyncio application + device backend event bridge + optional web UI.
+
+The agent only talks to a :class:`~open_loupedeck.devices.base.DeviceBackend` (``runtime.deck``)
+and its model descriptor; opening / discovery go through :mod:`open_loupedeck.devices.registry`.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,6 @@ import asyncio
 import contextlib
 import logging
 import signal
-import sys
 import threading
 from collections.abc import Awaitable, Callable
 from itertools import count
@@ -15,23 +18,19 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from Loupedeck.DeviceManager import DeviceManager
-from Loupedeck.Devices.constants import BAUD_RATE
-from Loupedeck.Devices.LoupedeckLive import LoupedeckLive
 
 from .actions import ActionContext, run_actions
 from .button_render import PRESS_ANIMATION_MAX_DURATION_TICKS
-from .config import Settings
 from .config_io import raw_to_settings
 from .config_paths import default_config_path
 from .config_state import ConfigState
 from .control_ids import control_ids_for_lookup
 from .deck_brightness import make_deck_brightness
 from .deck_skin import apply_page_skin, page_needs_animated_skin
-from .device_discovery import list_loupedeck_usb_ports, usb_hint_for_port
-from .events import NormalizedEvent, normalize_loupedeck_message
+from .devices.base import DeviceBackend, device_model_of
+from .devices.registry import normalize_native_message, open_backend
+from .events import NormalizedEvent
 from .ha_client import HaClient
-from .hardware.live_s_device import LoupedeckLiveS
 from .i18n import set_language_from_raw, t
 from .knob_flash import flash_knob_feedback, flash_knob_page_name
 from .knob_pages import (
@@ -44,7 +43,6 @@ from .knob_pages import (
 from .knob_roles import effective_model, resolve_knob_event
 from .live_message import preview_storage_key, refresh_live_messages
 from .logging_setup import bootstrap_logging, load_raw_for_logging
-from .loupedeck_patch import set_serial_fatal_callback
 from .match import actions_for_event
 from .obs_client import ObsSession
 from .overlay_hub import OverlayHub
@@ -55,114 +53,6 @@ from .spotify_client import SpotifyManager
 from .twitch_api import DEFAULT_CLIENT_ID, TwitchManager
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_device_class(model: str, hint: str) -> type[LoupedeckLive] | None:
-    m = model.lower()
-    if m == "live":
-        return LoupedeckLive
-    if m == "live_s":
-        return LoupedeckLiveS
-    if m == "auto":
-        if hint == "live_s":
-            return LoupedeckLiveS
-        if hint == "live":
-            return LoupedeckLive
-    return None
-
-
-def _open_deck(settings: Settings) -> LoupedeckLive:
-    """Open serial port with correct Live vs Live S driver; prefer USB VID/PID discovery."""
-
-    bauds = [settings.device.baudrate] if settings.device.baudrate is not None else [BAUD_RATE, 256000, 115200]
-
-    model = settings.device.model or "auto"
-    candidates: list[tuple[str, type[LoupedeckLive]]] = []
-    seen: set[tuple[str, str]] = set()
-
-    def add(path: str, cls: type[LoupedeckLive]) -> None:
-        key = (path, cls.__name__)
-        if key in seen:
-            return
-        seen.add(key)
-        candidates.append((path, cls))
-
-    if settings.device.path:
-        p = settings.device.path
-        hint = usb_hint_for_port(p)
-        rc = _resolve_device_class(model, hint)
-        if rc is not None:
-            add(p, rc)
-        else:
-            add(p, LoupedeckLiveS)
-            add(p, LoupedeckLive)
-    else:
-        usb_list = list_loupedeck_usb_ports()
-        if usb_list:
-            for path, hint in usb_list:
-                rc = _resolve_device_class(model, hint)
-                if rc is not None:
-                    add(path, rc)
-                else:
-                    add(path, LoupedeckLiveS)
-                    add(path, LoupedeckLive)
-        else:
-            logger.warning(
-                "No USB serial port with Loupedeck vendor ID (0x2ec2) found. "
-                "Plug in the device; on Linux use udev + dialout; on Windows install the USB serial driver "
-                "if needed; set device.path manually (e.g. COM5, /dev/ttyACM0)."
-            )
-            for path in DeviceManager.list():
-                hint = usb_hint_for_port(path)
-                rc = _resolve_device_class(model, hint)
-                if rc is not None:
-                    add(path, rc)
-                else:
-                    add(path, LoupedeckLiveS)
-                    add(path, LoupedeckLive)
-
-    if not candidates:
-        hint = "Set device.path in config (e.g. COM5 on Windows, /dev/ttyACM0 on Linux)."
-        if sys.platform != "win32":
-            hint += " On Linux you can list ports: ls -l /dev/serial/by-id/"
-        raise RuntimeError("No serial ports to try. " + hint)
-
-    last_err: Exception | None = None
-    for path, cls in candidates:
-        for baud in bauds:
-            try:
-                deck = cls(path=path, baudrate=baud, timeout=1)
-                if deck.is_loupedeck():
-                    logger.info("Loupedeck open: %s as %s @ %s baud", path, cls.__name__, baud)
-                    return deck
-            except Exception as e:
-                last_err = e
-                logger.debug("Try %s %s @ %s: %s", cls.__name__, path, baud, e)
-                continue
-
-    msg = _open_deck_failure_message(last_err)
-    raise RuntimeError(msg) from last_err
-
-
-def _open_deck_failure_message(last_err: Exception | None) -> str:
-    base = (
-        "No Loupedeck found. Check device.path, device.model, device.baudrate; "
-        "stop the official Loupedeck app if it is running."
-    )
-    if last_err is None:
-        return base
-    err_s = str(last_err)
-    if "Permission denied" in err_s or "Errno 13" in err_s:
-        return (
-            f"{base}\n\n"
-            f"Permission denied on the serial port ({last_err}).\n"
-            "- Add your user to group dialout: sudo usermod -aG dialout $USER\n"
-            "- Log out and log back in (or reboot), then retry.\n"
-            "- Install the udev rule from this repo: udev/99-loupedeck.rules → /etc/udev/rules.d/\n"
-            "  then: sudo udevadm control --reload-rules && sudo udevadm trigger\n"
-            "  and unplug/replug the Loupedeck.\n"
-        )
-    return f"{base}\n\nLast error: {last_err}"
 
 
 def _should_dispatch(ev: NormalizedEvent) -> bool:
@@ -320,10 +210,9 @@ async def run_agent(
         def _mark_deck_unplugged() -> None:
             runtime.deck_unplugged = True
 
-        def on_serial_fatal() -> None:
+        def on_device_unplugged() -> None:
+            # Called from the backend's I/O thread.
             loop.call_soon_threadsafe(_mark_deck_unplugged)
-
-        set_serial_fatal_callback(on_serial_fatal)
 
         knob_flash_tasks: set[asyncio.Task[Any]] = set()
 
@@ -369,13 +258,9 @@ async def run_agent(
                 task.add_done_callback(knob_flash_tasks.discard)
             return True
 
-        async def handle_raw_message(msg: dict[str, Any]) -> None:
-            if (
-                msg.get("action") == "push"
-                and msg.get("state") == "down"
-                and str(msg.get("id", "")) in KNOB_ENCODER_IDS
-            ):
-                kid = str(msg.get("id", ""))
+        async def handle_event(ev: NormalizedEvent) -> None:
+            if ev.kind == "button" and ev.edge == "down" and str(ev.id) in KNOB_ENCODER_IDS:
+                kid = str(ev.id)
                 if await run_knob_role(kid, "press"):
                     return
                 # Legacy (no deck pages): push cycles knob_pages; ignored if the knob has no pages.
@@ -397,29 +282,25 @@ async def run_agent(
                     await flash_knob_page_name(runtime.deck, config_dir, raw_snap, model, kid, label, redraw_skin)
                 return
 
-            ev = normalize_loupedeck_message(msg)
-            if ev is None or not _should_dispatch(ev):
+            if not _should_dispatch(ev):
                 return
             if ev.kind == "button" and ev.edge == "down":
-                logger.debug("Button down id=%s (raw_id=%s)", ev.id, msg.get("id"))
+                logger.debug("Button down id=%s (raw_id=%s)", ev.id, ev.raw.get("id"))
             logger.debug("Dispatch event %s %s edge=%s", ev.kind, ev.id, ev.edge)
 
             canonical_bid = None
             if ev.kind == "button":
                 lookup_ids = control_ids_for_lookup(ev)
                 canonical_bid = lookup_ids[0] if lookup_ids else None
-            if (
-                ev.kind == "button"
-                and ev.edge == "down"
-                and canonical_bid in ("btn_circle", "btn_1", "btn_2", "btn_3")
-                and runtime.deck is not None
-                and isinstance(runtime.deck, LoupedeckLiveS)
-            ):
-                idx = 0 if canonical_bid == "btn_circle" else int(canonical_bid.split("_")[1])
+            # Physical page buttons (model descriptor, e.g. the Live S round buttons -> pages 0..3).
+            dev_model = device_model_of(runtime.deck)
+            page_buttons = dev_model.page_buttons if dev_model is not None else ()
+            if ev.kind == "button" and ev.edge == "down" and canonical_bid in page_buttons:
+                idx = page_buttons.index(canonical_bid)
                 async with lock:
                     pages = state.raw.get("pages") or []
                     if isinstance(pages, list) and len(pages) > 0:
-                        state.page_index = idx % min(len(pages), 4)
+                        state.page_index = idx % min(len(pages), len(page_buttons))
                     pi = state.page_index
                 logger.debug("Page switch via %s -> index %s", ev.id, pi)
                 await redraw_skin("physical_page_button")
@@ -517,16 +398,23 @@ async def run_agent(
             ctx.pages = navigator
             await run_actions(ctx, actions)
 
-        def thread_callback(_deck: Any, msg: dict[str, Any]) -> None:
+        async def handle_raw_message(msg: dict[str, Any]) -> None:
+            """Compatibility: a driver-native message dict (Loupedeck callback shape)."""
+
+            ev = normalize_native_message(msg)
+            if ev is not None:
+                await handle_event(ev)
+
+        def thread_callback(ev: NormalizedEvent) -> None:
             def schedule() -> None:
-                task = asyncio.create_task(handle_raw_message(msg))
+                task = asyncio.create_task(handle_event(ev))
 
                 def _done(t: asyncio.Task[None]) -> None:
                     if t.cancelled():
                         return
                     exc = t.exception()
                     if exc is not None:
-                        logger.exception("Unhandled error in Loupedeck handler", exc_info=exc)
+                        logger.exception("Unhandled error in device event handler", exc_info=exc)
 
                 task.add_done_callback(_done)
 
@@ -540,39 +428,45 @@ async def run_agent(
                 if not runtime.deck_unplugged:
                     continue
                 try:
-                    new_deck = _open_deck(state.settings())
+                    new_deck = open_backend(state.settings())
                 except Exception as e:
-                    logger.debug("Loupedeck reconnect: not available yet: %s", e)
+                    logger.debug("Device reconnect: not available yet: %s", e)
                     continue
                 old = runtime.deck
                 runtime.deck = new_deck
                 runtime.deck_unplugged = False
                 if old is not None and old is not new_deck:
                     with contextlib.suppress(Exception):
-                        old.stop()
+                        old.set_unplugged_callback(None)
+                    with contextlib.suppress(Exception):
+                        old.close()
                 try:
-                    new_deck.start()
+                    new_deck.set_unplugged_callback(on_device_unplugged)
+                    new_deck.open()
                     brightness.apply()
-                    new_deck.set_callback(thread_callback)
+                    new_deck.set_event_callback(thread_callback)
                     logger.info(
-                        "Loupedeck reconnected (%s, %s)",
+                        "Device reconnected (%s, %s)",
                         getattr(new_deck, "path", "?"),
-                        type(new_deck).__name__,
+                        new_deck.model.id,
                     )
                     await redraw_skin("deck_reconnect")
                 except Exception:
-                    logger.exception("Loupedeck reconnect setup failed; will retry")
+                    logger.exception("Device reconnect setup failed; will retry")
                     runtime.deck_unplugged = True
                     runtime.deck = old
                     with contextlib.suppress(Exception):
-                        new_deck.stop()
+                        new_deck.set_unplugged_callback(None)
+                    with contextlib.suppress(Exception):
+                        new_deck.close()
 
         reconnect_task: asyncio.Task[None] | None = None
         if not runtime.no_device:
             reconnect_task = asyncio.create_task(reconnect_loop())
 
         if runtime.deck is not None:
-            runtime.deck.start()
+            runtime.deck.set_unplugged_callback(on_device_unplugged)
+            runtime.deck.open()
             try:
                 brightness.apply()
                 if navigator is not None:
@@ -580,16 +474,20 @@ async def run_agent(
             except Exception:
                 logger.exception("Initial skin draw failed")
 
-            runtime.deck.set_callback(thread_callback)
+            runtime.deck.set_event_callback(thread_callback)
 
         fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        runtime.simulate_event = handle_event
         runtime.simulate_raw_message = handle_raw_message
         try:
             await fut
         finally:
+            runtime.simulate_event = None
             runtime.simulate_raw_message = None
             runtime.intentional_deck_shutdown = True
-            set_serial_fatal_callback(None)
+            if runtime.deck is not None:
+                with contextlib.suppress(Exception):
+                    runtime.deck.set_unplugged_callback(None)
             if reconnect_task is not None:
                 reconnect_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -605,9 +503,9 @@ async def run_agent(
                 await skin_anim_task
             if runtime.deck is not None:
                 try:
-                    runtime.deck.stop()
+                    runtime.deck.close()
                 except Exception:
-                    logger.exception("Error while stopping Loupedeck reader")
+                    logger.exception("Error while closing the device")
             if obs:
                 try:
                     await asyncio.shield(obs.close())
@@ -664,12 +562,12 @@ async def _async_main(
     runtime.log_dir_override = log_dir
     runtime.overlay_hub = OverlayHub()
     runtime.no_device = no_device
-    deck: LoupedeckLive | None = None
+    deck: DeviceBackend | None = None
     if not no_device:
         try:
-            deck = _open_deck(state.settings())
+            deck = open_backend(state.settings())
         except Exception as e:
-            logger.warning("Loupedeck not available (%s). Actions will not run until device works.", e)
+            logger.warning("Device not available (%s). Actions will not run until device works.", e)
             if not web:
                 raise SystemExit(1) from e
             # Startup failed (e.g. device not plugged in yet, or its port briefly busy) --

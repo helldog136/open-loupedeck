@@ -36,7 +36,7 @@ from .config_paths import ensure_application_dirs
 from .config_state import ConfigState
 from .control_ids import is_page_scoped_control
 from .deck_brightness import make_deck_brightness, parse_hhmm
-from .hardware.live_s_device import LoupedeckLiveS
+from .devices.base import device_model_of
 from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
 from .knob_duos import list_duos
 from .knob_roles import validate_knobs_config
@@ -61,7 +61,7 @@ from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unus
 from .package_paths import package_root
 from .packs import list_packs
 from .runtime_refs import AgentRuntimeRefs
-from .simulate_input import build_synthetic_loupedeck_message
+from .simulate_input import build_synthetic_event
 from .spotify_client import SpotifyManager
 from .twitch_api import DEFAULT_CLIENT_ID, TwitchManager
 
@@ -245,9 +245,8 @@ def create_web_app(
                 "path": p,
             }
         else:
-            conn = getattr(rt.deck, "connection", None)
             path = getattr(rt.deck, "path", None)
-            usb_ok = conn is not None and bool(getattr(conn, "is_open", False))
+            usb_ok = bool(getattr(rt.deck, "is_open", False))
             usb = {
                 "connected": usb_ok,
                 "disabled": False,
@@ -305,7 +304,8 @@ def create_web_app(
 
         deck_layout: str | None = None
         if rt.deck is not None:
-            deck_layout = "live_s" if isinstance(rt.deck, LoupedeckLiveS) else "live"
+            dm = device_model_of(rt.deck)
+            deck_layout = dm.config_name if dm is not None else "live"
 
         hub = getattr(rt, "overlay_hub", None)
         overlay_paths: dict[str, str] = {"page": "/overlay", "websocket": "/ws/overlay"} if hub is not None else {}
@@ -403,7 +403,7 @@ def create_web_app(
     async def simulate_press(body: dict[str, Any] = Body(...)) -> JSONResponse:
         """Fire the same dispatch path as a hardware press/turn (for testing without the device)."""
 
-        sim = rt.simulate_raw_message
+        sim = rt.simulate_event
         if sim is None:
             raise HTTPException(503, t("error.simulate_unavailable"))
         cid = str(body.get("control_id") or "").strip()
@@ -413,14 +413,14 @@ def create_web_app(
             s = str(raw_dir).strip().lower()
             if s in ("left", "right"):
                 direction = s
-        msg = build_synthetic_loupedeck_message(cid, direction=direction)
-        if msg is None:
+        ev = build_synthetic_event(cid, direction=direction)
+        if ev is None:
             raise HTTPException(
                 400,
                 t("error.unsupported_control"),
             )
         try:
-            await sim(msg)
+            await sim(ev)
         except Exception as e:
             logger.exception("simulate_press failed")
             raise HTTPException(500, detail=str(e)) from e

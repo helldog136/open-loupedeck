@@ -24,6 +24,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from .devices.base import device_model_of
 from .i18n import t
 from .knob_duos import duo_feedback, expand_duo, get_duo, match_duo, missing_params, validate_duo_params
 from .knob_pages import (
@@ -281,11 +282,15 @@ def resolve_knob_event(
 
 
 def effective_model(configured: str, deck: Any = None) -> str:
-    """``live`` / ``live_s`` from the config, or from the opened driver class when ``auto``."""
+    """``live`` / ``live_s`` from the config, or from the opened device's model when ``auto``."""
 
     m = (configured or "auto").lower()
     if m in ("live", "live_s") or deck is None:
         return m
+    dm = device_model_of(deck)
+    if dm is not None:
+        return dm.config_name
+    # A bare driver object (no backend): recognise the Loupedeck driver classes by name.
     name = type(deck).__name__
     if name == "LoupedeckLiveS":
         return "live_s"

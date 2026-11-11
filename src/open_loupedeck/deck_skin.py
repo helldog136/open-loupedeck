@@ -1,4 +1,4 @@
-"""Draw page images onto Loupedeck Live or Live S (different center grid geometry)."""
+"""Draw page images onto the connected device, through its backend and model descriptor."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from typing import Any
 
 from PIL import Image, ImageColor
 
-from .button_render import effective_graphic_source, key_size_for_control, render_tactile_key_image
+from .button_render import DEFAULT_KEY_SIZE, effective_graphic_source, render_tactile_key_image
 from .control_ids import is_page_scoped_control
-from .hardware.live_s_device import LoupedeckLiveS
+from .devices.base import device_model_of
 from .key_media_cache import raw_graphic_needs_skin_animation
 from .live_message import (
     dynamic_display_overlay_entry,
@@ -21,22 +21,6 @@ from .live_message import (
 from .look_defaults import proposed_entry
 
 logger = logging.getLogger(__name__)
-
-LIVE_S_MAX_TOUCH = 14
-
-# Loupedeck protocol names for SET_COLOR on the four Live S physical buttons.
-#
-# Upstream foxxyz/loupedeck maps the four Live S LEDs to button ids 0–3, i.e. BUTTONS keys
-# 0x07–0x0A (values 0, 1, 2, 3). python-loupedeck uses string names: 0x07 is "circle", then
-# "1", "2", "3" for 0x08–0x0A. Do *not* use "1"–"4" (0x08–0x0B): that is the middle four of
-# the eight Loupedeck Live side keys and shifts every Live S color to the wrong LED.
-LIVE_S_PHYSICAL_BUTTON_LED_MAP: dict[str, str] = {
-    "btn_circle": "circle",
-    "btn_1": "1",
-    "btn_2": "2",
-    "btn_3": "3",
-}
-DEFAULT_LIVE_S_LED_RGB: tuple[int, int, int] = (32, 32, 40)
 
 
 def _rgb_from_button_color(raw: Any) -> tuple[int, int, int] | None:
@@ -52,27 +36,24 @@ def _rgb_from_button_color(raw: Any) -> tuple[int, int, int] | None:
         return None
 
 
-def _apply_live_s_physical_button_leds(deck: Any, gb: dict[str, Any]) -> None:
-    """Drive RGB LEDs for the four hardware buttons (config ``button_color`` per ``btn_*``)."""
+def _apply_physical_button_leds(deck: Any, gb: dict[str, Any]) -> None:
+    """Drive the RGB LEDs of the model's ``led_button`` controls (config ``button_color`` per ``btn_*``)."""
 
-    if not isinstance(deck, LoupedeckLiveS):
+    model = device_model_of(deck)
+    if model is None or not model.capabilities.button_led:
         return
-    for cid, proto_name in LIVE_S_PHYSICAL_BUTTON_LED_MAP.items():
+    default_rgb = model.default_button_rgb or (0, 0, 0)
+    for cid in model.led_button_ids():
         entry = _entry_for_control(gb, cid)
-        rgb = DEFAULT_LIVE_S_LED_RGB
+        rgb = default_rgb
         if isinstance(entry, dict):
             parsed = _rgb_from_button_color(entry.get("button_color"))
             if parsed is not None:
                 rgb = parsed
         try:
-            deck.set_button_color(proto_name, rgb)
+            deck.set_button_color(cid, rgb)
         except Exception:
-            logger.exception(
-                "set_button_color failed control_id=%s protocol_name=%s rgb=%s",
-                cid,
-                proto_name,
-                rgb,
-            )
+            logger.exception("set_button_color failed control_id=%s rgb=%s", cid, rgb)
 
 
 def _blank_rgba(size: tuple[int, int]) -> Image.Image:
@@ -80,18 +61,14 @@ def _blank_rgba(size: tuple[int, int]) -> Image.Image:
 
 
 def drawable_control_ids(deck: Any) -> list[str]:
-    """All controls that support key/strip bitmaps for this hardware (canonical ids)."""
+    """All controls that take a key/strip bitmap on this device (canonical ids, redraw order).
 
-    if isinstance(deck, LoupedeckLiveS):
-        # Only the 5×3 center grid (indices 0..14). Do not include btn_circle / btn_1..btn_3 here: they map to the
-        # same set_key_image indices as touch_0..touch_3 and would paint after them, wiping those
-        # cells with black when a button slot is empty. Physical side buttons need separate
-        # framebuffer coordinates (not the touch grid); until those exist, skip hardware bitmaps for btn_*.
-        return [f"touch_{i}" for i in range(LIVE_S_MAX_TOUCH + 1)]
-    ids = [f"touch_{i}" for i in range(12)]
-    ids += [f"btn_{i}" for i in range(1, 8)]
-    ids += ["strip_left", "strip_right"]
-    return ids
+    From the model descriptor. On the Live S that is only the 5×3 centre grid: its physical
+    buttons have no display (painting them through the touch grid would wipe touch_0..3).
+    """
+
+    model = device_model_of(deck)
+    return model.drawable_control_ids() if model is not None else []
 
 
 def _entry_for_control(buttons: dict[str, Any], control_id: str) -> dict[str, Any] | None:
@@ -150,45 +127,6 @@ def _has_visual(entry: dict[str, Any]) -> bool:
     return proposed_entry(entry) is not None
 
 
-def _apply_rgba_to_control(deck: Any, control_id: str, img: Image.Image) -> None:
-    if control_id.startswith("touch_"):
-        n = int(control_id.split("_", 1)[1])
-        if isinstance(deck, LoupedeckLiveS):
-            if n > LIVE_S_MAX_TOUCH:
-                logger.warning(
-                    "Live S has touch keys 0..%s only; skipping %s",
-                    LIVE_S_MAX_TOUCH,
-                    control_id,
-                )
-                return
-        else:
-            if n > 11:
-                logger.warning(
-                    "Loupedeck Live has touch keys 0..11 only; skipping %s",
-                    control_id,
-                )
-                return
-        deck.set_key_image(str(n), img)
-    elif control_id.startswith("btn_"):
-        rest = control_id[4:]
-        if rest == "circle":
-            logger.debug("Skipping image for btn_circle (not supported by set_key_image)")
-            return
-        deck.set_key_image(rest, img)
-    elif control_id in ("strip_left", "left"):
-        if isinstance(deck, LoupedeckLiveS):
-            logger.debug("Live S has no side strip displays; skip %s", control_id)
-            return
-        deck.set_left_image(img)
-    elif control_id in ("strip_right", "right"):
-        if isinstance(deck, LoupedeckLiveS):
-            logger.debug("Live S has no side strip displays; skip %s", control_id)
-            return
-        deck.set_right_image(img)
-    else:
-        logger.debug("No drawable target for %s (knobs use colors only)", control_id)
-
-
 def apply_page_skin(
     deck: Any,
     page: dict[str, Any],
@@ -215,7 +153,9 @@ def apply_page_skin(
     page_buttons: dict[str, Any] = raw_buttons if isinstance(raw_buttons, dict) else {}
     gb = global_buttons if isinstance(global_buttons, dict) else {}
 
-    controls_n = len(drawable_control_ids(deck))
+    model = device_model_of(deck)
+    controls = drawable_control_ids(deck)
+    controls_n = len(controls)
     log_prefix = f"apply_page_skin id={redraw_id}" if redraw_id is not None else "apply_page_skin"
     logger.debug(
         "%s reason=%r page=%r page_index=%s overlay_cache=%s controls=%s page_keys=%s global_keys=%s deck=%s",
@@ -227,12 +167,12 @@ def apply_page_skin(
         controls_n,
         list(page_buttons.keys()),
         list(gb.keys()),
-        type(deck).__name__,
+        model.id if model is not None else type(deck).__name__,
     )
 
     with deck:
-        for control_id in drawable_control_ids(deck):
-            size = key_size_for_control(control_id)
+        for control_id in controls:
+            size = model.key_size_for(control_id) if model is not None else DEFAULT_KEY_SIZE
             base = _entry_for_skin(gb, page_buttons, control_id)
             overlay = overlay_text_for_control(control_id, page_index, live_text)
             # Only apply runtime overlay when this key still has a live message in config; otherwise
@@ -272,11 +212,11 @@ def apply_page_skin(
                 img = _blank_rgba(size)
 
             try:
-                _apply_rgba_to_control(deck, control_id, img)
+                deck.set_key_image(control_id, img)
             except Exception:
                 logger.exception("Failed to draw %s", control_id)
 
-        _apply_live_s_physical_button_leds(deck, gb)
+        _apply_physical_button_leds(deck, gb)
 
         # Animation ticks (~10/s for GIF/video keys) use DEBUG; other redraws stay INFO.
         msg = f"{log_prefix} complete (drew {controls_n} controls)"
