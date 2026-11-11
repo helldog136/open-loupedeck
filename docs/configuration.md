@@ -116,11 +116,13 @@ ha:
 ```yaml
 device:
   path: ""          # empty = auto-discover; or e.g. /dev/ttyACM0, COM5
-  model: auto        # auto | live_s | live
+  model: auto        # auto | live_s | live | streamdeck | streamdeck_mini | streamdeck_mk2 | ...
   # baudrate: 460800  # optional; try if handshake fails
 ```
 
-`auto` picks the driver from USB VID `0x2ec2` + PID (`0x0006` = Live S, `0x0004` = Live) when possible. `live_s` = 5×3 keys, two knobs (`knob_0`, `knob_1`), four round buttons (`button_0` = circle, `button_1`–`button_3` on the right), any number of `pages`. `live` = original Loupedeck Live (4×3 keys, `strip_0`/`strip_1`, `knob_0`–`knob_5`, `button_0`–`button_7`). The key coordinates of the config refer to this model's grid (`auto` = Live S).
+`auto` picks the driver from USB VID `0x2ec2` + PID (`0x0006` = Live S, `0x0004` = Live) when possible. `live_s` = 5×3 keys, two knobs (`knob_0`, `knob_1`), four round buttons (`button_0` = circle, `button_1`–`button_3` on the right), any number of `pages`. `live` = original Loupedeck Live (4×3 keys, `strip_0`/`strip_1`, `knob_0`–`knob_5`, `button_0`–`button_7`). The key coordinates of the config refer to this model's grid (`auto` = Live S). Elgato Stream
+Deck models (`streamdeck`, `streamdeck_mini`, `streamdeck_mk2`, `streamdeck_xl`, `streamdeck_plus`,
+`streamdeck_neo`, `streamdeck_pedal`) are experimental: see [streamdeck.md](streamdeck.md).
 
 ### `pages`
 

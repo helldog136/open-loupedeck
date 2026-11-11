@@ -4,6 +4,10 @@
 
 **Open-Loupedeck** is a background app that connects to **Loupedeck Live** or **Loupedeck Live S** hardware over USB and turns button presses, touches, and knob rotations into actions: switching **OBS** scenes, controlling **Home Assistant** devices, firing webhooks, playing sounds, controlling **Spotify**, showing live stats, and drawing fully custom text/graphics (with gradients and animations) on the keys.
 
+**Elgato Stream Deck** support (Mini, MK.2, XL, +, Neo, Pedal) is **experimental** and not yet
+tested on real hardware — see [docs/streamdeck.md](docs/streamdeck.md) (quit the Elgato software
+first; Linux needs `udev/70-streamdeck.rules`).
+
 It's an alternative to the official Loupedeck application — install it, and it runs quietly in the background (tray icon), with a native configuration window you open on demand. No official Loupedeck software required.
 
 > **Heads-up:** this project is almost entirely "vibe-coded" — built collaboratively with [Claude Code](https://claude.com/claude-code) (Anthropic's AI coding agent) rather than hand-written line by line. See [Acknowledgments](#acknowledgments) below. It works, it's tested against real hardware, but review the code yourself before trusting it with anything critical.
@@ -98,6 +102,9 @@ sudo usermod -aG dialout $USER   # then log out and back in
 sudo cp udev/99-loupedeck.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
+
+For an Elgato Stream Deck (experimental), copy `udev/70-streamdeck.rules` the same way and replug the
+deck; see [docs/streamdeck.md](docs/streamdeck.md).
 
 ---
 

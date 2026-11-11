@@ -41,9 +41,12 @@ Open-Loupedeck's own code is licensed under [PolyForm Noncommercial 1.0.0](LICEN
 | simpleobsws       | 1.4.3     | MIT License                                   | https://github.com/IRLToolkit/simpleobsws                  |
 | six               | 1.17.0    | MIT License                                   | https://github.com/benjaminp/six                           |
 | starlette         | 1.6.0     | BSD-3-Clause                                  | https://github.com/Kludex/starlette                        |
+| streamdeck        | 0.10.0    | MIT License                                   | https://github.com/abcminiuser/python-elgato-streamdeck    |
 | typing-inspection | 0.4.4     | MIT                                           | https://github.com/pydantic/typing-inspection              |
 | typing_extensions | 4.16.0    | PSF-2.0                                       | https://github.com/python/typing_extensions                |
 | tzdata            | 2026.3    | Apache-2.0                                    | https://github.com/python/tzdata                           |
 | uvicorn           | 0.52.4    | BSD-3-Clause                                  | https://uvicorn.dev/                                       |
 | watchfiles        | 1.2.0     | MIT License                                   | https://github.com/samuelcolvin/watchfiles                 |
 | websockets        | 17.1      | BSD-3-Clause                                  | https://github.com/python-websockets/websockets            |
+
+The installers also bundle the native **hidapi** library (used by `streamdeck` to reach the Stream Deck over USB), [libusb/hidapi](https://github.com/libusb/hidapi), distributed under its BSD-style license (one of the three licenses hidapi offers).
