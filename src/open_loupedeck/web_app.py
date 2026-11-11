@@ -309,6 +309,13 @@ def create_web_app(
                 "detail": str(path) if path else "",
                 "path": str(path) if path else None,
             }
+            dm_open = device_model_of(rt.deck)
+            if dm_open is not None:
+                usb["name"] = dm_open.name
+            if getattr(rt.deck, "experimental", False) is True:
+                # Backends not verified on hardware yet (Stream Deck): the UI shows this notice.
+                usb["experimental"] = True
+                usb["notice"] = t("status.device.experimental", name=dm_open.name if dm_open else "")
 
         obs_block: dict[str, Any]
         if st.obs is None:

@@ -1,0 +1,18 @@
+# Elgato Stream Deck (USB HID) — let the logged-in user open the device (Open-Loupedeck's
+# experimental Stream Deck backend, python-elgato-streamdeck over hidapi/libusb).
+#
+# Install:
+#   sudo cp 70-streamdeck.rules /etc/udev/rules.d/70-streamdeck.rules
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#   unplug and replug the Stream Deck
+#
+# The file name must sort before 73-seat-late.rules for TAG+="uaccess" to take effect.
+# Users without a local seat (SSH, headless): they get access through the "plugdev" group.
+# Confirm the vendor: lsusb | grep -i 0fd9
+
+# libusb access (hidapi-libusb, the backend python-elgato-streamdeck uses on Linux)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0fd9", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+
+# hidraw nodes (hidapi-hidraw builds)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0fd9", MODE="0660", GROUP="plugdev", TAG+="uaccess"

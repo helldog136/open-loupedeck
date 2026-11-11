@@ -377,6 +377,7 @@
   "pages.tab.hardware": "Liée au bouton rond n° {number} · double-cliquez pour renommer",
   "shell.select_control": "Choisissez une touche",
   "status.device.connected": "Connecté {path}",
+  "status.device.experimental": "{name} : prise en charge expérimentale, pas encore testée sur ce matériel. Merci de signaler ce qui fonctionne ou non.",
   "status.device.not_found": "Introuvable",
   "status.device.not_found_title": "Aucun Loupedeck détecté. Branchez-le, ou vérifiez le modèle dans Services.",
   "status.device.simulation": "Sans appareil",

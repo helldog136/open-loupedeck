@@ -23,16 +23,20 @@ logger = logging.getLogger(__name__)
 def _builtin_models() -> tuple[DeviceModel, ...]:
     # Pure data, no driver import.
     from .loupedeck.models import LOUPEDECK_MODELS
+    from .streamdeck.models import STREAMDECK_MODELS
     from .virtual.models import VIRTUAL_MODELS
 
-    return LOUPEDECK_MODELS + VIRTUAL_MODELS
+    return LOUPEDECK_MODELS + STREAMDECK_MODELS + VIRTUAL_MODELS
 
 
 def _builtin_factories() -> list[BackendFactory]:
     from .loupedeck.backend import LoupedeckBackendFactory
+    from .streamdeck.backend import StreamDeckBackendFactory
     from .virtual.backend import VirtualBackendFactory
 
-    return [LoupedeckBackendFactory(), VirtualBackendFactory()]
+    # Registration order = auto-detect order: a connected Loupedeck always wins over a Stream Deck
+    # (the Stream Deck backend imports its library and hidapi only when it looks for a deck).
+    return [LoupedeckBackendFactory(), StreamDeckBackendFactory(), VirtualBackendFactory()]
 
 
 class DeviceRegistry:
@@ -89,7 +93,9 @@ class DeviceRegistry:
 
         A ``device.model`` naming a known model goes straight to that model's backend; ``auto``
         (or an unknown value) tries every backend in registration order. The error of the last
-        backend tried is raised unchanged (one backend = exactly its own message).
+        backend tried is raised unchanged (one backend = exactly its own message), except that an
+        error flagged ``device_absent`` (that backend saw no device at all) never hides the error of
+        another backend.
         """
 
         forced = self.model_by_name(self._forced_model) if self._forced_model else None
@@ -107,15 +113,16 @@ class DeviceRegistry:
             factories = [f for f in factories if getattr(f, "auto_detect", True)]
         if not factories:
             raise RuntimeError("No device backend available.")
-        last: Exception | None = None
+        errors: list[Exception] = []
         for f in factories:
             try:
                 return f.open(settings)
             except Exception as e:
                 logger.debug("Backend %s: %s", f.family, e)
-                last = e
-        assert last is not None
-        raise last
+                errors.append(e)
+        assert errors
+        present = [e for e in errors if not getattr(e, "device_absent", False)]
+        raise present[-1] if present else errors[0]
 
     def normalize_message(self, msg: dict[str, Any], model: DeviceModel | None = None) -> ControlEvent | None:
         """First backend that understands a driver-native message dict (synthetic presses)."""

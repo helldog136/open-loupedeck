@@ -377,6 +377,7 @@
   "pages.tab.hardware": "Linked to round button {number} · double-click to rename",
   "shell.select_control": "Select a control",
   "status.device.connected": "Connected {path}",
+  "status.device.experimental": "{name}: experimental support, not tested on this hardware yet. Please report what works and what does not.",
   "status.device.not_found": "Not found",
   "status.device.not_found_title": "No Loupedeck detected. Plug it in, or check the hardware model in Services.",
   "status.device.simulation": "No device",

@@ -8,8 +8,10 @@ controller and the web UI only know two things about a device:
 - its **backend** (`DeviceBackend`): the opened device, addressed by control id.
 
 Everything driver-specific (pixel formats, serial threads, protocol names, upstream patches)
-stays inside one backend package. Today there are two backends: `loupedeck` (Live and Live S) and
-`virtual` (a browser-rendered device, see `docs/virtual-device.md`; chosen by name only, never by `auto`).
+stays inside one backend package. Today there are three backends: `loupedeck` (Live and Live S),
+`streamdeck` (Elgato Stream Deck, experimental, see `docs/streamdeck.md`; auto-detected after the
+Loupedeck) and `virtual` (a browser-rendered device, see `docs/virtual-device.md`; chosen by name
+only, never by `auto`).
 
 ```
 devices/
@@ -23,6 +25,9 @@ devices/
     patches.py    upstream driver fixes (init, serial reader exits on unplug)
     discovery.py  USB VID/PID lookup of serial ports
     events.py     driver callback dict -> ControlEvent
+  streamdeck/
+    models.py     Mini, MK.2, XL, +, Neo, Pedal descriptors
+    backend.py    StreamDeckBackend over python-elgato-streamdeck (lazy import), factory
 ```
 
 The old module paths (`hardware/live_s_device.py`, `loupedeck_patch.py`,
@@ -99,8 +104,9 @@ the registry imports no driver.
 
 - `discover_devices()` lists `DiscoveredDevice(backend, path, model)` from every backend.
 - `open_backend(settings)`: a `device.model` naming a known model goes to that model's backend;
-  `auto` (or an unknown value) tries each backend in registration order. With one backend its
-  error message is raised unchanged. `device.path` and `device.baudrate` are the backend's
+  `auto` (or an unknown value) tries each backend in registration order (Loupedeck, then Stream
+  Deck). With one backend its error message is raised unchanged; an error flagged
+  `device_absent` (that backend saw no device at all) never hides another backend's error. `device.path` and `device.baudrate` are the backend's
   business (the Loupedeck backend honours them exactly as before).
 - `resolve_model(configured, device)`: the device's model, else `device.model`'s, else the
   default (Live S); `config_model(configured)` ignores the device.
