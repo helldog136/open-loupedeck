@@ -1,11 +1,12 @@
 /*
  * status.js — Header status chips (device / OBS / Home Assistant, plus Spotify / Twitch once set up) and
- * the 1.5 s /api/status poll, which also feeds the agent's deck layout, current page and per-key render
- * errors back into the UI. A chip is actionable: it opens the matching Services card.
+ * the 1.5 s /api/status poll, which also feeds the connected device (the edited model may change), the
+ * agent's current page and per-control render errors back into the UI. A chip is actionable: it opens
+ * the matching Services card.
  */
 
-import { layoutMode, ensurePages } from "./model.js";
-import { syncPageLedColors, syncPageSelect, syncUiToAgentPage, updateLiveSPageChrome } from "./pages.js";
+import { loadDeviceModels } from "./model.js";
+import { syncPageLedColors, syncUiToAgentPage } from "./pages.js";
 import { getServiceState, setServiceState } from "./services/cards.js";
 import { refreshSpotifyStatus } from "./services/spotify.js";
 import { refreshTwitchStatus } from "./services/twitch.js";
@@ -19,6 +20,8 @@ let pollTick = 0;
 const SLOW_SERVICE_EVERY = 6;
 /** Last device chip content, so a language change can redraw it without a new request. */
 let lastStatus = null;
+/** Which device the agent had at the previous poll (model reloaded when it changes). */
+let lastDeviceKey = null;
 
 /**
  * mode: "ok" (connected), "bad" (needs attention: shows the call to action), "idle" (not set up / off).
@@ -43,13 +46,16 @@ function serviceChip(id, svc) {
 }
 
 function updateDeviceChip(usb) {
-  const name = layoutMode() === "live" ? "Loupedeck Live" : "Loupedeck Live S";
+  const name = usb.name || (state.model ? state.model.name : "Loupedeck");
   const nameEl = document.querySelector("#chipDevice .chip-name");
   if (nameEl) nameEl.textContent = name;
   if (usb.disabled) {
     setChip("chipDevice", { mode: "idle", action: t("status.device.simulation"), title: t("status.device.simulation_title") });
   } else if (usb.connected) {
-    setChip("chipDevice", { mode: "ok", title: t("status.device.connected", { path: usb.path || usb.detail || "" }) });
+    let title = t("status.device.connected", { path: usb.path || usb.detail || "" });
+    // Backends not verified on hardware yet (Stream Deck): say so in the chip tooltip.
+    if (usb.experimental) title += ` — ${t("status.device.experimental", { name })}`;
+    setChip("chipDevice", { mode: "ok", title });
   } else {
     setChip("chipDevice", { mode: "bad", action: t("status.device.not_found"), title: t("status.device.not_found_title") });
   }
@@ -97,17 +103,12 @@ async function refreshConnectionStatus() {
     lastStatus = j;
     emit("status:updated", j);
 
-    const prevLayout = state.agentDeckLayout;
-    if (j.deck_layout === "live" || j.deck_layout === "live_s") {
-      state.agentDeckLayout = j.deck_layout;
-    } else {
-      state.agentDeckLayout = null;
+    // A device was plugged / unplugged / switched: the edited model may change with it.
+    const deviceKey = `${j.deck_layout || ""}|${!!(j.usb && j.usb.connected)}`;
+    if (lastDeviceKey !== null && deviceKey !== lastDeviceKey) {
+      if (await loadDeviceModels()) emit("model:changed");
     }
-    if (prevLayout !== state.agentDeckLayout) {
-      ensurePages();
-      updateLiveSPageChrome();
-      syncPageSelect();
-    }
+    lastDeviceKey = deviceKey;
 
     updateDeviceChip(j.usb || {});
     updateConnection("obs", "chipObs", j.obs || {});
@@ -118,16 +119,12 @@ async function refreshConnectionStatus() {
       syncUiToAgentPage(j.page_index);
     }
     syncPageLedColors();
-    state.touchErrors = j.touch_errors && typeof j.touch_errors === "object" ? j.touch_errors : {};
-    // Update outlines without waiting for a full re-render.
-    document.querySelectorAll(".cell, .dk-key").forEach((el) => {
-      const cid = el && el.dataset && el.dataset.cid;
-      if (cid && typeof cid === "string" && cid.startsWith("touch_") && state.touchErrors[cid]) {
-        el.classList.add("error-outline");
-        el.title = `${cid} — ${state.touchErrors[cid]}`;
-      } else if (el) {
-        el.classList.remove("error-outline");
-      }
+    // Render errors of the bindings on the page shown, by control id (the deck outlines them).
+    state.controlErrors = j.control_errors && typeof j.control_errors === "object" ? j.control_errors : {};
+    document.querySelectorAll("#deckRoot .dk-ctl").forEach((n) => {
+      const err = state.controlErrors[n.dataset.cid];
+      n.classList.toggle("has-error", !!err);
+      if (err) n.title = err;
     });
   } catch {
     for (const id of ["chipDevice", "chipObs", "chipHa"]) setChip(id, { mode: "idle", title: t("status.unreachable") });

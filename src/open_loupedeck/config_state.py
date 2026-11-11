@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
-from .config_backup import create_rotating_backup
+from .config_backup import create_migration_backup, create_rotating_backup
 from .config_io import (
     default_raw_config,
     ensure_minimal_structure,
@@ -15,6 +15,7 @@ from .config_io import (
     raw_to_settings,
     save_raw_config,
 )
+from .config_migrate import CONFIG_VERSION, migrate_config, needs_migration
 from .config_paths import ensure_application_dirs
 from .media_library import materialize_external_media
 
@@ -32,7 +33,7 @@ class ConfigState:
                 # Best-effort: a snapshot "as of this session's start" is a nice-to-have safety
                 # net (see Ctrl+Z for in-session undo), never a reason to fail startup.
                 logger.debug("Startup backup snapshot failed for %s", path, exc_info=True)
-            raw = ensure_minimal_structure(load_raw_config(path))
+            raw = ensure_minimal_structure(self._load_migrated(path))
             raw, changed = materialize_external_media(raw, path.parent.resolve())
             if changed:
                 save_raw_config(path, raw)
@@ -43,12 +44,31 @@ class ConfigState:
             save_raw_config(path, self.raw)
         self.page_index: int = 0
 
+    @staticmethod
+    def _load_migrated(path: Path) -> dict[str, Any]:
+        """Load ``path``; a legacy config is backed up, migrated to the current schema and saved."""
+
+        raw = load_raw_config(path)
+        if not needs_migration(raw):
+            return raw
+        backup = create_migration_backup(path, CONFIG_VERSION)
+        migrated, notes = migrate_config(raw)
+        save_raw_config(path, migrated)
+        logger.warning(
+            "Config %s migrated to config_version %s (%s note(s)); the previous file is kept as %s",
+            path,
+            CONFIG_VERSION,
+            len(notes),
+            backup,
+        )
+        return migrated
+
     def settings(self) -> Settings:
         return raw_to_settings(self.raw)
 
     def reload_from_disk(self) -> None:
         if self.path.is_file():
-            raw = ensure_minimal_structure(load_raw_config(self.path))
+            raw = ensure_minimal_structure(self._load_migrated(self.path))
             raw, changed = materialize_external_media(raw, self.path.parent.resolve())
             if changed:
                 save_raw_config(self.path, raw)

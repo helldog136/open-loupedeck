@@ -2,7 +2,15 @@
   <img src="press-kit/logo/wordmark-transparent.png" alt="Open-Loupedeck" width="480">
 </p>
 
-**Open-Loupedeck** is a background app that connects to **Loupedeck Live** or **Loupedeck Live S** hardware over USB and turns button presses, touches, and knob rotations into actions: switching **OBS** scenes, controlling **Home Assistant** devices, firing webhooks, playing sounds, controlling **Spotify**, showing live stats, and drawing fully custom text/graphics (with gradients and animations) on the keys.
+**Open-Loupedeck** is a background app that turns the keys, touch screens, knobs and buttons of a deck into actions: switching **OBS** scenes, controlling **Home Assistant** devices, firing webhooks, playing sounds, controlling **Spotify**, showing live stats, and drawing fully custom text/graphics (with gradients and animations) on the keys.
+
+| Device | Status |
+|---|---|
+| **Loupedeck Live** and **Loupedeck Live S** (USB) | Supported, tested on real hardware. |
+| **Elgato Stream Deck** (Mini, MK.2, XL, +, Neo, Pedal) | **Experimental**, not yet tested on real hardware: see [docs/streamdeck.md](docs/streamdeck.md) (quit the Elgato software first; Linux needs `udev/70-streamdeck.rules`). |
+| **Virtual device** (15 keys, Mega, Mini) | No hardware needed: the deck is drawn in your browser. See [docs/virtual-device.md](docs/virtual-device.md). |
+
+New here? Read **[docs/getting-started.md](docs/getting-started.md)**. What changed: [CHANGELOG.md](CHANGELOG.md).
 
 It's an alternative to the official Loupedeck application — install it, and it runs quietly in the background (tray icon), with a native configuration window you open on demand. No official Loupedeck software required.
 
@@ -15,7 +23,7 @@ It's an alternative to the official Loupedeck application — install it, and it
 1. Grab the latest installer from [Releases](../../releases).
 2. Run it. It installs to Program Files, adds a Start Menu shortcut, and launches Open-Loupedeck.
 3. A tray icon appears; the configuration window opens automatically. Close the window any time — the app keeps running in the tray. Right-click the tray icon for **Restart** (applies changes that need a fresh start) or **Quit**.
-4. Plug in your Loupedeck. The web-based config UI (opened in a native window, not a browser) will pick it up automatically.
+4. Plug in your Loupedeck (or Stream Deck). The web-based config UI (opened in a native window, not a browser) will pick it up automatically. On first launch a welcome card offers starter packs (Streamer, Music, Smart home, World of Warcraft, Blank).
 
 macOS and Linux packages ([`.dmg`](packaging/macos/build_dmg.sh) / [AppImage](packaging/linux/build_appimage.sh)) are built but not yet tested on real hardware — see [Building from source](#building-from-source) to run it there today.
 
@@ -35,9 +43,12 @@ macOS and Linux packages ([`.dmg`](packaging/macos/build_dmg.sh) / [AppImage](pa
 | **HTTP / shell / system audio** | Webhooks, local sound playback, shell commands, system output volume. |
 | **Keyboard macros** | Record a sequence of real keystrokes in the UI and replay them in order on a key press — sent to whatever app has focus. |
 | **Custom key graphics** | Text or images on every key, fully previewable before you press anything: solid colors *or* gradients (text and background, any angle), continuous "idle" animations (shake, pulse, rotating gradient, color cycle), one-shot "press" animations (flash, invert, zoom, slide-out-and-back), custom fonts, icon packs (Simple Icons, Lucide, Heroicons, MDI) or your own images. |
-| **Pages** | As many pages as you want, reordered by drag-and-drop, with the 4 hardware page-switch buttons (Live S) clearly marked. |
+| **Pages** | As many pages as you want, with the 4 hardware page-switch buttons (Live S) clearly marked. |
+| **Any device shape** | The editor is drawn from the device's model (keys, knobs, buttons, sliders, strips): the same bindings work on a Live S, a Stream Deck or the virtual Mega. One rule for every control: a setting for every page, overridden by the page's own. |
+| **World of Warcraft** | Keys that send a key chord for a macro bound in the game, plus on-demand WoW icons ([docs/wow.md](docs/wow.md)). |
+| **Screen brightness** | Adjustable, with an automatic night mode. |
 
-Hardware protocol via [python-loupedeck-live](https://github.com/devleaks/python-loupedeck-live).
+Hardware protocols via [python-loupedeck-live](https://github.com/devleaks/python-loupedeck-live) and [python-elgato-streamdeck](https://github.com/abcminiuser/python-elgato-streamdeck).
 
 ---
 
@@ -45,10 +56,10 @@ Hardware protocol via [python-loupedeck-live](https://github.com/devleaks/python
 
 Open it from the tray icon ("Open configuration"). Two tabs:
 
-- **Buttons** — the page list (left rail: drag to reorder, click to switch, ✕ to remove), the deck grid, and the button editor. Editing a button autosaves as you type (a red outline means the value isn't valid yet, so it's never saved half-broken) and pushes the update to the physical device live. **Ctrl+Z / Ctrl+Shift+Z** undo/redo anything you just did, for the current session.
-- **Services** — OBS, Home Assistant, Spotify, Twitch, and logging credentials/settings; hardware model override; "Launch at startup" (starts silently in the tray at login — no config window; open it from the tray icon or by launching the app again); config backups (one is taken automatically every time the app starts, and you can restore any of the last 3 from here); a button to open the config folder directly.
+- **Buttons** — the page tabs on top, a picture of your device (every key shows its real look), and the inspector on the right: pick a control, then *what it does*, *how it looks* and, for buttons, the colour of the light. A scope bar says whether a change is for this page or every page. Editing autosaves and updates the device live (a warning marks text that does not fit its key). **Ctrl+Z / Ctrl+Shift+Z** (or the Undo button) undo anything you just did. On a narrow screen the deck keeps a tappable size and pans sideways.
+- **Services** — OBS, Home Assistant, Spotify, Twitch and logging credentials/settings; language; hardware model; screen brightness and night mode; "Launch at startup" (starts silently in the tray at login — no config window; open it from the tray icon or by launching the app again); config backups (one is taken automatically every time the app starts, and you can restore any of the last 3 from here); a button to open the config folder directly.
 
-Drag one button onto another to swap their entire configuration (action, text, colors, animations — everything).
+Drag one key onto another to swap their entire configuration (action, text, colors, animations — everything).
 
 ---
 
@@ -82,6 +93,7 @@ python -m open_loupedeck.tray_app
 | `--config PATH` | Path to `config.yaml`. Default: per-OS path, see below. |
 | `-v`, `--verbose` | Verbose logging. |
 | `--web [HOST:PORT]` | Start the embedded HTTP server (default `127.0.0.1:8765` if given with no value). |
+| `--virtual [MODEL]` | With `--web`: use the virtual device (`virtual`, `virtual_mega`, `virtual_mini`) instead of hardware. |
 | `--no-device` | Don't open the Loupedeck serial device — pairs with `--web` to edit config without hardware. |
 | `--log-dir DIR` | Override the log directory. |
 
@@ -99,6 +111,9 @@ sudo cp udev/99-loupedeck.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
+For an Elgato Stream Deck (experimental), copy `udev/70-streamdeck.rules` the same way and replug the
+deck; see [docs/streamdeck.md](docs/streamdeck.md).
+
 ---
 
 ## Configuration file
@@ -111,9 +126,13 @@ The config lives at:
 | macOS | `~/Library/Application Support/open-loupedeck/config.yaml` |
 | Linux | `~/.config/open-loupedeck/config.yaml` |
 
-Editing it by hand is possible (it's plain YAML) but the config window covers everything and validates as you go — see **[docs/configuration.md](docs/configuration.md)** for the full schema (every action type and its parameters, dispatch order between pages/global_buttons/bindings, the button design fields, troubleshooting) if you want to script it directly or write a plugin.
+Editing it by hand is possible (it's plain YAML) but the config window covers everything and validates as you go — see **[docs/configuration.md](docs/configuration.md)** for the full schema (config v2, every action type and its parameters, how a page's own setting overrides the one for every page, the button design fields, troubleshooting) if you want to script it directly or write a plugin.
+
+An older (v1) config is converted automatically the first time 0.3 starts; the original is kept as `open-loupedeck-backups/config.yaml.pre-v2`.
 
 Languages: English and French are built in (setting `language: auto` follows your OS). Adding another is a single JSON file — see **[docs/translating.md](docs/translating.md)**.
+
+World of Warcraft: one deck key sends one key chord for a macro bound inside the game, plus on-demand WoW icons (`wow:<name>`) — see **[docs/wow.md](docs/wow.md)**.
 
 Extra Python actions: `plugin_modules: ["/path/to/file.py"]` in the config, `@register_action("my.action")` in the file — see `examples/custom_action.py`.
 

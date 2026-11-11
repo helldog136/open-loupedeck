@@ -122,6 +122,16 @@ button[hidden],
   box-shadow: 0 0 6px var(--led, transparent);
   flex: none;
 }
+/* A page no button opens: hollow dot. */
+.pagetab:not(.has-button) .dot {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+.pagetab:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
 .pagetab .num {
   font: 500 11px var(--mono);
   color: var(--muted);
@@ -189,10 +199,6 @@ main.buttons-layout {
 @media (max-width: 960px) {
   main.buttons-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-  #mount-inspector.side-panel {
-    position: static;
-    max-height: none;
   }
 }
 
@@ -305,6 +311,14 @@ main.buttons-layout {
 .svc-row select {
   width: auto;
   min-width: 11rem;
+}
+.svc-row-hint {
+  flex-basis: 100%;
+  margin: calc(var(--sp-1) * -1) 0 0;
+  font-size: var(--fs-xs);
+}
+.svc-row-hint:empty {
+  display: none;
 }
 .svc-slider {
   display: inline-flex;

@@ -10,8 +10,9 @@ from typing import Any
 import yaml
 
 from .config import DeviceConfig, HaConfig, ObsConfig, Settings
+from .config_migrate import CONFIG_VERSION, default_global_bindings, migrate_config, needs_migration
 from .deck_brightness import clamp_level, normalize_night
-from .knob_roles import migrate_legacy_knob_pages
+from .devices.registry import config_model
 
 
 def load_raw_config(path: Path) -> dict[str, Any]:
@@ -91,8 +92,32 @@ def raw_to_settings(raw: dict[str, Any]) -> Settings:
     )
 
 
+def _default_page(n: int) -> dict[str, Any]:
+    # Live S 5x3 key grid: lower-left = key_0_2, lower-right = key_4_2.
+    return {
+        "id": n,
+        "name": f"Page {n + 1}",
+        "controls": {
+            "key_0_2": {
+                "action": {
+                    "type": "display.live_message",
+                    "template": "Page {page_number}/{page_count}",
+                }
+            },
+            "key_4_2": {
+                "action": {
+                    "type": "display.clock",
+                    "time_format": "%H:%M",
+                    "date_format": "%a %d %b",
+                }
+            },
+        },
+    }
+
+
 def default_raw_config() -> dict[str, Any]:
     return {
+        "config_version": CONFIG_VERSION,
         "language": "auto",
         "onboarding_done": False,
         "brightness": 80,
@@ -107,99 +132,26 @@ def default_raw_config() -> dict[str, Any]:
         "ha": {"base_url": "", "token": ""},
         "device": {"path": "", "baudrate": None, "model": "auto"},
         "plugin_modules": [],
-        "global_buttons": {},
-        "pages": [
-            {
-                "id": 0,
-                "name": "Page 1",
-                "buttons": {
-                    # Live S 5×3 touch grid: lower-left=touch_10, lower-right=touch_14.
-                    "touch_10": {
-                        "action": {
-                            "type": "display.live_message",
-                            "template": "Page {page_number}/{page_count}",
-                        }
-                    },
-                    "touch_14": {
-                        "action": {
-                            "type": "display.clock",
-                            "time_format": "%H:%M",
-                            "date_format": "%a %d %b",
-                        }
-                    },
-                },
-            },
-            {
-                "id": 1,
-                "name": "Page 2",
-                "buttons": {
-                    "touch_10": {
-                        "action": {
-                            "type": "display.live_message",
-                            "template": "Page {page_number}/{page_count}",
-                        }
-                    },
-                    "touch_14": {
-                        "action": {
-                            "type": "display.clock",
-                            "time_format": "%H:%M",
-                            "date_format": "%a %d %b",
-                        }
-                    },
-                },
-            },
-            {
-                "id": 2,
-                "name": "Page 3",
-                "buttons": {
-                    "touch_10": {
-                        "action": {
-                            "type": "display.live_message",
-                            "template": "Page {page_number}/{page_count}",
-                        }
-                    },
-                    "touch_14": {
-                        "action": {
-                            "type": "display.clock",
-                            "time_format": "%H:%M",
-                            "date_format": "%a %d %b",
-                        }
-                    },
-                },
-            },
-            {
-                "id": 3,
-                "name": "Page 4",
-                "buttons": {
-                    "touch_10": {
-                        "action": {
-                            "type": "display.live_message",
-                            "template": "Page {page_number}/{page_count}",
-                        }
-                    },
-                    "touch_14": {
-                        "action": {
-                            "type": "display.clock",
-                            "time_format": "%H:%M",
-                            "date_format": "%a %d %b",
-                        }
-                    },
-                },
-            },
-        ],
+        # The round buttons open pages 1..4 (a default binding, editable like any other).
+        "global": default_global_bindings(config_model("auto")),
+        "pages": [_default_page(i) for i in range(4)],
         "bindings": [],
     }
 
 
 def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
+    """A normalised version-2 copy of ``raw`` (a legacy config is migrated in memory first)."""
+
     out = deepcopy(raw)
+    if needs_migration(out):
+        out, _notes = migrate_config(out)
     if "pages" not in out:
         out["pages"] = []
     if "bindings" not in out:
         out["bindings"] = []
     if "plugin_modules" not in out:
         out["plugin_modules"] = []
-    if "device" not in out:
+    if "device" not in out or not isinstance(out["device"], dict):
         out["device"] = {"path": "", "baudrate": None, "model": "auto"}
     elif "model" not in out["device"]:
         out["device"]["model"] = "auto"
@@ -219,54 +171,34 @@ def ensure_minimal_structure(raw: dict[str, Any]) -> dict[str, Any]:
             "file": True,
             "console": True,
         }
-    if "global_buttons" not in out or not isinstance(out["global_buttons"], dict):
-        out["global_buttons"] = {}
+    if not isinstance(out.get("global"), dict):
+        out["global"] = {}
     if "spotify" not in out or not isinstance(out["spotify"], dict):
         out["spotify"] = {}
     if "twitch" not in out or not isinstance(out["twitch"], (dict, list)):
         out["twitch"] = {}
-    _normalize_live_s_pages_and_page_buttons(out)
-    # Legacy per-knob page stacks -> per-deck-page knob roles (idempotent; keeps the old data).
-    migrate_legacy_knob_pages(out)
+    _normalize_pages(out)
     return out
 
 
-def _normalize_live_s_pages_and_page_buttons(raw: dict[str, Any]) -> None:
-    """Loupedeck Live S: allow any number of touch pages; physical buttons only switch indices 0–3."""
+def _normalize_pages(raw: dict[str, Any]) -> None:
+    """Every page is a mapping with a ``controls`` map; Live S configs get ids 0..n-1 and names."""
 
-    dev = raw.get("device") or {}
-    if str(dev.get("model", "auto")).lower() != "live_s":
-        return
     pages = raw.get("pages")
     if not isinstance(pages, list):
-        pages = []
-    while len(pages) < 1:
-        pages.append({"id": len(pages), "name": f"Page {len(pages) + 1}", "buttons": {}})
+        return
+    live_s = str((raw.get("device") or {}).get("model", "auto")).lower() == "live_s"
+    if live_s:
+        while len(pages) < 1:
+            pages.append({"id": len(pages), "name": f"Page {len(pages) + 1}", "controls": {}})
     for i, p in enumerate(pages):
         if not isinstance(p, dict):
-            pages[i] = {"id": i, "name": f"Page {i + 1}", "buttons": {}}
+            if live_s:
+                pages[i] = {"id": i, "name": f"Page {i + 1}", "controls": {}}
             continue
-        p.setdefault("buttons", {})
-        p["id"] = i
-        if "name" not in p or str(p.get("name") or "").strip() == "":
-            p["name"] = f"Page {i + 1}"
-    raw["pages"] = pages
-    gb = raw.get("global_buttons")
-    if not isinstance(gb, dict):
-        gb = {}
-    # Legacy configs used "btn_0" for the circle key; merge into btn_circle and drop the alias.
-    if "btn_circle" not in gb and "btn_0" in gb:
-        gb["btn_circle"] = gb.get("btn_0")
-    gb.pop("btn_0", None)
-    for bid in ("btn_circle", "btn_1", "btn_2", "btn_3"):
-        ent = gb.get(bid)
-        if not isinstance(ent, dict):
-            continue
-        c = ent.get("button_color")
-        ent = dict(ent)
-        if c is not None and str(c).strip() != "":
-            ent["button_color"] = str(c).strip()
-        else:
-            ent.pop("button_color", None)
-        gb[bid] = ent
-    raw["global_buttons"] = gb
+        if not isinstance(p.get("controls"), dict):
+            p["controls"] = {}
+        if live_s:
+            p["id"] = i
+            if "name" not in p or str(p.get("name") or "").strip() == "":
+                p["name"] = f"Page {i + 1}"

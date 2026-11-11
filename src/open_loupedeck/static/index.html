@@ -207,14 +207,13 @@
               <h3 data-i18n="svc.general.title">General</h3>
             </div>
             <div class="svc-rows">
-              <label class="svc-row">
-                <span class="svc-row-label" data-i18n="svc.general.model">Hardware</span>
-                <select id="deviceModel">
+              <div class="svc-row">
+                <label class="svc-row-label" for="deviceModel" data-i18n="svc.general.model">Hardware</label>
+                <select id="deviceModel" aria-describedby="deviceModelHint">
                   <option value="auto" data-i18n="svc.general.model_auto">Detect automatically</option>
-                  <option value="live_s">Loupedeck Live S</option>
-                  <option value="live" data-i18n="svc.general.model_live">Loupedeck Live (original)</option>
                 </select>
-              </label>
+                <p class="hint svc-row-hint" id="deviceModelHint" role="status"></p>
+              </div>
               <label class="svc-row">
                 <span class="svc-row-label" data-i18n="svc.general.autostart">Launch at startup</span>
                 <span class="toggle"><input type="checkbox" id="autostartToggle" /><span></span></span>
@@ -222,6 +221,10 @@
               <div class="svc-row">
                 <span class="svc-row-label" data-i18n="svc.general.folder_hint">Where your configuration and media are stored</span>
                 <button type="button" class="btn" id="btnOpenConfigFolder" data-i18n="svc.general.open_folder">Open config folder</button>
+              </div>
+              <div class="svc-row">
+                <span class="svc-row-label"><span data-i18n="svc.general.wow_cache">Downloaded World of Warcraft icons</span> <span class="hint" id="wowCacheStatus" role="status"></span></span>
+                <button type="button" class="btn" id="btnClearWowCache" data-i18n="svc.general.wow_cache_clear">Clear WoW icon cache</button>
               </div>
             </div>
           </section>
@@ -254,13 +257,10 @@
         <select id="pageSelect" hidden aria-hidden="true" tabindex="-1"></select>
       </div>
       <main class="buttons-layout">
-        <section id="mount-deck" class="deck-wrap deck-shell">
-          <div class="deck-page-bar">
-            <span class="deck-page-label" data-i18n="deck.editing">Editing</span>
-            <p class="deck-title" id="pageName">Page</p>
-          </div>
-          <div id="onboardingMount" class="ob-mount" hidden></div>
+        <section id="mount-deck" class="deck-shell" data-i18n-attr="aria-label:deck.region">
           <div id="deckRoot"></div>
+          <!-- First launch: the welcome card replaces the deck; afterwards "Next steps" sits under it. -->
+          <div id="onboardingMount" class="ob-mount" hidden></div>
         </section>
 
         <aside id="mount-inspector" class="insp-host" data-i18n-attr="aria-label:inspector.region">

@@ -1,16 +1,18 @@
 /*
- * inspector/clipboard.js — Copy / paste a control's entry between keys (persisted in localStorage) and
- * clear a control. Used by the inspector header buttons.
+ * inspector/clipboard.js — Copy / paste a control's binding between controls (persisted in
+ * localStorage) and clear a control. Used by the inspector header buttons. A binding only pastes onto
+ * a control of the same shape (a knob role onto a knob, an action + look onto a key / button); it goes
+ * to the scope being edited.
  */
 
-import { canPasteToControl, getButtonEntry, isLiveSPageSwitchButton } from "../model.js";
+import { bindingShape, control, getEntry } from "../model.js";
 import { setSaveStatus } from "../save.js";
 import { state } from "../state.js";
 import { deepCloneJson } from "../util.js";
 import { controlName } from "./controls.js";
 import { editEntry } from "./edit.js";
 
-const STORAGE_KEY = "ld_clipboard_control_v1";
+const STORAGE_KEY = "ld_clipboard_control_v2";
 
 export function loadCopiedControlFromStorage() {
   try {
@@ -34,17 +36,19 @@ function saveCopiedControlToStorage() {
 }
 
 export function copyControl(cid) {
-  const e = cid && getButtonEntry(cid);
+  const e = cid && getEntry(cid);
   if (!e) return false;
   state.copiedControlEntry = deepCloneJson(e);
-  state.copiedControlMeta = { cid, at: Date.now() };
+  state.copiedControlMeta = { cid, shape: bindingShape(cid), at: Date.now() };
   saveCopiedControlToStorage();
   setSaveStatus(t("inspector.copy.done", { name: controlName(cid) }));
   return true;
 }
 
 export function canPaste(cid) {
-  return !!(cid && state.copiedControlEntry && canPasteToControl(cid));
+  if (!cid || !state.copiedControlEntry || !control(cid)) return false;
+  const meta = state.copiedControlMeta || {};
+  return (meta.shape || "action") === bindingShape(cid);
 }
 
 export function pasteControl(cid) {
@@ -52,20 +56,14 @@ export function pasteControl(cid) {
   const src = deepCloneJson(state.copiedControlEntry);
   editEntry(cid, (e) => {
     for (const k of Object.keys(e)) delete e[k];
-    // Page buttons only switch pages: only their light colour can be pasted.
-    if (isLiveSPageSwitchButton(cid)) {
-      const c = src && src.button_color ? String(src.button_color).trim() : "";
-      if (c) e.button_color = c;
-    } else {
-      Object.assign(e, src);
-    }
+    Object.assign(e, src);
   });
   setSaveStatus(t("inspector.paste.done", { name: controlName(cid) }));
   return true;
 }
 
 export function clearControl(cid) {
-  if (!cid || !getButtonEntry(cid)) return false;
+  if (!cid || !getEntry(cid)) return false;
   editEntry(cid, (e) => {
     for (const k of Object.keys(e)) delete e[k];
   });

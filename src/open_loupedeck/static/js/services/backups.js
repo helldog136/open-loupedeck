@@ -4,14 +4,10 @@
  */
 
 import { apiGet, refreshSkin } from "../api.js";
-import { renderDeck } from "../deck.js";
-import { currentPage, ensureDevice } from "../model.js";
-import { pullAgentLayoutAndPage, syncPageSelect, updateLiveSPageChrome } from "../pages.js";
+import { pullAgentPage } from "../pages.js";
 import { cancelPendingAutosave, runAutosave, scheduleAutosave, setSaveStatus } from "../save.js";
 import { setServiceState, wireInlineConfirm } from "./cards.js";
-import { ensureLogging, syncLoggingFromCfg } from "./logging.js";
-import { syncSpotifyFromCfg } from "./spotify.js";
-import { state } from "../state.js";
+import { emit, state } from "../state.js";
 import { applyCfgSnapshot, snapshotBeforeAction } from "../undo.js";
 import { $ } from "../util.js";
 
@@ -143,15 +139,8 @@ async function resetConfigToDefaults() {
     const j = await r.json();
     state.cfg = await apiGet();
     state.suppressAutosave = true;
-    ensureDevice();
-    await pullAgentLayoutAndPage();
-    updateLiveSPageChrome();
-    syncSpotifyFromCfg();
-    ensureLogging();
-    syncLoggingFromCfg();
-    $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
-    syncPageSelect();
-    renderDeck();
+    await pullAgentPage();
+    emit("config:replaced", state.pageIndex); // main.js re-syncs every view
     state.suppressAutosave = false;
     scheduleAutosave(); // the four hardware pages may have been padded on load
     setSaveStatus(t("svc.maint.reset_done"));

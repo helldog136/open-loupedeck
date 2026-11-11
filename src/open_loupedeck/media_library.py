@@ -15,6 +15,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from .bindings import iter_bindings
 from .icon_loader import looks_like_icon_uri
 from .key_media_cache import (
     is_video_path,
@@ -222,7 +223,7 @@ _FILE_ACTION_TYPES = frozenset({"sound.play", "overlay.play_sound", "overlay.sho
 
 
 def _deep_process_file_actions(obj: Any, config_dir: Path) -> bool:
-    """Catch file paths on actions nested outside the usual pages/global_buttons/bindings/knob_pages shape."""
+    """Catch file paths on actions nested outside the usual global/pages/bindings/knob_pages shape."""
 
     changed = False
     if isinstance(obj, dict):
@@ -390,23 +391,9 @@ def materialize_external_media(raw: dict[str, Any], config_dir: Path) -> tuple[d
     config_dir = config_dir.resolve()
     changed = False
 
-    gb = out.get("global_buttons")
-    if isinstance(gb, dict):
-        for entry in gb.values():
-            if isinstance(entry, dict):
-                changed |= _process_button_entry(entry, config_dir)
-
-    pages = out.get("pages")
-    if isinstance(pages, list):
-        for page in pages:
-            if not isinstance(page, dict):
-                continue
-            buttons = page.get("buttons")
-            if not isinstance(buttons, dict):
-                continue
-            for entry in buttons.values():
-                if isinstance(entry, dict):
-                    changed |= _process_button_entry(entry, config_dir)
+    # Bindings (``global`` + ``pages[].controls``); knob roles are caught by the deep pass below.
+    for _sk, _cid, entry in iter_bindings(out):
+        changed |= _process_button_entry(entry, config_dir)
 
     bindings = out.get("bindings")
     if isinstance(bindings, list):

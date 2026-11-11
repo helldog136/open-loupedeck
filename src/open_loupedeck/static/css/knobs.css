@@ -3,6 +3,7 @@
 
 .kn-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .kn-chips button { display: grid; gap: 1px; text-align: left; padding: 6px 12px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; max-width: 100%; }
+.kn-chips button.is-inherited { border-style: dashed; }
 .kn-chips button[aria-pressed="true"] { border-color: var(--accent); background: var(--surface-2); }
 .kn-chip-name { font-size: var(--fs-sm); font-weight: 600; overflow-wrap: anywhere; }
 .kn-chip-role { font: 500 10px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
@@ -36,8 +37,6 @@
 .kn-action { display: grid; gap: var(--sp-3); min-width: 0; }
 .kn-clear { justify-self: start; font-size: var(--fs-sm); }
 .kn-clear[hidden] { display: none; }
-.kn-apply { margin: 0; }
-.kn-apply .btn-link { font-size: var(--fs-sm); }
 
 .kn-tests { display: flex; gap: 8px; }
 .kn-test { flex: 1; min-width: 0; }

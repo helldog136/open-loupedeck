@@ -1,4 +1,4 @@
-"""Loupedeck screen brightness: day level, optional night window, debounced persistence.
+"""Device screen brightness: day level, optional night window, debounced persistence.
 
 Config (top level of ``config.yaml``)::
 
@@ -23,6 +23,8 @@ from collections.abc import Callable
 from datetime import datetime, time
 from time import monotonic
 from typing import Any
+
+from .devices.base import device_model_of
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ def in_window(now: time, start: time, end: time) -> bool:
 
 
 class DeckBrightness:
-    """Holds the brightness settings, applies them to ``runtime.deck`` and persists changes."""
+    """Holds the brightness settings, applies them to ``runtime.deck`` (the device backend) and persists changes."""
 
     def __init__(
         self,
@@ -136,6 +138,9 @@ class DeckBrightness:
         level = self.effective_level()
         self._last_applied = level
         deck = getattr(self._runtime, "deck", None)
+        model = device_model_of(deck)
+        if model is not None and not model.brightness:
+            return level
         if deck is not None and hasattr(deck, "set_brightness"):
             try:
                 deck.set_brightness(level)

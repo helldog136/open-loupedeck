@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
-KNOB_ENCODER_IDS = frozenset({"knobTL", "knobCL", "knobBL", "knobTR", "knobCR", "knobBR"})
+from .control_ids import to_control_id
+from .devices.loupedeck.models import LEGACY_KNOB_IDS
+from .devices.model import DeviceModel
+from .devices.registry import config_model
+
+KNOB_ENCODER_IDS = frozenset(LEGACY_KNOB_IDS)
+"""Legacy knob ids (the keys of a legacy ``knob_pages``)."""
 
 # Hard upper bound for on-screen page name after cycling (seconds).
 KNOB_PAGE_FEEDBACK_MAX_SEC = 2.0
@@ -42,22 +48,19 @@ def knob_page_feedback_label(page: dict[str, Any]) -> str:
     return str(page.get("name") or page.get("page_change_message") or page.get("message") or "").strip()
 
 
-def feedback_touch_key_for_knob_page_name(knob_id: str, model: str) -> str | None:
-    """Touch cell that shows the knob page name when that encoder’s page is cycled."""
+def feedback_key_for_knob(knob_id: str, model: DeviceModel | str | None) -> str | None:
+    """Display control showing a knob's feedback (its model ``feedback_key``, else the nearest).
 
-    m = (model or "auto").lower()
-    if m == "live":
-        col_top = {
-            "knobTL": "touch_0",
-            "knobCL": "touch_4",
-            "knobBL": "touch_8",
-            "knobTR": "touch_3",
-            "knobCR": "touch_7",
-            "knobBR": "touch_11",
-        }
-        return col_top.get(knob_id)
-    # live_s (and auto default layout): top dial → touch_0, lower dial → touch_5
-    return {"knobTL": "touch_0", "knobCL": "touch_5"}.get(knob_id)
+    ``model`` is a :class:`DeviceModel` or a ``device.model`` value (``live``, ``live_s``,
+    ``auto`` -> the Live S); ``knob_id`` a control id (``knob_0``) or a legacy one (``knobTL``).
+    """
+
+    dm = model if isinstance(model, DeviceModel) else config_model(model)
+    cid = to_control_id(knob_id, dm)
+    return dm.feedback_key_for(cid) if cid is not None else None
+
+
+feedback_touch_key_for_knob_page_name = feedback_key_for_knob
 
 
 def feedback_duration_sec(raw: dict[str, Any]) -> float:

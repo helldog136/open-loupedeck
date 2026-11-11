@@ -69,16 +69,17 @@ const probeCache = new Map(); // url -> "ok" | "fail"
 /**
  * Fill `host` (a sized box) with a preview of an icon value. Monochrome icons are painted through a CSS mask in
  * `currentColor`; coloured ones use an <img>. If the image cannot be loaded (offline, bad slug) the host shows a
- * text placeholder (two letters) instead.
+ * text placeholder instead: `placeholder` when given (e.g. the first letter of what the icon stands for),
+ * else two letters of the icon's name.
  */
-export function renderIcon(host, value, { title = "" } = {}) {
+export function renderIcon(host, value, { title = "", placeholder = "" } = {}) {
   host.textContent = "";
   host.classList.add("pk-ico");
   const url = previewUrl(value);
   const fallback = () => {
     host.textContent = "";
     host.classList.add("is-missing");
-    host.append(el("span", { class: "pk-ico-txt", text: iconInitials(value) }));
+    host.append(el("span", { class: "pk-ico-txt", text: placeholder || iconInitials(value) }));
   };
   host.classList.remove("is-missing");
   if (title) host.title = title;

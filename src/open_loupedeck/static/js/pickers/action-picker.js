@@ -10,7 +10,7 @@
  * favourites live in localStorage; both are optional and silently skipped when storage is unavailable.
  */
 
-import { actionKeywords, normalize, pushRecent, rankItems } from "./helpers.js";
+import { actionKeywords, normalize, pushRecent, rankItems, sortActionsByUse, splitActionLabel } from "./helpers.js";
 import { el, loadJSON, nextId, onLanguageChange, renderIcon, saveJSON, tr } from "./common.js";
 
 const KEY_RECENT = "olp.picker.actions.recent";
@@ -48,10 +48,12 @@ export function createActionPicker(container, opts = {}) {
 
   const labelOf = (a) => (lang && a.labels && a.labels[lang]) || a.label || a.type;
   const categoryOf = (a) => tr(`category.${a.category}`, a.category || "");
+  /** Short human name + secondary text ("System", the details in parentheses). */
+  const partsOf = (a) => splitActionLabel(labelOf(a), categoryOf(a));
   const lookOf = (a) => a.default_look || {};
   const byType = (type) => catalog.find((a) => a.type === type);
   const fieldsOf = (a) => ({
-    label: `${labelOf(a)} ${a.label || ""}`,
+    label: `${partsOf(a).name} ${labelOf(a)}`,
     category: `${categoryOf(a)} ${a.category || ""}`,
     keywords: a._kw || (a._kw = actionKeywords(a)),
   });
@@ -61,12 +63,16 @@ export function createActionPicker(container, opts = {}) {
     search.setAttribute("aria-label", tr("picker.action.search", "Search an action…"));
   }
 
-  function rowFor(a, optionId) {
+  function rowFor(a, optionId, { withCategory = false } = {}) {
     const look = lookOf(a);
+    const { name, details, prefix } = partsOf(a);
+    const initial = name.charAt(0).toLocaleUpperCase();
     const dot = el("span", { class: "pk-dot", "aria-hidden": "true" });
     dot.style.background = look.bg || "var(--surface-2)";
     dot.style.color = look.fg || "#fff";
-    if (look.icon) renderIcon(dot, look.icon);
+    if (look.icon) renderIcon(dot, look.icon, { placeholder: initial });
+    else dot.append(el("span", { class: "pk-ico-txt", text: initial }));
+    const sub = [withCategory ? categoryOf(a) : "", prefix, details].filter(Boolean).join(" · ");
     const fav = favourites.includes(a.type);
     const main = el(
       "button",
@@ -78,9 +84,10 @@ export function createActionPicker(container, opts = {}) {
         tabindex: "-1",
         "data-type": a.type,
         "aria-selected": a.type === value ? "true" : "false",
+        title: labelOf(a),
       },
       dot,
-      el("span", { class: "pk-act-text" }, el("span", { class: "pk-act-label", text: labelOf(a) }), el("span", { class: "pk-act-cat", text: categoryOf(a) })),
+      el("span", { class: "pk-act-text" }, el("span", { class: "pk-act-label", text: name }), sub ? el("span", { class: "pk-act-cat", text: sub }) : null),
     );
     main.addEventListener("click", () => choose(a));
     const star = el("button", {
@@ -112,7 +119,7 @@ export function createActionPicker(container, opts = {}) {
     if (recItems.length) out.push({ name: tr("picker.action.recent", "Recent"), items: recItems, special: true });
     const order = [];
     const map = new Map();
-    for (const a of catalog) {
+    for (const a of sortActionsByUse(catalog)) {
       const c = categoryOf(a);
       if (!map.has(c)) {
         map.set(c, []);
@@ -149,7 +156,8 @@ export function createActionPicker(container, opts = {}) {
       }
       for (const a of g.items) {
         const oid = `${id}-o${n++}`;
-        sec.append(rowFor(a, oid));
+        // Mixed lists (search results, recent, favourites) say which category each action is from.
+        sec.append(rowFor(a, oid, { withCategory: !!(g.flat || g.special) }));
         optionIds.push({ id: oid, action: a });
       }
       list.append(sec);

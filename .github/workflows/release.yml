@@ -36,6 +36,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           pip install pyinstaller
+      - name: Fetch hidapi (Stream Deck backend)
+        # hidapi.dll is bundled by packaging/pyinstaller.spec (OPEN_LOUPEDECK_HIDAPI); the build still
+        # succeeds without it, the Stream Deck backend then needs hidapi on the user's system.
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/libusb/hidapi/releases/download/hidapi-0.14.0/hidapi-win.zip" -OutFile hidapi-win.zip
+          Expand-Archive hidapi-win.zip -DestinationPath hidapi-win
+          $dll = Get-ChildItem -Recurse hidapi-win -Filter hidapi.dll | Where-Object { $_.FullName -match "x64" } | Select-Object -First 1
+          "OPEN_LOUPEDECK_HIDAPI=$($dll.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
       - name: PyInstaller build
@@ -64,6 +74,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           pip install pyinstaller
+      - name: Install hidapi (Stream Deck backend, bundled by the spec)
+        continue-on-error: true
+        run: brew install hidapi
       - name: Build .dmg
         run: bash packaging/macos/build_dmg.sh
       - uses: actions/upload-artifact@v4
@@ -86,6 +99,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
           pip install pyinstaller
+      - name: Install hidapi (Stream Deck backend, bundled by the spec)
+        continue-on-error: true
+        run: sudo apt-get update && sudo apt-get install -y libhidapi-libusb0
       - name: Build AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1" # CI runners typically have no working FUSE mount

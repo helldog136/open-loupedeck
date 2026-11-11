@@ -88,7 +88,8 @@ def test_ensure_minimal_structure_fills_missing_sections():
         "obs",
         "ha",
         "logging",
-        "global_buttons",
+        "global",
+        "config_version",
     ):
         assert key in out
     # Knobs live on each deck page now; the legacy top-level knob_pages is no longer created.
@@ -122,8 +123,9 @@ def test_ensure_minimal_structure_normalizes_live_s_btn_0_alias():
         "global_buttons": {"btn_0": {"button_color": " #ff0000 "}},
     }
     out = ensure_minimal_structure(raw)
-    assert "btn_0" not in out["global_buttons"]
-    assert out["global_buttons"]["btn_circle"]["button_color"] == "#ff0000"
+    assert "btn_0" not in out["global"] and "global_buttons" not in out
+    assert out["global"]["button_0"]["button_color"] == "#ff0000"
+    assert out["global"]["button_0"]["action"] == {"type": "agent.goto_page", "index": 0}
     # Live S always gets at least one page, with a normalized id/name.
     assert len(out["pages"]) == 1
     assert out["pages"][0]["id"] == 0

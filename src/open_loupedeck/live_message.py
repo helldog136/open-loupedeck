@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from .control_ids import is_page_scoped_control
+from .bindings import resolve_binding, storage_key
 from .obs_stream_status import fetch_obs_stream_fields
 from .platform_battery import read_battery_info
 from .twitch_helix import (
@@ -350,17 +350,16 @@ def iter_dynamic_display_slots(
 
     out: list[tuple[str, str, dict[str, Any]]] = []
     pages = raw.get("pages") or []
-    if not isinstance(pages, list):
-        return out
-    for pi, page in enumerate(pages):
-        if not isinstance(page, dict):
-            continue
-        bt = page.get("buttons") or {}
-        if not isinstance(bt, dict):
-            continue
-        for cid, entry in bt.items():
-            _append_entry_slots(out, f"p{pi}:", cid, entry)
-    gb = raw.get("global_buttons") or {}
+    if isinstance(pages, list):
+        for pi, page in enumerate(pages):
+            if not isinstance(page, dict):
+                continue
+            bt = page.get("controls") or {}
+            if not isinstance(bt, dict):
+                continue
+            for cid, entry in bt.items():
+                _append_entry_slots(out, f"p{pi}:", cid, entry)
+    gb = raw.get("global") or {}
     if isinstance(gb, dict):
         for cid, entry in gb.items():
             _append_entry_slots(out, "g:", cid, entry)
@@ -893,19 +892,14 @@ async def refresh_live_messages(
     return changed
 
 
-def overlay_text_for_control(
-    control_id: str,
-    page_index: int,
-    live_text: dict[str, str] | None,
-) -> str | None:
-    if not live_text:
-        return None
-    if is_page_scoped_control(control_id):
-        return live_text.get(f"p{page_index}:{control_id}")
-    return live_text.get(f"g:{control_id}")
+def preview_storage_key(control_id: str, page_index: int, raw: dict[str, Any] | None = None) -> str:
+    """Storage key of ``control_id``'s binding on page ``page_index`` (``p<i>:<id>`` / ``g:<id>``).
 
+    With ``raw``, the resolution rule picks page or global; without, the page key.
+    """
 
-def preview_storage_key(control_id: str, page_index: int) -> str:
-    if is_page_scoped_control(control_id):
-        return f"p{page_index}:{control_id}"
-    return f"g:{control_id}"
+    if raw is not None:
+        b = resolve_binding(raw, page_index, control_id)
+        if b is not None:
+            return b.storage_key
+    return storage_key(control_id, "page", page_index)

@@ -114,6 +114,95 @@ export function pushRecent(list, value, max = 5) {
   return [value, ...list.filter((v) => v !== value)].slice(0, max);
 }
 
+/* ------------------------------------------------------------------ action labels */
+
+/**
+ * A catalog label is "Category — what it does (details)". Split it for humans: `name` is the short part
+ * ("Next track"), `details` the parenthesised details, `prefix` the leading word when it says more than
+ * the category does ("System" for a Sound action). Works on any language using " — " / " - ".
+ */
+export function splitActionLabel(label, category = "") {
+  let rest = String(label ?? "").trim();
+  let prefix = "";
+  const m = /^(.+?)\s[—–-]\s(.+)$/.exec(rest);
+  if (m) {
+    prefix = m[1].trim();
+    rest = m[2].trim();
+  }
+  let details = "";
+  const d = /^(.*\S)\s*\(([^()]+)\)$/.exec(rest);
+  if (d) {
+    rest = d[1].trim();
+    details = d[2].trim();
+  }
+  const name = rest ? rest.charAt(0).toLocaleUpperCase() + rest.slice(1) : String(label ?? "");
+  const cat = normalize(category);
+  const pre = normalize(prefix);
+  if (pre && cat && (cat.startsWith(pre) || pre.startsWith(cat))) prefix = "";
+  return { name, details, prefix };
+}
+
+/**
+ * Categories in the order people reach for them (streaming and sound first, plumbing last); unknown
+ * categories come after, in catalog order.
+ */
+export const CATEGORY_ORDER = [
+  "obs",
+  "sound",
+  "spotify",
+  "twitch",
+  "home_assistant",
+  "display",
+  "deck",
+  "keyboard",
+  "wow",
+  "obs_overlay",
+  "http",
+  "shell",
+];
+
+/** Within a category, these come first (in this order); the others keep the catalog order. */
+export const ACTION_ORDER = [
+  "obs.set_scene",
+  "obs.toggle_mute",
+  "sound.play",
+  "sound.mute_toggle",
+  "sound.volume_delta",
+  "spotify.play_pause",
+  "spotify.next",
+  "spotify.previous",
+  "twitch.create_clip",
+  "twitch.create_marker",
+  "ha.toggle",
+  "ha.turn_on",
+  "ha.turn_off",
+  "display.clock",
+  "display.obs_scene",
+  "agent.goto_page",
+  "agent.next_page",
+  "agent.prev_page",
+];
+
+/** Catalog actions in the order people reach for them: by category rank, then ACTION_ORDER, then catalog order. */
+export function sortActionsByUse(actions) {
+  const at = (a) => {
+    const i = ACTION_ORDER.indexOf(a.type);
+    return i < 0 ? ACTION_ORDER.length : i;
+  };
+  return actions
+    .map((a, i) => ({ a, i }))
+    .sort((x, y) => categoryRank(x.a) - categoryRank(y.a) || at(x.a) - at(y.a) || x.i - y.i)
+    .map((x) => x.a);
+}
+
+/** Rank of an action's category in CATEGORY_ORDER (from `category_key` "category.<slug>" or `category`). */
+export function categoryRank(action) {
+  const key = String((action && (action.category_key || action.category)) || "");
+  const slug = normalize(key.replace(/^category\./, "")).replace(/[^a-z0-9]+/g, "_");
+  const i = CATEGORY_ORDER.indexOf(slug);
+  return i < 0 ? CATEGORY_ORDER.length : i;
+}
+
 /* ------------------------------------------------------------------ icons */
 
 // Keep in sync with icon_loader.py (_LUCIDE_VER, _MDI_VER, _HEROICONS_BASE): the browser previews the very
@@ -122,6 +211,9 @@ export const LUCIDE_VER = "0.446.0";
 export const MDI_VER = "7.4.47";
 export const HEROICONS_VER = "2.1.5";
 const SLUG_SAFE = /^[a-zA-Z0-9._-]+$/;
+// World of Warcraft icons (Blizzard assets: never bundled, loaded from Wowhead's CDN; keep in sync with wow_icons.py).
+export const WOW_ICON_BASE = "https://wow.zamimg.com/images/wow/icons/large";
+export const WOW_NAME = /^[a-z0-9_]+$/;
 
 /**
  * Classify an `icon` config value.
@@ -156,6 +248,11 @@ export function parseIconValue(raw) {
     const color = parts.length > 1 ? parts[1].toLowerCase() : "ffffff";
     if (!SLUG_SAFE.test(slug) || parts.length > 2 || !/^[0-9a-f]{6}$/.test(color)) return { kind: "invalid", url: null };
     return { kind: "si", slug, color: parts.length > 1 ? color : null, url: `https://cdn.simpleicons.org/${encodeURIComponent(slug)}/${color}` };
+  }
+  if (low.startsWith("wow:")) {
+    const slug = rest(4).toLowerCase();
+    if (!WOW_NAME.test(slug) || slug.length > 96) return { kind: "invalid", url: null };
+    return { kind: "wow", slug, url: `${WOW_ICON_BASE}/${slug}.jpg` };
   }
   if (low.startsWith("https://") || low.startsWith("http://")) return { kind: "url", url: s };
   return { kind: "file", url: null, path: s };
@@ -240,14 +337,6 @@ export function contrastRatio(a, b) {
   if (la == null || lb == null) return null;
   const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
   return (hi + 0.05) / (lo + 0.05);
-}
-
-/** Black or white, whichever reads better on `bg`. */
-export function readableOn(bg) {
-  const cw = contrastRatio("#ffffff", bg);
-  const cb = contrastRatio("#000000", bg);
-  if (cw == null) return "#ffffff";
-  return cw >= cb ? "#ffffff" : "#000000";
 }
 
 export const LOW_CONTRAST = 3;

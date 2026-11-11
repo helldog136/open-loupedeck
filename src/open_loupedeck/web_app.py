@@ -22,7 +22,7 @@ from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile, WebSo
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import autostart, sound_library, sound_player
+from . import autostart, sound_library, sound_player, wow_icons
 from .action_catalog import merged_catalog
 from .button_render import (
     PreviewCache,
@@ -32,11 +32,15 @@ from .button_render import (
 )
 from .config_backup import create_rotating_backup, list_backups, restore_backup, wipe_backups
 from .config_io import default_raw_config, ensure_minimal_structure, save_raw_config
+from .config_migrate import UI_MODEL_KEY, config_version, from_ui_view, to_ui_view
 from .config_paths import ensure_application_dirs
 from .config_state import ConfigState
-from .control_ids import is_page_scoped_control
+from .control_ids import control_to_legacy_id, to_control_id
 from .deck_brightness import make_deck_brightness, parse_hhmm
-from .hardware.live_s_device import LoupedeckLiveS
+from .devices.base import device_model_of
+from .devices.model import DeviceModel, control_kind_from_id
+from .devices.registry import config_model, default_model, force_model, known_models, model_by_name
+from .devices.virtual.transport import handle_virtual_socket, virtual_backend_of
 from .i18n import available_languages, get_language, messages_for, resolve_language, set_language_from_raw, t
 from .knob_duos import list_duos
 from .knob_roles import validate_knobs_config
@@ -55,13 +59,13 @@ from .live_message import (
     prune_stale_live_message_keys,
     twitch_live_params_from_entry,
 )
-from .logging_setup import reapply_logging_from_config
+from .logging_setup import default_icon_cache_dir, reapply_logging_from_config
 from .look_defaults import proposed_entry, resolve_look
 from .media_library import FONT_FILE_EXT, materialize_external_media, prune_unused_library_media
 from .package_paths import package_root
 from .packs import list_packs
 from .runtime_refs import AgentRuntimeRefs
-from .simulate_input import build_synthetic_loupedeck_message
+from .simulate_input import build_synthetic_event
 from .spotify_client import SpotifyManager
 from .twitch_api import DEFAULT_CLIENT_ID, TwitchManager
 
@@ -77,6 +81,30 @@ mimetypes.add_type("text/javascript", ".js")
 
 def _static_dir() -> Path:
     return package_root() / "static"
+
+
+def ui_model(raw: dict[str, Any], deck: Any = None) -> DeviceModel:
+    """Model the current UI lays the deck out for: ``device.model``, else the connected device's
+    (``auto``), else the Live S. The legacy-shaped config the UI edits uses its key grid."""
+
+    dev = raw.get("device") if isinstance(raw.get("device"), dict) else {}
+    return model_by_name(str(dev.get("model") or "auto")) or device_model_of(deck) or default_model()
+
+
+def config_for_ui(raw: dict[str, Any], deck: Any = None) -> dict[str, Any]:
+    """The config as the current web UI edits it (legacy ids/shape, see ``config_migrate``)."""
+
+    return to_ui_view(raw, ui_model(raw, deck))
+
+
+def config_from_ui(body: dict[str, Any]) -> dict[str, Any]:
+    """A config PUT by a client: version 2 as is; a legacy / UI-view body is converted."""
+
+    if config_version(body) >= 2:
+        out = dict(body)
+        out.pop(UI_MODEL_KEY, None)
+        return out
+    return from_ui_view(body)
 
 
 def _twitch_accounts_from(raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -129,6 +157,13 @@ def create_web_app(
             return "<h1>Missing static/index.html</h1>"
         return p.read_text(encoding="utf-8")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon() -> Response:
+        icon = Path(__file__).parent / "icons" / "app.ico"
+        if not icon.is_file():
+            raise HTTPException(404, "no favicon")
+        return Response(content=icon.read_bytes(), media_type="image/x-icon")
+
     static = _static_dir()
     if static.is_dir():
         app.mount("/assets/ui", StaticFiles(directory=str(static)), name="ui_static")
@@ -149,6 +184,34 @@ def create_web_app(
             await ws.close(code=1011)
             return
         await hub.handle_connection(ws)
+
+    @app.websocket("/ws/virtual")
+    async def ws_virtual(ws: WebSocket) -> None:
+        await handle_virtual_socket(ws, lambda: rt.deck)
+
+    @app.get("/api/virtual/state")
+    async def api_virtual_state() -> JSONResponse:
+        """Snapshot of the virtual device (model, images as base64 PNG, LEDs, brightness)."""
+
+        vb = virtual_backend_of(rt.deck)
+        if vb is None:
+            raise HTTPException(status_code=404, detail="No virtual device is running (start with --virtual)")
+        return JSONResponse(vb.snapshot())
+
+    @app.post("/api/virtual/model")
+    async def api_virtual_model(body: dict[str, Any] = Body(...)) -> JSONResponse:
+        """Switch the running virtual device to another virtual model (this run only, config untouched)."""
+
+        vb = virtual_backend_of(rt.deck)
+        if vb is None:
+            raise HTTPException(status_code=409, detail="No virtual device is running (start with --virtual)")
+        wanted = model_by_name(str(body.get("model") or ""))
+        if wanted is None or wanted.family != "virtual":
+            raise HTTPException(status_code=400, detail="Unknown virtual model")
+        if wanted.id != vb.model.id:
+            force_model(wanted.id)
+            vb.request_unplug()  # the agent's reconnect loop opens the new model
+        return JSONResponse({"ok": True, "model": wanted.id})
 
     @app.get("/api/locales")
     async def api_locales() -> JSONResponse:
@@ -245,15 +308,21 @@ def create_web_app(
                 "path": p,
             }
         else:
-            conn = getattr(rt.deck, "connection", None)
             path = getattr(rt.deck, "path", None)
-            usb_ok = conn is not None and bool(getattr(conn, "is_open", False))
+            usb_ok = bool(getattr(rt.deck, "is_open", False))
             usb = {
                 "connected": usb_ok,
                 "disabled": False,
                 "detail": str(path) if path else "",
                 "path": str(path) if path else None,
             }
+            dm_open = device_model_of(rt.deck)
+            if dm_open is not None:
+                usb["name"] = dm_open.name
+            if getattr(rt.deck, "experimental", False) is True:
+                # Backends not verified on hardware yet (Stream Deck): the UI shows this notice.
+                usb["experimental"] = True
+                usb["notice"] = t("status.device.experimental", name=dm_open.name if dm_open else "")
 
         obs_block: dict[str, Any]
         if st.obs is None:
@@ -305,20 +374,28 @@ def create_web_app(
 
         deck_layout: str | None = None
         if rt.deck is not None:
-            deck_layout = "live_s" if isinstance(rt.deck, LoupedeckLiveS) else "live"
+            dm = device_model_of(rt.deck)
+            deck_layout = dm.config_name if dm is not None else "live"
 
         hub = getattr(rt, "overlay_hub", None)
         overlay_paths: dict[str, str] = {"page": "/overlay", "websocket": "/ws/overlay"} if hub is not None else {}
 
         touch_errors: dict[str, str] = {}
+        control_errors: dict[str, str] = {}
         try:
-            prefix = f"p{int(page_index_ui)}:touch_"
+            async with lock:
+                view_model = ui_model(state.raw, rt.deck)
+            prefix = f"p{int(page_index_ui)}:"
             for k, v in (rt.control_error or {}).items():
-                if isinstance(k, str) and k.startswith(prefix):
-                    # storage_key is "p{page}:touch_N" → expose "touch_N"
+                if not isinstance(k, str):
+                    continue
+                # storage keys: "p{page}:<control id>" (page binding) / "g:<control id>" (global)
+                if k.startswith((prefix, "g:")):
                     _, _, cid = k.partition(":")
-                    if is_page_scoped_control(cid):
-                        touch_errors[cid] = str(v)
+                    control_errors.setdefault(cid, str(v))
+                    lid = control_to_legacy_id(cid, view_model) if control_kind_from_id(cid) == "key" else None
+                    if lid is not None and k.startswith(prefix):
+                        touch_errors[lid] = str(v)  # the current UI's key ids
         except Exception:
             logger.debug("status: touch_errors build failed", exc_info=True)
 
@@ -332,6 +409,32 @@ def create_web_app(
                 "deck_layout": deck_layout,
                 "overlay": overlay_paths,
                 "touch_errors": touch_errors,
+                "control_errors": control_errors,
+            }
+        )
+
+    @app.get("/api/device_model")
+    async def api_device_model() -> JSONResponse:
+        """Descriptor of the connected device, else of the configured ``device.model`` (``auto``: none)."""
+
+        async with lock:
+            configured = state.settings().device.model or "auto"
+        dm = device_model_of(rt.deck)
+        source: str | None = "device" if dm is not None else None
+        if dm is None:
+            dm = model_by_name(configured)
+            source = "config" if dm is not None else None
+        # What the config is written for (``auto`` -> Live S): its key grid gives the coordinates.
+        cm = config_model(configured)
+        return JSONResponse(
+            {
+                "source": source,
+                "connected": rt.deck is not None and bool(getattr(rt.deck, "is_open", False)),
+                "configured_model": configured,
+                "config_model": cm.id,
+                "known_models": [m.id for m in known_models()],
+                "models": {m.id: m.to_dict() for m in known_models()},
+                "model": dm.to_dict() if dm is not None else None,
             }
         )
 
@@ -354,6 +457,14 @@ def create_web_app(
         except Exception as exc:
             raise HTTPException(500, t("error.open_folder", error=exc)) from exc
         return JSONResponse({"ok": True, "path": str(folder)})
+
+    @app.post("/api/wow_icons/clear")
+    async def clear_wow_icons() -> JSONResponse:
+        """Delete the downloaded World of Warcraft icons (they are fetched again on demand)."""
+
+        removed = await asyncio.to_thread(wow_icons.clear_cache, default_icon_cache_dir())
+        preview_cache.clear()
+        return JSONResponse({"ok": True, "removed": removed})
 
     @app.get("/api/autostart")
     async def get_autostart() -> JSONResponse:
@@ -395,7 +506,7 @@ def create_web_app(
     async def simulate_press(body: dict[str, Any] = Body(...)) -> JSONResponse:
         """Fire the same dispatch path as a hardware press/turn (for testing without the device)."""
 
-        sim = rt.simulate_raw_message
+        sim = rt.simulate_event
         if sim is None:
             raise HTTPException(503, t("error.simulate_unavailable"))
         cid = str(body.get("control_id") or "").strip()
@@ -405,14 +516,16 @@ def create_web_app(
             s = str(raw_dir).strip().lower()
             if s in ("left", "right"):
                 direction = s
-        msg = build_synthetic_loupedeck_message(cid, direction=direction)
-        if msg is None:
+        async with lock:
+            sim_model = ui_model(state.raw, rt.deck)  # legacy ids from the UI use its grid
+        ev = build_synthetic_event(cid, direction=direction, model=sim_model)
+        if ev is None:
             raise HTTPException(
                 400,
                 t("error.unsupported_control"),
             )
         try:
-            await sim(msg)
+            await sim(ev)
         except Exception as e:
             logger.exception("simulate_press failed")
             raise HTTPException(500, detail=str(e)) from e
@@ -428,9 +541,12 @@ def create_web_app(
     @app.get("/api/packs")
     async def starter_packs(
         lang: str | None = Query(None, description="Language code; default = the app's current language"),
+        model: str | None = Query(None, description="Model id the packs are fitted to; default = the UI's model"),
     ) -> JSONResponse:
         code = resolve_language(lang) if lang else get_language()
-        return JSONResponse({"lang": code, "packs": list_packs(code)})
+        async with lock:
+            pm = model_by_name(model) or ui_model(state.raw, rt.deck)
+        return JSONResponse({"lang": code, "packs": list_packs(code, pm)})
 
     @app.get("/api/knob_duos")
     async def knob_duos(
@@ -585,17 +701,29 @@ def create_web_app(
         return JSONResponse({"ok": True})
 
     @app.get("/api/config")
-    async def get_config() -> JSONResponse:
-        logger.debug("GET /api/config")
+    async def get_config(
+        format: str | None = Query(None, description="v2 = the stored config_version 2 shape; default = UI view"),
+    ) -> JSONResponse:
+        """The config. By default in the legacy shape the current UI edits (``config_migrate``);
+        ``?format=v2`` returns the stored ``config_version: 2`` document."""
+
+        logger.debug("GET /api/config format=%s", format)
         async with lock:
             raw = ensure_minimal_structure(dict(state.raw))
+            if (format or "").lower() != "v2":
+                raw = config_for_ui(raw, rt.deck)
         return JSONResponse(raw)
 
     @app.put("/api/config")
     async def put_config(body: dict[str, Any]) -> JSONResponse:
+        """Save a config: ``config_version: 2`` as is, or a legacy / UI-view one (migrated)."""
+
         if not isinstance(body, dict):
             raise HTTPException(400, t("error.json_object_required"))
-        merged = ensure_minimal_structure(body)
+        try:
+            merged = ensure_minimal_structure(config_from_ui(body))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, str(e)) from e
         knob_errors = validate_knobs_config(merged)
         if knob_errors:
             raise HTTPException(400, t("error.invalid_knobs", details="; ".join(knob_errors[:10])))
@@ -674,6 +802,7 @@ def create_web_app(
             state.reload_from_disk()
             prune_stale_live_message_keys(dict(state.raw), rt)
             fresh = dict(state.raw)
+            fresh_view = config_for_ui(fresh, rt.deck)
             if rt.deck_brightness is not None:
                 rt.deck_brightness.load_from_raw(fresh)
                 rt.deck_brightness.apply()
@@ -694,7 +823,7 @@ def create_web_app(
             except Exception:
                 logger.exception("on_refresh failed after config restore")
                 raise HTTPException(500, t("error.refresh_failed")) from None
-        return JSONResponse({"ok": True, **result, "config": fresh})
+        return JSONResponse({"ok": True, **result, "config": fresh_view})
 
     @app.post("/api/config/backups/wipe")
     async def post_config_backups_wipe() -> JSONResponse:
@@ -897,6 +1026,13 @@ def create_web_app(
 
     preview_cache = PreviewCache()
 
+    def _wow_icon_pending(entry: dict[str, Any]) -> bool:
+        spec = str(entry.get("icon") or entry.get("image") or "").strip()
+        if not spec.lower().startswith("wow:"):
+            return False
+        name = wow_icons.normalize_name(spec[4:])
+        return name is not None and not wow_icons.cached_path(default_icon_cache_dir(), name).is_file()
+
     @app.post("/api/preview_key")
     async def preview_key(
         body: dict[str, Any] = Body(...),
@@ -912,8 +1048,12 @@ def create_web_app(
         entry = body.get("entry")
         if not isinstance(entry, dict):
             raise HTTPException(400, t("error.entry_object"))
-        cid = str(body.get("control_id") or "touch_0")
-        size = key_size_for_control(cid)
+        async with lock:
+            # The editor names the model it lays out (its key size); else the UI's model.
+            pv_model = model_by_name(str(body.get("model") or "")) or ui_model(state.raw, rt.deck)
+        raw_cid = str(body.get("control_id") or "key_0_0")
+        cid = to_control_id(raw_cid, pv_model) or raw_cid
+        size = pv_model.image_size(cid) or key_size_for_control(cid)
 
         def _as_optional_int(v: Any) -> int | None:
             if v is None:
@@ -937,7 +1077,7 @@ def create_web_app(
             pages_list = state.raw.get("pages") or []
             n = len(pages_list) if isinstance(pages_list, list) else 0
             pi = int(state.page_index) % n if n else 0
-            sk = preview_storage_key(cid, pi)
+            sk = preview_storage_key(cid, pi, state.raw)
             if live_message_params_from_entry(ent):
                 ov = rt.live_message_text.get(sk)
                 if ov is not None:
@@ -1027,7 +1167,8 @@ def create_web_app(
         cached = preview_cache.get(ckey) if cacheable else None
         if cached is None:
             cached = await asyncio.to_thread(_render)
-            if cacheable:
+            # A WoW icon that could not be downloaded (offline...) must not be frozen into the cache.
+            if cacheable and not _wow_icon_pending(entry):
                 preview_cache.put(ckey, cached)
         png, measure = cached
         if not png:

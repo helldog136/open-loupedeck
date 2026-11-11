@@ -31,19 +31,21 @@ export function svgIcon(name) {
 }
 
 /**
- * Fill `host` with the field's tag: "Proposed", or "Modified" + a reset link calling `onReset`.
+ * Fill `host` with the field's tag: "Proposed" (or "Default" with `asDefault`, for a value that is the device's own default and not
+ * a suggestion), or "Modified" + a reset link calling `onReset`.
  * `fieldLabel` names the field for the reset button's accessible name.
  */
-export function paintTag(host, modified, fieldLabel, onReset) {
+export function paintTag(host, modified, fieldLabel, onReset, { asDefault = false } = {}) {
   host.textContent = "";
   host.className = modified ? "tag mod" : "tag proposed";
-  host.append(document.createTextNode(t(modified ? "inspector.tag.modified" : "inspector.tag.proposed")));
+  const plain = asDefault ? "inspector.tag.default" : "inspector.tag.proposed";
+  host.append(document.createTextNode(t(modified ? "inspector.tag.modified" : plain)));
   if (modified) {
     const b = el("button", {
       type: "button",
       class: "insp-reset",
       text: t("inspector.tag.reset"),
-      "aria-label": t("inspector.tag.reset_label", { field: fieldLabel }),
+      "aria-label": t(asDefault ? "inspector.tag.reset_default_label" : "inspector.tag.reset_label", { field: fieldLabel }),
     });
     b.addEventListener("click", onReset);
     host.append(b);

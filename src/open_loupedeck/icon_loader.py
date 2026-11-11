@@ -12,6 +12,8 @@ from urllib.parse import quote
 import httpx
 from PIL import Image
 
+from . import wow_icons
+
 logger = logging.getLogger(__name__)
 
 # Heroicons 2.x on jsDelivr (pinned minor for stable paths)
@@ -72,10 +74,18 @@ def icon_url_from_spec(raw: str) -> tuple[str, str] | None:
     - ``heroicons:`` — path under heroicons npm, e.g. ``24/solid/heart``
     - ``lucide:`` — icon slug, e.g. ``bell``
     - ``mdi:`` — Material Design Icons slug, e.g. ``heart``
+    - ``wow:`` — World of Warcraft icon (raster, Wowhead CDN); the name is the file name of a Wowhead icon URL
     - ``https://`` / ``http://`` — direct SVG URL
     """
     s = raw.strip()
     low = s.lower()
+
+    if low.startswith("wow:"):
+        name = wow_icons.normalize_name(s[4:])
+        if name is None:
+            logger.warning("Invalid WoW icon name: %r", s[4:])
+            return None
+        return (f"wow:{name}", wow_icons.icon_url(name))
 
     if low.startswith("simpleicons:"):
         slug_color = _parse_simpleicons(s.split(":", 1)[1])
@@ -152,6 +162,9 @@ def load_icon_image(
     cache_key, url = parsed
     w, h = size
     cache_dir.mkdir(parents=True, exist_ok=True)
+    if cache_key.startswith("wow:"):
+        # Raster icon with its own never-expiring cache (see wow_icons); not an SVG, so no rasterize step.
+        return wow_icons.load_wow_image(cache_key[4:], cache_dir, size)
     # "v2": rasterization changed (aspect-preserving); older cached PNGs were stretched/cropped.
     cpath = _cache_path(cache_dir, "v2|" + cache_key + "|" + url, w, h)
     if cpath.is_file():

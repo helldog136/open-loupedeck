@@ -13,24 +13,17 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from .button_render import render_tactile_key_image
-from .knob_pages import feedback_duration_sec, feedback_touch_key_for_knob_page_name
+from .button_render import DEFAULT_KEY_SIZE, render_tactile_key_image
+from .devices.base import device_model_of
+from .devices.model import DeviceModel
+from .knob_pages import feedback_duration_sec, feedback_key_for_knob
 
 logger = logging.getLogger(__name__)
 
 FEEDBACK_ENTRY_BASE = {"background": "#1a1f2e", "text_color": "#e8ecf4"}
 
-# touch control id -> generation of the latest flash drawn on it.
+# display control id -> generation of the latest flash drawn on it.
 _generation: dict[str, int] = {}
-
-
-def _touch_index(control_id: str) -> int | None:
-    if not control_id.startswith("touch_"):
-        return None
-    try:
-        return int(control_id.split("_", 1)[1])
-    except ValueError:
-        return None
 
 
 def _single_line_label(text: str, max_len: int = 80) -> str:
@@ -42,23 +35,22 @@ async def flash_knob_feedback(
     deck: Any,
     config_dir: Path,
     raw_config: dict[str, Any],
-    device_model: str,
+    device_model: DeviceModel | str | None,
     knob_id: str,
     text: str,
     redraw_skin: Callable[..., Awaitable[None]],
     duration_sec: float | None = None,
 ) -> str | None:
-    """Draw ``text`` on the touch key mapped to ``knob_id``, then restore the skin.
+    """Draw ``text`` on the display control mapped to ``knob_id``, then restore the skin.
 
-    ``duration_sec`` overrides the global ``knob_page_feedback.duration_sec``; 0 disables the
-    feedback. Returns the touch control id drawn on (``None`` if nothing was drawn).
+    The control is the knob's ``feedback_key`` on the device's model (``device_model`` when the
+    backend has none). ``duration_sec`` overrides the global ``knob_page_feedback.duration_sec``;
+    0 disables the feedback. Returns the control id drawn on (``None`` if nothing was drawn).
     """
 
-    touch_cid = feedback_touch_key_for_knob_page_name(knob_id, device_model)
+    model = device_model_of(deck) or device_model
+    touch_cid = feedback_key_for_knob(knob_id, model)
     if touch_cid is None:
-        return None
-    n = _touch_index(touch_cid)
-    if n is None:
         return None
     line = _single_line_label(text)
     if not line:
@@ -70,11 +62,14 @@ async def flash_knob_feedback(
     gen = _generation.get(touch_cid, 0) + 1
     _generation[touch_cid] = gen
 
+    dm = device_model_of(deck)
+    size = (dm.image_size(touch_cid) if dm is not None else None) or DEFAULT_KEY_SIZE
+
     def _draw() -> None:
         with deck:
-            im = render_tactile_key_image({**FEEDBACK_ENTRY_BASE, "text": line}, config_dir, size=(90, 90))
+            im = render_tactile_key_image({**FEEDBACK_ENTRY_BASE, "text": line}, config_dir, size=size)
             if im is not None:
-                deck.set_key_image(str(n), im)
+                deck.set_image(touch_cid, im)
 
     try:
         await asyncio.to_thread(_draw)
@@ -97,7 +92,7 @@ async def flash_knob_page_name(
     deck: Any,
     config_dir: Path,
     raw_config: dict[str, Any],
-    device_model: str,
+    device_model: DeviceModel | str | None,
     knob_id: str,
     page_name: str,
     redraw_skin: Callable[..., Awaitable[None]],

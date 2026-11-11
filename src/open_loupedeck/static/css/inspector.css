@@ -121,7 +121,50 @@
 .insp-json-msg.is-error { color: var(--bad); }
 .insp-group .hint, .insp-group p { margin: 0; }
 
-/* page buttons: light colour */
+/* scope bar: this page / every page, with what applies here */
+.insp-scopebar {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.insp-scopebar[data-state="inherits"] { border-color: var(--line-strong); background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
+.insp-scope-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.insp-scope-label { font-size: 12px; color: var(--muted); font-weight: 600; }
+.insp-scope-seg button { padding: 4px 12px; font-size: var(--fs-sm); }
+.insp-scope-status { margin: 0; font-size: var(--fs-sm); color: var(--muted); line-height: 1.4; }
+.insp-scopebar[data-state="inherits"] .insp-scope-status,
+.insp-scopebar[data-state="override"] .insp-scope-status { color: var(--fg); }
+.insp-scope-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.insp-scope-actions:empty { display: none; }
+
+/* what a page inherits from the binding for every page */
+.insp-inherited {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+}
+.insp-inherit-tag { font: 600 var(--fs-xs) var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.insp-inherited .insp-look-title { font-size: 16px; overflow-wrap: anywhere; }
+.insp-inherit-pic.is-ready .insp-big-empty { display: none; }
+.insp-inherit-pic.is-round { width: 64px; height: 64px; border-radius: 50%; }
+.insp-inherit-pic .insp-led { width: 34px; height: 34px; }
+
+/* controls the editor cannot bind yet */
+.insp-unsupported { justify-items: start; }
+.insp-unsupported strong { font-size: var(--fs-md); }
+.insp-unsupported .hint { margin: 0; }
+.insp-empty-keys { margin-top: 10px; font-size: var(--fs-xs); color: var(--muted); max-width: 32ch; }
+
+/* "Go to page": the other ways to name a page */
+.field-more { font-size: 12px; color: var(--muted); }
+.field-more > summary { cursor: pointer; padding: 2px 0; }
+.field-more[open] > summary { margin-bottom: var(--sp-2); }
+
+/* buttons: light colour */
 .insp-led-wrap { display: inline-flex; align-items: center; gap: 10px; }
 .insp-led { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--led, var(--muted)); background: #0b0e14; box-shadow: 0 0 10px var(--led, transparent); flex: none; }
 

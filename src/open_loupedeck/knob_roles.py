@@ -1,21 +1,22 @@
 """Knob roles per deck page: what each encoder does depends on the deck page being shown.
 
-Schema (on each entry of ``pages``)::
+Schema (a knob binding, in ``pages[].controls`` or ``global``, see ``bindings.py``)::
 
-    knobs:
-      knobTL:
+    controls:
+      knob_0:
         rotate: {duo: system_volume, params: {step: 5}}   # a linked "duo" (see knob_duos.py)
         press: {type: sound.mute_toggle}                  # optional, independent
         feedback_sec: 1.5                                 # optional, overrides knob_page_feedback
-      knobCL:
+      knob_1:
         rotate:                                           # advanced: split left and right
           left: {type: agent.prev_page}                   # an action or a list of actions
           right: [{type: agent.next_page}]
         press: null
 
-A knob without an entry (or a page without ``knobs``) does nothing. The legacy top-level
+A knob without a binding (on the page, or global) does nothing. The legacy top-level
 ``knob_pages`` (per-knob page stacks, push cycles them) is migrated by
-:func:`migrate_legacy_knob_pages`; see ``docs/ui-redesign/knobs-model.md``.
+:func:`migrate_legacy_knob_pages` (into legacy ``pages[].knobs``, then by the config migration);
+see ``docs/ui-redesign/knobs-model.md``.
 """
 
 from __future__ import annotations
@@ -24,13 +25,14 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from .bindings import global_bindings, page_bindings, resolve_binding
+from .devices.model import control_kind_from_id
 from .i18n import t
 from .knob_duos import duo_feedback, expand_duo, get_duo, match_duo, missing_params, validate_duo_params
 from .knob_pages import (
     KNOB_ENCODER_IDS,
     KNOB_PAGE_FEEDBACK_MAX_SEC,
     _actions_from_side_value,
-    feedback_touch_key_for_knob_page_name,
     pages_list_for_knob,
 )
 
@@ -94,25 +96,30 @@ def validate_knob_entry(entry: Any, where: str) -> list[str]:
 
 
 def validate_knobs_config(raw: dict[str, Any]) -> list[str]:
-    """Problems in every ``pages[].knobs`` (empty list = valid). Unknown extra keys are tolerated."""
+    """Problems in every knob binding (``knob_<n>`` in ``global`` and ``pages[].controls``).
 
+    Empty list = valid. Unknown extra keys are tolerated.
+    """
+
+    errors: list[str] = []
+    if raw.get("global") is not None and not isinstance(raw.get("global"), dict):
+        errors.append("global must be an object")
+    for cid, entry in global_bindings(raw).items():
+        if control_kind_from_id(str(cid)) == "knob":
+            errors.extend(validate_knob_entry(entry, f"global.{cid}"))
     pages = raw.get("pages")
     if not isinstance(pages, list):
-        return []
-    errors: list[str] = []
+        return errors
     for pi, page in enumerate(pages):
-        if not isinstance(page, dict) or page.get("knobs") is None:
+        if not isinstance(page, dict):
             continue
-        knobs = page["knobs"]
-        where = f"pages[{pi}].knobs"
-        if not isinstance(knobs, dict):
+        where = f"pages[{pi}].controls"
+        if page.get("controls") is not None and not isinstance(page.get("controls"), dict):
             errors.append(f"{where} must be an object")
             continue
-        for kid, entry in knobs.items():
-            if str(kid) not in KNOB_ENCODER_IDS:
-                errors.append(f"{where}: unknown knob {kid!r} (expected one of {', '.join(sorted(KNOB_ENCODER_IDS))})")
-                continue
-            errors.extend(validate_knob_entry(entry, f"{where}.{kid}"))
+        for cid, entry in page_bindings(page).items():
+            if control_kind_from_id(str(cid)) == "knob":
+                errors.extend(validate_knob_entry(entry, f"{where}.{cid}"))
     return errors
 
 
@@ -206,17 +213,10 @@ class KnobResolution:
 
 
 def knob_entry_for_page(raw: dict[str, Any], page_index: int, knob_id: str) -> dict[str, Any] | None:
-    pages = raw.get("pages")
-    if not isinstance(pages, list) or not pages:
-        return None
-    page = pages[int(page_index) % len(pages)]
-    if not isinstance(page, dict):
-        return None
-    knobs = page.get("knobs")
-    if not isinstance(knobs, dict):
-        return None
-    entry = knobs.get(knob_id)
-    return entry if isinstance(entry, dict) else None
+    """The knob's binding on this page, else its global one (``knob_id`` is a control id)."""
+
+    b = resolve_binding(raw, page_index, knob_id)
+    return b.entry if b is not None else None
 
 
 def _action_feedback(actions: list[dict[str, Any]], lang: str | None) -> str:
@@ -278,23 +278,3 @@ def resolve_knob_event(
     if not acts:
         return None
     return KnobResolution(deepcopy(acts), _action_feedback(acts, lang), fsec)
-
-
-def effective_model(configured: str, deck: Any = None) -> str:
-    """``live`` / ``live_s`` from the config, or from the opened driver class when ``auto``."""
-
-    m = (configured or "auto").lower()
-    if m in ("live", "live_s") or deck is None:
-        return m
-    name = type(deck).__name__
-    if name == "LoupedeckLiveS":
-        return "live_s"
-    if name == "LoupedeckLive":
-        return "live"
-    return m
-
-
-def feedback_touch_key(knob_id: str, model: str) -> str | None:
-    """The touch key next to ``knob_id`` on this device model (where its feedback is drawn)."""
-
-    return feedback_touch_key_for_knob_page_name(knob_id, model)

@@ -1,28 +1,34 @@
 /*
- * inspector/knob-view.js — The knob inspector. A knob has no screen and no pages of its own: what it
- * does depends on the deck page being shown, stored in `pages[i].knobs.<knobId>`:
+ * inspector/knob-view.js — The inspector of a control that rotates (a knob). A knob has no screen: its
+ * role is a binding like any other (`global.knob_<n>` for every page, `pages[i].controls.knob_<n>`
+ * overriding it on a page), shaped:
  *   rotate: { duo, params }            one linked setting (left / right = - / +), a "duo"
  *         | { left, right }            Advanced: two free actions
  *   press:  action                     independent of the rotation
  *   feedback_sec: 0..2                 optional per-knob display time of the feedback
- * The view shows the role of this knob on every page (chips), the three zones under the knob (left /
- * press / right; left and right are one choice while linked), the picker for the active zone, the
- * display time and test buttons, and Advanced (split left / right, JSON). Every change goes through
- * `editRole` (Undo snapshot, autosave, deck captions). It also provides the knob captions of the deck
- * (the role name on the page shown). Duos come from GET /api/knob_duos (translated server side).
+ * The view shows the header and scope bar (this page / every page), the role of this knob on every
+ * page (chips), the three zones under the knob (left / press / right; left and right are one choice
+ * while linked), the picker for the active zone, the display time and test buttons, and Advanced
+ * (split left / right, JSON). Every change goes through `editRole` (the scope being edited, Undo
+ * snapshot, autosave, deck captions). It also provides the knob captions of the deck (the role on the
+ * page shown). Duos come from GET /api/knob_duos (translated server side).
  */
 
 import { buildActionFromFormIn, fillActionFieldsInContainer, renderActionFieldsInto } from "../action-fields.js";
 import { postSimulatePress } from "../api.js";
-import { getSpec } from "../catalog.js";
+import { actionShortName, getSpec } from "../catalog.js";
 import { renderDeck, setKnobCaptionProvider } from "../deck.js";
+import { displayEntry, getEntry, pageEntry, pageName } from "../model.js";
 import { createActionPicker } from "../pickers/action-picker.js";
 import { flushAutosave, scheduleAutosave } from "../save.js";
 import { emit, state } from "../state.js";
-import { snapshotBeforeAction, snapshotBeforeEditOnce } from "../undo.js";
-import { $, deepCloneJson } from "../util.js";
+import { snapshotBeforeEditOnce } from "../undo.js";
+import { $ } from "../util.js";
 import { el, nextId } from "./dom.js";
-import { newAction } from "./key-view.js";
+import { editEntry } from "./edit.js";
+import { createHeader, newAction } from "./key-view.js";
+import { createInheritedSummary } from "./inherited.js";
+import { createScopeBar, inheritsGlobal } from "./scope.js";
 
 /* ---- duo catalogue --------------------------------------------------------------------------- */
 
@@ -93,8 +99,8 @@ function expandDuo(duo, stored, side) {
 
 /* ---- stored role ----------------------------------------------------------------------------- */
 
-const curPage = () => (state.cfg && state.cfg.pages && state.cfg.pages[state.pageIndex]) || null;
-const roleOf = (page, id) => (page && page.knobs && page.knobs[id]) || null;
+/** The role being edited (this page's own, or the one for every page: the scope being edited). */
+const editedRole = (id) => getEntry(id);
 const isEmpty = (v) => v == null || (Array.isArray(v) && !v.length) || (typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length);
 
 /** One action of a stored value (an action, or a list of exactly one); null when empty. */
@@ -112,44 +118,27 @@ function pruneRole(r) {
     if (!r.rotate.left && !r.rotate.right) delete r.rotate;
   }
   if (r.feedback_sec != null && !Number.isFinite(Number(r.feedback_sec))) delete r.feedback_sec;
-  return Object.keys(r).length ? r : null;
+  return r;
 }
 
-function setRole(page, id, role) {
-  if (role) {
-    if (!page.knobs || typeof page.knobs !== "object") page.knobs = {};
-    page.knobs[id] = role;
-  } else if (page.knobs) {
-    delete page.knobs[id];
-    if (!Object.keys(page.knobs).length) delete page.knobs;
-  }
-}
-
-/** Change this knob's role on the page shown: Undo snapshot, write, deck captions, autosave. */
+/** Change this knob's role in the scope being edited: Undo snapshot, write, deck captions, autosave. */
 function editRole(knobId, mutate, { typing = false } = {}) {
-  const page = curPage();
-  if (!page) return;
-  if (typing) snapshotBeforeEditOnce();
-  else snapshotBeforeAction();
-  const cur = roleOf(page, knobId);
-  const draft = cur ? deepCloneJson(cur) : {};
-  mutate(draft);
-  setRole(page, knobId, pruneRole(draft));
-  renderDeck();
-  scheduleAutosave();
+  editEntry(
+    knobId,
+    (draft) => {
+      mutate(draft);
+      pruneRole(draft);
+    },
+    { typing },
+  );
 }
 
 /* ---- names and texts ------------------------------------------------------------------------- */
 
-function actionName(a) {
-  const spec = a && getSpec(a.type);
-  const label = (spec && spec.label) || (a && a.type) || "";
-  const parts = String(label).split(/\s[—-]\s/);
-  return parts.length > 1 ? parts.slice(1).join(" - ") : label;
-}
+const actionName = (a) => (a ? actionShortName(a.type) : "");
 
-/** Short name of a role (the caption under the knob on the deck). */
-function roleName(role) {
+/** Short name of a role (the caption under the knob on the deck, the scope bar). */
+export function roleName(role) {
   if (!role) return "";
   const r = role.rotate;
   if (r && r.duo) {
@@ -160,7 +149,8 @@ function roleName(role) {
   if (role.press) return t("inspector.knob.role.press_only");
   return "";
 }
-const caption = (knobId) => roleName(roleOf(curPage(), knobId)) || t("inspector.knob.role.none");
+/** Deck caption: the role the knob has on the page shown (its own, else the one for every page). */
+const caption = (knobId) => roleName(displayEntry(knobId));
 
 /** What the deck flashes after a turn / a push: "Volume +5", "Next track", the action's name. */
 function feedbackText(role, side) {
@@ -181,16 +171,6 @@ function feedbackText(role, side) {
   const a = single(r[side]);
   return a ? actionName(a) : r[side] ? t("inspector.knob.role.custom") : "";
 }
-
-const knobName = (id) => {
-  const k = `inspector.knob.name.${id}`;
-  const s = t(k);
-  return s === k ? id : s;
-};
-const pageName = (i) => {
-  const p = state.cfg.pages[i];
-  return (p && p.name) || t("pages.default_name", { number: i + 1 });
-};
 
 /* ---- per-session UI memory ------------------------------------------------------------------- */
 
@@ -276,7 +256,7 @@ function createActionEditor(host, { value, onSet }) {
 /* ---- the view -------------------------------------------------------------------------------- */
 
 let root = null; // the open view's element
-let ctxClose = null;
+let ctxScope = () => {};
 let editors = [];
 let restoreFocus = null;
 let lightSync = () => {};
@@ -293,25 +273,29 @@ function render(host, knobId) {
   editors = [];
   if (root) root.remove();
   const id = nextId("insp-knob");
-  const page = curPage();
-  const splitNow = () => ui.split || isSplit(roleOf(curPage(), knobId));
+  const splitNow = () => ui.split || isSplit(editedRole(knobId));
   const zoneOn = (z) => (splitNow() ? ui.zone === z : z === "press" ? ui.zone === "press" : ui.zone !== "press");
 
-  root = el("div", { class: "insp-view kn-view", "data-knob": knobId });
+  root = el("div", { class: "insp-view kn-view", "data-knob": knobId, "data-control": knobId, "data-kind": "knob" });
 
-  // header
-  root.append(
-    el(
-      "header",
-      { class: "insp-head" },
-      el(
-        "div",
-        { class: "insp-head-text" },
-        el("h2", { class: "insp-title", text: knobName(knobId) }),
-        el("span", { class: "insp-scope", text: t("inspector.knob.scope", { page: page ? pageName(state.pageIndex) : "" }) }),
-      ),
-    ),
-  );
+  // header + scope bar (this page / every page)
+  const inheriting = inheritsGlobal(knobId);
+  const header = createHeader(knobId, () => ctxScope());
+  const scopeBar = createScopeBar(knobId, { describe: roleName, onScope: () => ctxScope() });
+  root.append(header.root, scopeBar.root);
+  header.sync();
+  host.append(root);
+  lightSync = () => {
+    header.sync();
+    scopeBar.sync();
+  };
+  // Only the role for every page applies here: the bar asks whether to override it or edit it.
+  if (inheriting) {
+    const summary = createInheritedSummary(knobId, { describe: roleName });
+    root.append(summary.root);
+    editors.push({ destroy: () => summary.destroy() });
+    return;
+  }
 
   // step 1: role
   const step1 = el("section", { class: "insp-step", "aria-labelledby": `${id}-h1` });
@@ -320,16 +304,21 @@ function render(host, knobId) {
   step1.append(el("p", { class: "hint", text: t("inspector.knob.pages.hint") }), chips);
   const dialHost = el("div", { class: "kn-dial-wrap" });
   const panel = el("div", { class: "kn-panel" });
-  const applyMsg = el("span", { class: "hint", role: "status" });
-  const applyAll = el("button", { type: "button", class: "btn-link", text: t("inspector.knob.apply_all") });
-  step1.append(dialHost, panel, el("p", { class: "kn-apply" }, applyAll, " ", applyMsg));
+  step1.append(dialHost, panel);
   root.append(step1);
 
   function renderChips() {
     chips.textContent = "";
     state.cfg.pages.forEach((p, i) => {
-      const r = roleName(roleOf(p, knobId)) || t("inspector.knob.role.none");
-      const b = el("button", { type: "button", "data-pg": String(i), "aria-pressed": String(i === state.pageIndex), title: t("inspector.knob.show_page") });
+      const own = !!pageEntry(knobId, i);
+      const r = roleName(displayEntry(knobId, i)) || t("inspector.knob.role.none");
+      const b = el("button", {
+        type: "button",
+        "data-pg": String(i),
+        "aria-pressed": String(i === state.pageIndex),
+        title: t(own ? "inspector.knob.chip.own" : "inspector.knob.chip.every_page"),
+      });
+      if (!own) b.classList.add("is-inherited");
       b.append(el("span", { class: "kn-chip-name", text: `${i + 1} ${pageName(i)}` }), el("span", { class: "kn-chip-role", text: r }));
       b.addEventListener("click", () => {
         if (i === state.pageIndex) return;
@@ -344,7 +333,7 @@ function render(host, knobId) {
   }
 
   function renderDial() {
-    const r = roleOf(curPage(), knobId);
+    const r = editedRole(knobId);
     const none = t("inspector.knob.role.none");
     const zone = (z, glyph, title, text) => {
       const b = el("button", { type: "button", class: `kn-zone kn-z-${z}`, "data-zone": z, "aria-pressed": String(zoneOn(z === "press" ? "press" : z)) });
@@ -372,7 +361,7 @@ function render(host, knobId) {
 
   function renderPanel() {
     panel.textContent = "";
-    const r = roleOf(curPage(), knobId);
+    const r = editedRole(knobId);
     if (ui.zone === "press") return renderPressPanel(r);
     if (splitNow()) return renderSplitPanel(r);
     return renderDuoPanel(r);
@@ -422,7 +411,7 @@ function render(host, knobId) {
     if (!d || !(d.params || []).length) return;
     const need = el("p", { class: "msg-error", role: "status", hidden: true });
     const showNeed = () => {
-      const cur = roleOf(curPage(), knobId);
+      const cur = editedRole(knobId);
       const dd = duoById(cur && cur.rotate && cur.rotate.duo);
       const p = dd ? resolveParams(dd, cur.rotate.params) : {};
       need.hidden = !dd || !(dd.params || []).some((x) => x.required && p[x.name] == null);
@@ -510,23 +499,13 @@ function render(host, knobId) {
     );
   }
 
-  applyAll.addEventListener("click", () => {
-    snapshotBeforeAction();
-    const src = roleOf(curPage(), knobId);
-    for (const p of state.cfg.pages) setRole(p, knobId, src ? deepCloneJson(src) : null);
-    renderDeck();
-    scheduleAutosave();
-    renderAll();
-    applyMsg.textContent = t("inspector.knob.apply_all.done", { pages: state.cfg.pages.length });
-  });
-
   // step 2: display and test
   const step2 = el("section", { class: "insp-step", "aria-labelledby": `${id}-h2` });
   step2.append(el("h3", { id: `${id}-h2` }, el("b", { "aria-hidden": "true", text: "2" }), el("span", { text: t("inspector.knob.step2.title") })));
   const slider = el("input", { type: "range", id: `${id}-secs`, min: "0", max: "2", step: "0.1", "aria-describedby": `${id}-secs-v` });
   const secsTag = el("span", { class: "tag", id: `${id}-secs-v` });
   const effSecs = () => {
-    const r = roleOf(curPage(), knobId);
+    const r = editedRole(knobId);
     if (r && r.feedback_sec != null) return Number(r.feedback_sec);
     const g = state.cfg.knob_page_feedback && Number(state.cfg.knob_page_feedback.duration_sec);
     return Number.isFinite(g) ? g : 2;
@@ -538,7 +517,7 @@ function render(host, knobId) {
   };
   slider.addEventListener("input", () => {
     const v = Math.round(Number(slider.value) * 10) / 10;
-    const r = roleOf(curPage(), knobId);
+    const r = editedRole(knobId);
     if (r && r.feedback_sec != null) editRole(knobId, (x) => (x.feedback_sec = v), { typing: true });
     else {
       snapshotBeforeEditOnce();
@@ -554,7 +533,7 @@ function render(host, knobId) {
     return b;
   };
   async function runTest(side) {
-    const r = roleOf(curPage(), knobId);
+    const r = editedRole(knobId);
     const text = feedbackText(r, side) || t("inspector.knob.test.nothing");
     testMsg.textContent = "";
     emit("knob:flash", { knobId, text });
@@ -591,7 +570,7 @@ function render(host, knobId) {
     } else {
       ui.split = true;
       ui.zone = "left";
-      const cur = roleOf(curPage(), knobId);
+      const cur = editedRole(knobId);
       const d = cur && cur.rotate && cur.rotate.duo ? duoById(cur.rotate.duo) : null;
       if (d) editRole(knobId, (x) => (x.rotate = { left: expandDuo(d, cur.rotate.params, "left"), right: expandDuo(d, cur.rotate.params, "right") }));
     }
@@ -602,7 +581,7 @@ function render(host, knobId) {
   const jsonApply = el("button", { type: "button", class: "btn", text: t("inspector.knob.json.apply") });
   const paintJson = () => {
     if (document.activeElement === json) return;
-    json.value = JSON.stringify(roleOf(curPage(), knobId) || {}, null, 2);
+    json.value = JSON.stringify(editedRole(knobId) || {}, null, 2);
   };
   jsonApply.addEventListener("click", () => {
     let o;
@@ -629,9 +608,10 @@ function render(host, knobId) {
   );
   adv.append(advBody);
   root.append(adv);
-  host.append(root);
 
   lightSync = () => {
+    header.sync();
+    scopeBar.sync();
     renderChips();
     renderDial();
     paintJson();
@@ -659,13 +639,13 @@ function render(host, knobId) {
 /* ---- inspector view contract ----------------------------------------------------------------- */
 
 export const knobView = {
-  render(host, { knobId, close }) {
+  render(host, { knobId, onScope }) {
     if (ui.knobId !== knobId) {
       ui.knobId = knobId;
       ui.zone = "rot";
       ui.split = false;
     }
-    ctxClose = close;
+    ctxScope = typeof onScope === "function" ? onScope : () => {};
     this._host = host;
     this._knobId = knobId;
     active = this;
@@ -679,7 +659,6 @@ export const knobView = {
       lightSync();
       return;
     }
-    if (!curPage()) return ctxClose && ctxClose();
     render(this._host, this._knobId);
   },
   destroy() {

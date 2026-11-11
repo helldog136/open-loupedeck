@@ -11,11 +11,13 @@ from typing import Any
 
 @dataclass
 class AgentRuntimeRefs:
-    """Loupedeck device and OBS session owned by the asyncio agent; updated after startup.
+    """Device backend and OBS session owned by the asyncio agent; updated after startup.
 
-    ``deck_unplugged`` is set when the serial reader thread exits due to disconnect; the reconnect
-    loop clears it after a successful ``_open_deck``. ``intentional_deck_shutdown`` blocks that
-    loop during normal process exit.
+    ``deck`` is the opened :class:`~open_loupedeck.devices.base.DeviceBackend` (``None`` when no
+    device is open); its ``model`` is the device descriptor. ``deck_unplugged`` is set when the
+    backend signals an unplug; the reconnect loop clears it after a successful
+    ``devices.registry.open_backend``. ``intentional_deck_shutdown`` blocks that loop during
+    normal process exit.
     """
 
     deck: Any | None = None
@@ -59,9 +61,11 @@ class AgentRuntimeRefs:
     startup_verbose: bool = False
     # CLI --log-dir; overrides logging.dir in YAML when set.
     log_dir_override: Path | None = None
-    # Set by run_agent: dispatch one synthetic device message (test press from web UI).
+    # Set by run_agent: dispatch one synthetic event (test press from the web UI), same path as hardware.
+    simulate_event: Callable[[Any], Awaitable[None]] | None = None
+    # Set by run_agent: same, from a driver-native message dict (Loupedeck callback shape); compatibility.
     simulate_raw_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None
-    # UI health markers: storage_key -> short reason (touch keys use "p{page}:touch_N").
+    # UI health markers: storage_key ("p{page}:<control id>" / "g:<control id>") -> short reason.
     control_error: dict[str, str] = field(default_factory=dict)
     control_error_updated_at: dict[str, float] = field(default_factory=dict)
     # control_id -> skin_animation_tick at the moment of press, for a control's `press_animation`.

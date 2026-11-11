@@ -15,20 +15,20 @@ const PRESS = ["none", "flash", "invert", "zoom_text", "slide_reappear"];
 const DIRECTIONS = ["left", "right", "up", "down"];
 
 /**
- * `ctx`: { cid, kind, ui, entry(), edit(mutate, opts), onActionJson(action), playPress() }.
+ * `ctx`: { cid, caps, advNumber, ui, entry(), edit(mutate, opts), onActionJson(action), playPress() }.
  * `ui.advOpen` keeps the <details> state across refreshes.
  */
 export function createAdvancedStep(ctx) {
   const { cid, ui } = ctx;
   const id = nextId("insp-adv");
-  const screen = ctx.kind === "touch" || ctx.kind === "strip";
+  const screen = !!(ctx.caps && ctx.caps.image);
   const syncers = [];
 
   const body = el("div", { class: "acc-body insp-adv-body" });
   const details = el(
     "details",
     { class: "acc insp-adv" },
-    el("summary", {}, el("span", {}, el("b", { class: "insp-num", "aria-hidden": "true", text: "3" }), t("inspector.step3.title"))),
+    el("summary", {}, el("span", {}, el("b", { class: "insp-num", "aria-hidden": "true", text: String(ctx.advNumber || 3) }), t("inspector.step3.title"))),
     body,
   );
   details.open = !!ui.advOpen;
