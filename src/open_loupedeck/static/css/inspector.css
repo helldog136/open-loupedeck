@@ -140,6 +140,19 @@
 .insp-scope-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .insp-scope-actions:empty { display: none; }
 
+/* what a page inherits from the binding for every page */
+.insp-inherited {
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+}
+.insp-inherit-tag { font: 600 var(--fs-xs) var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.insp-inherited .insp-look-title { font-size: 16px; overflow-wrap: anywhere; }
+.insp-inherit-pic.is-ready .insp-big-empty { display: none; }
+.insp-inherit-pic.is-round { width: 64px; height: 64px; border-radius: 50%; }
+.insp-inherit-pic .insp-led { width: 34px; height: 34px; }
+
 /* controls the editor cannot bind yet */
 .insp-unsupported { justify-items: start; }
 .insp-unsupported strong { font-size: var(--fs-md); }

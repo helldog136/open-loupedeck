@@ -339,12 +339,4 @@ export function contrastRatio(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** Black or white, whichever reads better on `bg`. */
-export function readableOn(bg) {
-  const cw = contrastRatio("#ffffff", bg);
-  const cb = contrastRatio("#000000", bg);
-  if (cw == null) return "#ffffff";
-  return cw >= cb ? "#ffffff" : "#000000";
-}
-
 export const LOW_CONTRAST = 3;

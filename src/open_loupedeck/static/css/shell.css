@@ -200,10 +200,6 @@ main.buttons-layout {
   main.buttons-layout {
     grid-template-columns: minmax(0, 1fr);
   }
-  #mount-inspector.side-panel {
-    position: static;
-    max-height: none;
-  }
 }
 
 /* ---- Services tab ---- */

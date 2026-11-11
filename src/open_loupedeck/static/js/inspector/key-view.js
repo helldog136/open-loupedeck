@@ -19,6 +19,7 @@ import { capabilities, controlName } from "./controls.js";
 import { el, hasFocus, nextId, svgIcon } from "./dom.js";
 import { editEntry } from "./edit.js";
 import { entryAction, setEntryAction } from "./entry.js";
+import { createInheritedSummary } from "./inherited.js";
 import { createLightStep } from "./light.js";
 import { createScopeBar, inheritsGlobal } from "./scope.js";
 
@@ -106,6 +107,8 @@ export function createKeyView(host, cid, { onScope = () => {} } = {}) {
 
   if (inheriting) {
     header.sync();
+    const summary = createInheritedSummary(cid, { describe: describeEntry });
+    view.append(summary.root);
     return {
       cid,
       refresh() {
@@ -116,6 +119,7 @@ export function createKeyView(host, cid, { onScope = () => {} } = {}) {
       setCatalog() {},
       focus() {},
       destroy() {
+        summary.destroy();
         view.remove();
       },
     };

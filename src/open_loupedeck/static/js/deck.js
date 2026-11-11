@@ -44,10 +44,9 @@ import { snapshotBeforeAction } from "./undo.js";
 import { $, cssColorForLedPreview, deepCloneJson } from "./util.js";
 
 const FLASH_MS = 1400;
-/** Below this many px per unit, captions are hidden (they would not be readable). */
-const CAPTION_MIN_UNIT = 40;
 const MAX_UNIT = 118;
-const MIN_UNIT = 14;
+/** Smallest unit (px) the deck is drawn at: a key stays a comfortable tap target, a narrower screen pans. */
+const MIN_UNIT = 38;
 
 /** Live-key action types and the service whose connection decides the online / offline look. */
 const LIVE_SERVICE = {
@@ -305,15 +304,17 @@ function keyNode(ctl) {
   badge.title = t("deck.key.global");
   badge.setAttribute("aria-hidden", "true");
   face.append(warn, badge);
+  for (const c of face.children) if (c !== warn) c.setAttribute("aria-hidden", "true");
+  node.append(face);
   if (!strip) {
-    const dup = mk("button", "dk-dup", t("deck.duplicate"));
+    // A round corner tool outside the face: it never covers the key's text.
+    const dup = mk("button", "dk-dup", "⧉");
     dup.type = "button";
     dup.tabIndex = -1;
     dup.title = t("deck.duplicate.title");
-    face.append(dup);
+    dup.setAttribute("aria-label", t("deck.duplicate"));
+    node.append(dup);
   }
-  for (const c of face.children) if (c !== warn) c.setAttribute("aria-hidden", "true");
-  node.append(face);
   return node;
 }
 
@@ -327,6 +328,7 @@ function knobNode(ctl) {
   const dial = mk("span", "dk-dial");
   dial.append(mk("span", "dk-notch"));
   face.append(dial);
+  node.title = `${controlLabel(ctl.id)}: ${role || t("inspector.knob.role.none")}`;
   node.append(face, caption(role || t("inspector.knob.role.none"), !role));
   return node;
 }
@@ -352,7 +354,7 @@ function buttonNode(ctl) {
     "aria-label",
     page != null ? t("deck.button.aria_page", { name, page: pageName(page) }) : cap ? `${name}, ${cap}` : t("deck.key.aria_empty_named", { name }),
   );
-  node.title = page != null ? t("deck.button.title_page", { page: pageName(page) }) : name;
+  node.title = page != null ? t("deck.button.title_page", { page: pageName(page) }) : cap ? `${name}: ${cap}` : name;
   const face = mk("span", "dk-face");
   face.append(mk("span", "dk-btn-num", String(indexOf(ctl.id) + 1)));
   node.append(face, caption(cap));
@@ -365,6 +367,7 @@ function sliderNode(ctl) {
   node.dataset.cid = ctl.id;
   const name = controlLabel(ctl.id);
   node.setAttribute("aria-label", t("deck.slider.aria", { name }));
+  node.title = name;
   node.append(mk("span", "dk-track"), mk("span", "dk-thumb"), caption(name, true));
   return node;
 }
@@ -408,6 +411,7 @@ function paintSelection() {
     }
     if (n.matches("button")) n.setAttribute("aria-pressed", String(cid === sel));
   });
+  scrollSelectionIntoView(root.querySelector(".dk-stage-wrap"));
   if (!tabStop) tabStop = keys.find((k) => k === document.activeElement) || keys[0];
   keys.forEach((k) => (k.tabIndex = k === tabStop ? 0 : -1));
   root.querySelectorAll(".dk-strip").forEach((s) => (s.tabIndex = 0));
@@ -668,7 +672,20 @@ function fitStage() {
   const avail = root.clientWidth || 600;
   const u = fitUnit(stageModel, avail, Infinity, { min: MIN_UNIT, max: MAX_UNIT });
   stage.style.setProperty("--u", `${u.toFixed(2)}px`);
-  stage.classList.toggle("is-compact", u < CAPTION_MIN_UNIT);
+  const wrap = stage.parentElement;
+  wrap.classList.toggle("is-pannable", stage.offsetWidth > root.clientWidth + 1);
+  scrollSelectionIntoView(wrap);
+}
+
+/** On a panning deck, keep the selected control in view. */
+function scrollSelectionIntoView(wrap) {
+  if (!wrap || !wrap.classList.contains("is-pannable") || !state.selectedControl) return;
+  const n = wrap.querySelector(`.dk-ctl[data-cid="${CSS.escape(state.selectedControl)}"]`);
+  if (!n) return;
+  const left = n.offsetLeft;
+  const right = left + n.offsetWidth;
+  if (left < wrap.scrollLeft) wrap.scrollLeft = Math.max(0, left - 12);
+  else if (right > wrap.scrollLeft + wrap.clientWidth) wrap.scrollLeft = right - wrap.clientWidth + 12;
 }
 
 function footer() {
@@ -720,7 +737,7 @@ export function renderDeck() {
   note.setAttribute("aria-live", "polite");
   const wrap = mk("div", "dk-stage-wrap");
   wrap.append(stage);
-  root.replaceChildren(wrap, footer(), note);
+  root.replaceChildren(wrap, mk("p", "dk-pan-hint", t("deck.pan_hint")), footer(), note);
   fitStage();
   bindStage(stage);
   stage.querySelectorAll(".dk-key").forEach(loadKey);

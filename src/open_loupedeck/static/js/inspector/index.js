@@ -182,7 +182,3 @@ export function initInspector() {
   });
 }
 
-/** For tests and other modules: the control currently open (null when none). */
-export function openedControl() {
-  return current.id || null;
-}

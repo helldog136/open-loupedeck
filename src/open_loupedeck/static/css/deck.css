@@ -7,9 +7,17 @@
 }
 
 .dk-stage-wrap {
-  display: flex;
-  justify-content: center;
   width: 100%;
+}
+/* Small screens: the deck keeps a touch-sized unit and pans sideways instead of shrinking (deck.js). */
+.dk-stage-wrap.is-pannable {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: var(--sp-2);
+  scrollbar-width: thin;
+}
+.dk-stage-wrap.is-pannable .dk-stage {
+  margin-inline: 0;
 }
 
 /* ---- device body ---- */
@@ -17,7 +25,7 @@
   --u: 80px;
   --pad: 0.45;
   position: relative;
-  flex: none;
+  margin-inline: auto;
   width: calc((var(--lw) + 2 * var(--pad)) * var(--u));
   height: calc((var(--lh) + 2 * var(--pad)) * var(--u));
   border-radius: calc(var(--u) * 0.36);
@@ -212,25 +220,25 @@
 
 .dk-dup {
   position: absolute;
-  left: 3px;
-  bottom: 3px;
+  right: -5px;
+  bottom: -5px;
+  z-index: 2;
   display: none;
-  padding: 2px 7px;
-  font-size: 11px;
-  line-height: 1.3;
-  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  place-items: center;
+  font-size: 13px;
+  line-height: 1;
+  border-radius: 50%;
   border: 1px solid var(--line-strong);
-  background: rgba(12, 15, 20, 0.88);
+  background: rgba(12, 15, 20, 0.92);
   color: var(--fg);
   cursor: pointer;
 }
 .dk-key.is-selected.is-filled .dk-dup,
 .dk-key.is-filled:focus-within .dk-dup {
-  display: block;
-}
-.dk-stage.is-compact .dk-dup,
-.dk-stage.is-compact .dk-key.is-selected.is-filled .dk-dup {
-  display: none;
+  display: grid;
 }
 .dk-dup:hover {
   border-color: var(--accent);
@@ -259,15 +267,20 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  width: calc(var(--u) * 1.25);
+  width: calc(var(--u) * 1.1);
   margin-top: calc(var(--u) * -0.03);
   text-align: center;
-  font-size: clamp(10px, calc(var(--u) * 0.125), 12px);
+  font-size: clamp(9px, calc(var(--u) * 0.125), 12px);
   line-height: 1.2;
   color: var(--muted);
+  /* Long role names wrap on two lines, then end with an ellipsis (the full name is the control's tooltip). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
   pointer-events: none;
 }
 .dk-cap.is-empty {
@@ -275,9 +288,6 @@
 }
 .dk-ctl.is-selected .dk-cap {
   color: var(--fg);
-}
-.dk-stage.is-compact .dk-cap {
-  display: none;
 }
 
 /* ---- knobs (no text on the knob itself) ---- */
@@ -342,9 +352,6 @@
 .dk-btn-num {
   font: 600 clamp(8px, calc(var(--u) * 0.16), 13px) / 1 var(--mono);
   color: rgba(255, 255, 255, 0.28);
-}
-.dk-stage.is-compact .dk-btn-num {
-  display: none;
 }
 .dk-pedal .dk-face {
   border-radius: calc(var(--u) * 0.12);
@@ -441,6 +448,16 @@
 }
 .dk-model i.is-on {
   background: var(--ok);
+}
+.dk-pan-hint {
+  display: none;
+  margin: var(--sp-1) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+.dk-stage-wrap.is-pannable + .dk-pan-hint {
+  display: block;
 }
 .dk-note {
   min-height: 1.2em;

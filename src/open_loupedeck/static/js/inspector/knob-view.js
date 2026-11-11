@@ -27,6 +27,7 @@ import { $ } from "../util.js";
 import { el, nextId } from "./dom.js";
 import { editEntry } from "./edit.js";
 import { createHeader, newAction } from "./key-view.js";
+import { createInheritedSummary } from "./inherited.js";
 import { createScopeBar, inheritsGlobal } from "./scope.js";
 
 /* ---- duo catalogue --------------------------------------------------------------------------- */
@@ -289,7 +290,12 @@ function render(host, knobId) {
     scopeBar.sync();
   };
   // Only the role for every page applies here: the bar asks whether to override it or edit it.
-  if (inheriting) return;
+  if (inheriting) {
+    const summary = createInheritedSummary(knobId, { describe: roleName });
+    root.append(summary.root);
+    editors.push({ destroy: () => summary.destroy() });
+    return;
+  }
 
   // step 1: role
   const step1 = el("section", { class: "insp-step", "aria-labelledby": `${id}-h1` });
