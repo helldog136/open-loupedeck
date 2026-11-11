@@ -6,7 +6,7 @@
  * cfg.onboarding_pack (which pack was applied, so the checklist knows what to ask for).
  */
 
-import { ensurePages, layoutMode } from "./model.js";
+import { control, ensurePages, entryActions, kindOf } from "./model.js";
 import { scheduleAutosave } from "./save.js";
 import { getServiceState } from "./services/cards.js";
 import { goToService } from "./shell.js";
@@ -15,10 +15,8 @@ import { snapshotBeforeAction } from "./undo.js";
 import { $ } from "./util.js";
 
 const BLANK_ID = "blank";
-/** Touch keys of the original Live (4x3); the Live S grid has 15. */
-const LIVE_KEY_COUNT = 12;
 
-/** @type {{lang: string, packs: object[]} | null} */
+/** @type {{key: string, packs: object[]} | null} */
 let packCache = null;
 let renderToken = 0;
 
@@ -26,50 +24,56 @@ function lang() {
   return (window.i18n && window.i18n.lang) || "";
 }
 
-function hasAction(e) {
-  return !!e && typeof e === "object" && (!!(e.action && e.action.type) || (Array.isArray(e.actions) && e.actions.length > 0));
+/** Packs are fitted server-side to the edited model (keys outside its grid are dropped). */
+function cacheKey() {
+  return `${lang()}|${state.model ? state.model.id : ""}`;
 }
 
-/** True when any touch key (any page) or global control has an action. */
+const hasAction = (e) => entryActions(e).length > 0;
+
+/**
+ * True when the user configured something: an action on any page, or a global binding other than the
+ * default "buttons open their page" ones every new config starts with.
+ */
 export function hasConfiguredKey(cfg = state.cfg) {
   for (const p of cfg.pages || []) {
-    for (const [cid, e] of Object.entries((p && p.buttons) || {})) {
-      if (cid.startsWith("touch_") && hasAction(e)) return true;
-    }
+    if (Object.values((p && p.controls) || {}).some((e) => hasAction(e) || (e && e.rotate))) return true;
   }
-  return Object.values(cfg.global_buttons || {}).some(hasAction);
+  return Object.values(cfg.global || {}).some((e) => {
+    const acts = entryActions(e);
+    return acts.some((a) => a.type !== "agent.goto_page") || !!(e && e.rotate);
+  });
 }
 
 async function loadPacks() {
-  const code = lang();
-  if (packCache && packCache.lang === code) return packCache.packs;
-  const r = await fetch(`/api/packs${code ? `?lang=${encodeURIComponent(code)}` : ""}`);
+  const key = cacheKey();
+  if (packCache && packCache.key === key) return packCache.packs;
+  const q = new URLSearchParams();
+  if (lang()) q.set("lang", lang());
+  if (state.model) q.set("model", state.model.id);
+  const r = await fetch(`/api/packs?${q}`);
   if (!r.ok) throw new Error(`packs: HTTP ${r.status}`);
   const j = await r.json();
-  packCache = { lang: code, packs: j.packs || [] };
+  packCache = { key, packs: j.packs || [] };
   return packCache.packs;
 }
 
-/** Fill what is empty from `pack`; ONE undo snapshot. Emits config:replaced to re-sync every view. */
+/**
+ * Fill what is empty from `pack` (pages already fitted to the edited model, keyed by control id);
+ * ONE undo snapshot. Only a key without an action / a knob without a role is filled. Emits
+ * config:replaced to re-sync every view.
+ */
 export function applyPack(pack) {
   snapshotBeforeAction();
   ensurePages();
-  const maxKeys = layoutMode() === "live" ? LIVE_KEY_COUNT : 15;
   (pack.pages || []).forEach((src, i) => {
     const page = state.cfg.pages[i];
     if (!page) return;
-    if (!page.buttons || typeof page.buttons !== "object") page.buttons = {};
-    for (const [idx, entry] of Object.entries(src.keys || {})) {
-      if (Number(idx) >= maxKeys) continue;
-      const cid = `touch_${idx}`;
-      if (!hasAction(page.buttons[cid])) page.buttons[cid] = JSON.parse(JSON.stringify(entry));
-    }
-    const knobs = src.knobs || {};
-    if (Object.keys(knobs).length) {
-      if (!page.knobs || typeof page.knobs !== "object") page.knobs = {};
-      for (const [kid, role] of Object.entries(knobs)) {
-        if (!page.knobs[kid]) page.knobs[kid] = JSON.parse(JSON.stringify(role));
-      }
+    for (const [cid, entry] of Object.entries(src.controls || {})) {
+      if (!control(cid)) continue;
+      const cur = page.controls[cid];
+      const empty = kindOf(cid) === "knob" ? !cur : !hasAction(cur);
+      if (empty) page.controls[cid] = JSON.parse(JSON.stringify(entry));
     }
   });
   state.cfg.onboarding_pack = pack.id;
@@ -209,7 +213,7 @@ export function renderOnboarding() {
     box.hidden = false;
     renderChecklist(box, services);
   };
-  if (packCache && packCache.lang === lang()) show();
+  if (packCache && packCache.key === cacheKey()) show();
   else loadPacks().then(show, () => {});
 }
 

@@ -122,6 +122,16 @@ button[hidden],
   box-shadow: 0 0 6px var(--led, transparent);
   flex: none;
 }
+/* A page no button opens: hollow dot. */
+.pagetab:not(.has-button) .dot {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+.pagetab:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
 .pagetab .num {
   font: 500 11px var(--mono);
   color: var(--muted);

@@ -1,12 +1,14 @@
 /*
- * inspector/edit.js — The one way the inspector changes a key: snapshot for Undo, mutate a copy of the
- * entry, write it back (or remove it when empty), redraw the deck, autosave, and redraw the device a
- * moment later. No Apply button: every change goes through here.
+ * inspector/edit.js — The one way the inspector changes a binding: snapshot for Undo, mutate a copy of
+ * the entry in the scope being edited (this page or every page, model.js editScope), write it back (or
+ * remove it when empty), redraw the deck and the page tabs, autosave, and redraw the device a moment
+ * later. No Apply button: every change goes through here.
  */
 
 import { refreshSkin } from "../api.js";
 import { renderDeck } from "../deck.js";
-import { getButtonEntry, setButtonEntry } from "../model.js";
+import { getEntry, setEntry } from "../model.js";
+import { refreshPageTabs } from "../pages.js";
 import { flushAutosave, scheduleAutosave } from "../save.js";
 import { snapshotBeforeAction, snapshotBeforeEditOnce } from "../undo.js";
 import { deepCloneJson } from "../util.js";
@@ -27,21 +29,27 @@ export function scheduleDeviceRefresh(delay = 700) {
   }, delay);
 }
 
+/** After any binding change: deck, page tabs (a button may open a page), autosave, device. */
+export function afterBindingChange() {
+  renderDeck();
+  refreshPageTabs();
+  scheduleAutosave();
+  scheduleDeviceRefresh();
+}
+
 /**
- * Change the entry of `cid`: `mutate(entry)` edits a copy (an empty object for an empty key).
- * `typing: true` batches a burst of keystrokes into one Undo step (until the field loses focus).
- * Returns the stored entry (null when the key ended up empty).
+ * Change the entry of `cid` in its edited scope: `mutate(entry)` edits a copy (an empty object when
+ * there is none). `typing: true` batches a burst of keystrokes into one Undo step (until the field
+ * loses focus). `scope` forces "page" / "global". Returns the stored entry (null when it ended empty).
  */
-export function editEntry(cid, mutate, { typing = false } = {}) {
+export function editEntry(cid, mutate, { typing = false, scope } = {}) {
   if (!cid) return null;
   if (typing) snapshotBeforeEditOnce();
   else snapshotBeforeAction();
-  const cur = getButtonEntry(cid);
+  const cur = getEntry(cid, scope);
   const draft = cur ? deepCloneJson(cur) : {};
   mutate(draft);
-  setButtonEntry(cid, pruneEntry(draft));
-  renderDeck();
-  scheduleAutosave();
-  scheduleDeviceRefresh();
-  return getButtonEntry(cid);
+  setEntry(cid, pruneEntry(draft), scope);
+  afterBindingChange();
+  return getEntry(cid, scope);
 }

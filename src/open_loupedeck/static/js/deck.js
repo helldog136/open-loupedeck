@@ -1,47 +1,53 @@
 /*
- * deck.js — The interactive deck (#deckRoot): a faithful Loupedeck Live S / Live picture whose touch keys
- * show their real, server-rendered look (POST /api/preview_key), round LED buttons that switch pages,
- * knobs with a caption, select / swap / duplicate / delete / arrow-key interactions, and the brief
- * knob-feedback overlay on the neighbouring touch key. Styles live in css/deck.css.
+ * deck.js — The interactive deck (#deckRoot), drawn from the edited device model (state.model): every
+ * control placed from its position (device-layout.js, shared with the virtual device). Display keys
+ * show their real, server-rendered look (POST /api/preview_key, the model's key size); knobs, buttons,
+ * sliders, strips and pedals are drawn with their role as a caption; the selected control is
+ * highlighted, and the key showing a selected knob's feedback is outlined. Keys can be dragged onto one
+ * another (swap), duplicated (Ctrl+D) and cleared (Delete); audio files dropped on an empty key make
+ * sound keys. Styles live in css/deck.css.
+ *
+ * What a control shows is its resolved binding on the page shown (model.js: page binding, else
+ * global); keys that come from the global binding carry a small "every page" badge.
  *
  * Bus contract (state.js on/emit):
- *   emits "control:open" (cid)      — a key (or, on Live, a hardware button) was chosen. Knob clicks also
- *                                     emit it for now so the current encoder editor keeps working.
- *   emits "knob:open" ({knobId})    — a knob was clicked (the knob editor package listens to this).
- *   listens "knob:flash" ({knobId, text}) — draw `text` ~1.4 s on the knob's neighbouring touch key.
- *   listens "status:updated" (json) — the 1.5 s /api/status payload (from status.js), used to redraw live
- *                                     keys when OBS / Home Assistant go online or offline.
+ *   emits "control:open" (cid)     — a control was picked (any kind; the inspector routes by capability).
+ *   listens "knob:flash" ({knobId, text}) — draw `text` ~1.4 s on the knob's feedback key.
+ *   listens "status:updated" (json) — the /api/status payload (status.js): live keys get their online /
+ *                                     offline look when OBS / Home Assistant come and go.
  * Debug: window.__flashKnob(knobId, text).
  */
 
-import { BTNS_LIVE, BTNS_LIVE_S, KNOBS_LIVE, TOUCH_LIVE, TOUCH_LIVE_S } from "./constants.js";
+import { actionShortName } from "./catalog.js";
+import { PAD, fitUnit, keyBed, keyCoord, placeAt, visualOrder } from "./device-layout.js";
 import {
-  currentPage,
+  controlLabel,
+  displayEntry,
   ensureDevice,
   ensurePages,
-  getButtonEntry,
-  layoutMode,
-  setButtonEntry,
+  entryActions,
+  feedbackKeyFor,
+  gotoPageIndex,
+  indexOf,
+  keyIds,
+  keyNumber,
+  pageEntry,
+  pageName,
+  resolvedBinding,
+  setEntry,
 } from "./model.js";
 import { cleanSoundName, isAudioFile, uploadSoundFile } from "./pickers/sound-picker.js";
 import { scheduleAutosave } from "./save.js";
+import { goToService } from "./shell.js";
 import { emit, on, state } from "./state.js";
 import { snapshotBeforeAction } from "./undo.js";
-import { $, cssColorForLedPreview, deepCloneJson, escapeAttr, escapeHtml } from "./util.js";
+import { $, cssColorForLedPreview, deepCloneJson } from "./util.js";
 
-/**
- * Knob -> neighbouring touch key that shows the knob's feedback. Mirrors the backend source of truth,
- * knob_pages.feedback_touch_key_for_knob_page_name(): keep both in sync.
- */
-const KNOB_FEEDBACK_TOUCH = {
-  live: { knobTL: "touch_0", knobCL: "touch_4", knobBL: "touch_8", knobTR: "touch_3", knobCR: "touch_7", knobBR: "touch_11" },
-  live_s: { knobTL: "touch_0", knobCL: "touch_5" },
-};
 const FLASH_MS = 1400;
-
-/** Round buttons bound to pages 1-4 on Live S, and the LED colour used when the config has none. */
-const PAGE_BUTTONS = BTNS_LIVE_S;
-const DEFAULT_LEDS = ["#3b6bff", "#ff8a2b", "#e040c8", "#2de0c0"];
+/** Below this many px per unit, captions are hidden (they would not be readable). */
+const CAPTION_MIN_UNIT = 40;
+const MAX_UNIT = 118;
+const MIN_UNIT = 14;
 
 /** Live-key action types and the service whose connection decides the online / offline look. */
 const LIVE_SERVICE = {
@@ -57,39 +63,30 @@ const LIVE_SERVICE = {
 
 /* ---- knob caption hook ---------------------------------------------------------------------- */
 
-function defaultKnobCaption(knobId) {
-  return knobId;
-}
-let knobCaptionProvider = defaultKnobCaption;
+const noCaption = () => "";
+let knobCaptionProvider = noCaption;
 
-/** Caption shown under a knob (its role name). The knob editor package replaces the provider. */
+/** Caption shown under a knob (its role name on the page shown). The knob view provides it. */
 export function getKnobCaption(knobId) {
   try {
-    return String(knobCaptionProvider(knobId) || knobId);
+    return String(knobCaptionProvider(knobId) || "");
   } catch {
-    return knobId;
+    return "";
   }
 }
 export function setKnobCaptionProvider(fn) {
-  knobCaptionProvider = typeof fn === "function" ? fn : defaultKnobCaption;
+  knobCaptionProvider = typeof fn === "function" ? fn : noCaption;
 }
 
 /* ---- helpers --------------------------------------------------------------------------------- */
 
-function isTouch(cid) {
-  return typeof cid === "string" && cid.startsWith("touch_");
+function mk(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
 }
-function touchIds() {
-  return layoutMode() === "live" ? TOUCH_LIVE : TOUCH_LIVE_S;
-}
-function touchCols() {
-  return layoutMode() === "live" ? 4 : 5;
-}
-function entryActions(e) {
-  if (!e) return [];
-  if (Array.isArray(e.actions) && e.actions.length) return e.actions.filter((a) => a && typeof a === "object");
-  return e.action && typeof e.action === "object" ? [e.action] : [];
-}
+
 function isFilled(e) {
   if (!e || typeof e !== "object") return false;
   return !!(
@@ -103,28 +100,26 @@ function isFilled(e) {
     e.live_message
   );
 }
-function actionLabel(type) {
-  const a = state.actionCatalog.find((x) => x.type === type);
-  const label = (a && a.label) || type || "";
-  const parts = String(label).split(/\s[—-]\s/);
-  return parts.length > 1 ? parts.slice(1).join(" - ") : label;
-}
+
 function keyDescription(e) {
   const acts = entryActions(e);
-  const what = acts.length ? actionLabel(acts[0].type) : "";
+  const what = acts.length ? actionShortName(acts[0].type) : "";
   const text = String((e && (e.label || e.text)) || "").trim();
-  return [what, text].filter(Boolean).join(" ") || t("deck.key.empty_add");
+  return [what, text].filter(Boolean).join(" · ") || t("deck.key.empty_add");
 }
+
+/** Short role of a button / pedal for its caption: the page it opens, else its action, else "". */
+function actionCaption(e) {
+  const page = gotoPageIndex(e);
+  if (page != null) return pageName(page);
+  const acts = entryActions(e);
+  return acts.length ? actionShortName(acts[0].type) : "";
+}
+
 function ledColor(cid) {
-  const e = getButtonEntry(cid);
+  const e = displayEntry(cid);
   const raw = e && e.button_color && String(e.button_color).trim();
-  if (raw) return cssColorForLedPreview(raw);
-  const i = PAGE_BUTTONS.indexOf(cid);
-  return layoutMode() === "live_s" && i >= 0 ? DEFAULT_LEDS[i] : "#5b667c";
-}
-function pageName(i) {
-  const p = state.cfg.pages && state.cfg.pages[i];
-  return (p && p.name) || t("pages.default_name", { number: i + 1 });
+  return raw ? cssColorForLedPreview(raw) : "";
 }
 
 /* ---- server-rendered previews ---------------------------------------------------------------- */
@@ -160,13 +155,16 @@ function previewRequest(cid, e) {
   const entry = deepCloneJson(e || {});
   delete entry.button_color;
   const offline = isOffline(e);
-  const body = { entry, control_id: cid };
+  const model = state.model ? state.model.id : "";
+  const body = { entry, control_id: cid, model };
   if (offline) body.offline = true;
   // Proposed labels are translated: ask in the UI language, and keep languages apart in the cache.
   const lang = (window.i18n && window.i18n.lang) || "";
   if (lang) body.lang = lang;
-  const sizeClass = cid.startsWith("strip_") ? "strip" : "key";
-  return { hash: `${sizeClass}|${offline ? 1 : 0}|${lang}|${JSON.stringify(entry)}`, body };
+  const c = state.model && state.model.controls.find((x) => x.id === cid);
+  const img = c && c.outputs && c.outputs.image;
+  const size = img ? `${img.width}x${img.height}` : "key";
+  return { hash: `${size}|${offline ? 1 : 0}|${lang}|${JSON.stringify(entry)}`, body };
 }
 
 function cacheSet(hash, val) {
@@ -180,27 +178,27 @@ function cacheSet(hash, val) {
 }
 
 function elementsForHash(hash) {
-  return Array.from(document.querySelectorAll(".dk-key[data-hash]")).filter((el) => el.dataset.hash === hash);
+  return Array.from(document.querySelectorAll("#deckRoot .dk-key[data-hash]")).filter((n) => n.dataset.hash === hash);
 }
 
-function applyResult(el, res) {
-  const img = el.querySelector(".dk-img");
-  const warn = el.querySelector(".dk-warn");
-  el.classList.remove("is-loading");
+function applyResult(node, res) {
+  const img = node.querySelector(".dk-img");
+  const warn = node.querySelector(".dk-warn");
+  node.classList.remove("is-loading");
   if (res && res.url) {
     img.src = res.url;
     img.hidden = false;
-    el.classList.add("has-image");
-    el.classList.remove("no-image");
+    node.classList.add("has-image");
+    node.classList.remove("no-image");
     if (warn) warn.hidden = !res.overflow;
-    lastShown.set(el.dataset.cid, res);
+    lastShown.set(node.dataset.cid, res);
   } else {
     img.removeAttribute("src");
     img.hidden = true;
-    el.classList.remove("has-image");
-    el.classList.add("no-image");
+    node.classList.remove("has-image");
+    node.classList.add("no-image");
     if (warn) warn.hidden = true;
-    lastShown.delete(el.dataset.cid);
+    lastShown.delete(node.dataset.cid);
   }
 }
 
@@ -238,30 +236,29 @@ async function fetchPreview(hash, body) {
     return;
   }
   const res = previewCache.get(hash);
-  for (const el of elementsForHash(hash)) applyResult(el, res);
+  for (const n of elementsForHash(hash)) applyResult(n, res);
 }
 
-/** Make `el` (a key) show the right look for its current entry: cache hit, or skeleton + request. */
-function loadKey(el) {
-  const cid = el.dataset.cid;
-  const e = getButtonEntry(cid);
+/** Make `node` (a key) show the right look for its current entry: cache hit, or skeleton + request. */
+function loadKey(node) {
+  const cid = node.dataset.cid;
+  const e = displayEntry(cid);
   if (!isFilled(e)) {
-    el.dataset.hash = "";
-    applyResult(el, null);
-    el.classList.remove("no-image");
+    node.dataset.hash = "";
+    applyResult(node, null);
+    node.classList.remove("no-image");
     return;
   }
   const { hash, body } = previewRequest(cid, e);
-  el.dataset.hash = hash;
-  el.dataset.live = liveService(e).live ? "1" : "";
+  node.dataset.hash = hash;
   const hit = previewCache.get(hash);
   if (hit) {
-    applyResult(el, hit);
+    applyResult(node, hit);
     return;
   }
   const stale = lastShown.get(cid);
-  if (stale && !el.classList.contains("has-image")) applyResult(el, stale);
-  el.classList.add("is-loading");
+  if (stale && !node.classList.contains("has-image")) applyResult(node, stale);
+  node.classList.add("is-loading");
   if (!inflight.has(hash)) {
     inflight.add(hash);
     queue.push(() => fetchPreview(hash, body).finally(() => inflight.delete(hash)));
@@ -269,196 +266,213 @@ function loadKey(el) {
   }
 }
 
-/* ---- markup ---------------------------------------------------------------------------------- */
+/* ---- control elements ------------------------------------------------------------------------ */
 
-function keyHtml(cid, index) {
-  const e = getButtonEntry(cid);
+function caption(text, empty = false) {
+  const cap = mk("span", `dk-cap${empty ? " is-empty" : ""}`, text);
+  cap.setAttribute("aria-hidden", "true");
+  return cap;
+}
+
+function keyNode(ctl) {
+  const cid = ctl.id;
+  const b = resolvedBinding(cid);
+  const e = b ? b.entry : null;
   const filled = isFilled(e);
-  const err = state.touchErrors && state.touchErrors[cid];
-  const aria = filled
-    ? t("deck.key.aria", { number: index + 1, what: keyDescription(e) })
-    : t("deck.key.aria_empty", { number: index + 1 });
-  const strip = cid.startsWith("strip_");
-  const name = strip ? t(cid === "strip_left" ? "deck.strip.left" : "deck.strip.right") : "";
-  const label = strip ? `${name}${filled ? `, ${keyDescription(e)}` : ""}` : aria;
-  const fallback = filled ? escapeHtml(keyDescription(e)) : "";
-  return `<div class="dk-key${filled ? " is-filled" : " is-empty"}${strip ? " dk-strip" : ""}${
-    err ? " error-outline" : ""
-  }" role="button" tabindex="-1" data-cid="${escapeAttr(cid)}" ${
-    isTouch(cid) && filled ? 'draggable="true"' : ""
-  } aria-label="${escapeAttr(label)}" title="${escapeAttr(err ? `${cid} — ${err}` : strip ? name : aria)}">
-    <img class="dk-img" alt="" hidden draggable="false" />
-    <span class="dk-skel" aria-hidden="true"></span>
-    <span class="dk-fallback" aria-hidden="true">${fallback}</span>
-    <span class="dk-plus" aria-hidden="true">+</span>
-    <span class="dk-warn" hidden title="${escapeAttr(t("deck.overflow"))}" aria-label="${escapeAttr(
-      t("deck.overflow")
-    )}">&#9888;</span>
-    <button type="button" class="dk-dup" tabindex="-1" title="${escapeAttr(t("deck.duplicate.title"))}">${escapeHtml(
-      t("deck.duplicate")
-    )}</button>
-  </div>`;
+  const strip = ctl.kind === "strip";
+  const node = mk("div", `dk-ctl dk-key${strip ? " dk-strip" : ""}${filled ? " is-filled" : " is-empty"}`);
+  node.dataset.cid = cid;
+  node.setAttribute("role", "button");
+  node.tabIndex = -1;
+  const name = controlLabel(cid);
+  node.setAttribute("aria-label", filled ? `${name}, ${keyDescription(e)}` : t("deck.key.aria_empty_named", { name }));
+  if (b && b.scope === "global") node.classList.add("is-global");
+  // A touch strip cannot be bound yet: no "+" inviting the user to add something.
+  if (!(ctl.inputs || []).includes("press")) node.classList.add("is-passive");
+  // Only the page's own binding moves with a drag (a key showing the global binding has none).
+  if (!strip && pageEntry(cid)) node.draggable = true;
+  const face = mk("span", "dk-face");
+  const img = mk("img", "dk-img");
+  img.alt = "";
+  img.hidden = true;
+  img.draggable = false;
+  face.append(img, mk("span", "dk-skel"), mk("span", "dk-fallback", filled ? keyDescription(e) : ""), mk("span", "dk-plus", "+"));
+  const warn = mk("span", "dk-warn", "⚠");
+  warn.hidden = true;
+  warn.title = t("deck.overflow");
+  warn.setAttribute("aria-label", t("deck.overflow"));
+  const badge = mk("span", "dk-badge");
+  badge.title = t("deck.key.global");
+  badge.setAttribute("aria-hidden", "true");
+  face.append(warn, badge);
+  if (!strip) {
+    const dup = mk("button", "dk-dup", t("deck.duplicate"));
+    dup.type = "button";
+    dup.tabIndex = -1;
+    dup.title = t("deck.duplicate.title");
+    face.append(dup);
+  }
+  for (const c of face.children) if (c !== warn) c.setAttribute("aria-hidden", "true");
+  node.append(face);
+  return node;
 }
 
-function roundHtml(cid, number) {
-  const live = layoutMode() === "live_s";
-  const i = PAGE_BUTTONS.indexOf(cid);
-  const led = ledColor(cid);
-  const aria = live && i >= 0 ? t("deck.round.aria_page", { number, page: pageName(i) }) : t("deck.round.aria_plain", { number });
-  const title = live && i >= 0 ? t("deck.round.title_page", { page: pageName(i) }) : cid;
-  return `<button type="button" class="dk-round${cid === "btn_circle" ? " is-circle" : ""}" data-cid="${escapeAttr(
-    cid
-  )}" data-page="${live ? i : ""}" style="--led:${escapeAttr(led)}" aria-label="${escapeAttr(aria)}" title="${escapeAttr(
-    title
-  )}"${live && i >= 0 ? ` aria-pressed="${state.pageIndex === i}"` : ""}></button>`;
+function knobNode(ctl) {
+  const role = getKnobCaption(ctl.id);
+  const node = mk("button", "dk-ctl dk-knob");
+  node.type = "button";
+  node.dataset.cid = ctl.id;
+  node.setAttribute("aria-label", t("deck.knob.aria", { name: controlLabel(ctl.id), role: role || t("inspector.knob.role.none") }));
+  const face = mk("span", "dk-face");
+  const dial = mk("span", "dk-dial");
+  dial.append(mk("span", "dk-notch"));
+  face.append(dial);
+  node.append(face, caption(role || t("inspector.knob.role.none"), !role));
+  return node;
 }
 
-function knobHtml(knobId) {
-  const cap = getKnobCaption(knobId);
-  return `<div class="dk-knobwrap">
-    <button type="button" class="dk-knob" data-knob="${escapeAttr(knobId)}" aria-pressed="false" aria-label="${escapeAttr(
-      t("deck.knob.aria", { name: knobId, role: cap })
-    )}" title="${escapeAttr(knobId)}"><span class="dk-notch" aria-hidden="true"></span></button>
-    <span class="dk-kcap">${escapeHtml(cap)}</span>
-  </div>`;
+function buttonNode(ctl) {
+  const e = displayEntry(ctl.id);
+  const cap = actionCaption(e);
+  const node = mk("button", `dk-ctl dk-btn${ctl.kind === "pedal" ? " dk-pedal" : ""}`);
+  node.type = "button";
+  node.dataset.cid = ctl.id;
+  const led = ctl.outputs && ctl.outputs.led ? ledColor(ctl.id) : "";
+  if (led) {
+    node.style.setProperty("--led", led);
+    node.classList.add("is-lit");
+  }
+  const page = gotoPageIndex(e);
+  if (page != null) {
+    node.dataset.page = String(page);
+    if (page === state.pageIndex) node.setAttribute("aria-current", "page");
+  }
+  const name = controlLabel(ctl.id);
+  node.setAttribute(
+    "aria-label",
+    page != null ? t("deck.button.aria_page", { name, page: pageName(page) }) : cap ? `${name}, ${cap}` : t("deck.key.aria_empty_named", { name }),
+  );
+  node.title = page != null ? t("deck.button.title_page", { page: pageName(page) }) : name;
+  const face = mk("span", "dk-face");
+  face.append(mk("span", "dk-btn-num", String(indexOf(ctl.id) + 1)));
+  node.append(face, caption(cap));
+  return node;
 }
 
-function touchScreenHtml(cols) {
-  const ids = touchIds();
-  return `<div class="dk-screen dk-cols-${cols}">${ids.map((c, i) => keyHtml(c, i)).join("")}</div>`;
+function sliderNode(ctl) {
+  const node = mk("button", `dk-ctl dk-slider ${ctl.position.h >= ctl.position.w ? "is-vertical" : "is-horizontal"}`);
+  node.type = "button";
+  node.dataset.cid = ctl.id;
+  const name = controlLabel(ctl.id);
+  node.setAttribute("aria-label", t("deck.slider.aria", { name }));
+  node.append(mk("span", "dk-track"), mk("span", "dk-thumb"), caption(name, true));
+  return node;
 }
 
-function liveSHtml() {
-  return `<div class="dk-device dk-live-s">
-    <div class="dk-col dk-left">
-      <div class="dk-knobs">${["knobTL", "knobCL"].map(knobHtml).join("")}</div>
-      ${roundHtml("btn_circle", 1)}
-    </div>
-    ${touchScreenHtml(5)}
-    <div class="dk-col dk-right">${["btn_1", "btn_2", "btn_3"].map((c, i) => roundHtml(c, i + 2)).join("")}</div>
-  </div>`;
-}
-
-function liveHtml() {
-  const side = (strip, knobs) => `<div class="dk-side">
-      <div class="dk-knobs">${knobs.map(knobHtml).join("")}</div>
-      ${keyHtml(strip, strip === "strip_left" ? 0 : 1)}
-    </div>`;
-  return `<div class="dk-device dk-live">
-    ${side("strip_left", KNOBS_LIVE.slice(0, 3))}
-    <div class="dk-live-center">
-      ${touchScreenHtml(4)}
-      <div class="dk-row-btns">${BTNS_LIVE.map((c, i) => roundHtml(c, i + 1)).join("")}</div>
-    </div>
-    ${side("strip_right", KNOBS_LIVE.slice(3))}
-  </div>`;
+function controlNode(ctl) {
+  switch (ctl.kind) {
+    case "key":
+      return keyNode(ctl);
+    case "strip":
+      return ctl.outputs && ctl.outputs.image ? keyNode(ctl) : sliderNode(ctl);
+    case "knob":
+      return knobNode(ctl);
+    case "slider":
+      return sliderNode(ctl);
+    case "button":
+    case "pedal":
+      return buttonNode(ctl);
+    default:
+      return null;
+  }
 }
 
 /* ---- selection painting ---------------------------------------------------------------------- */
 
-/** Knob picked on the deck (the knob view mirrors it in state.selectedKnobEncoder). */
-let ownKnob = null;
-let lastSelectedControl = null;
-
-function selectedKnob() {
-  return state.selectedKnobEncoder || ownKnob;
-}
-
-function feedbackKeyForKnob(knobId) {
-  const table = KNOB_FEEDBACK_TOUCH[layoutMode()] || {};
-  return table[knobId] || null;
-}
-
 function paintSelection() {
-  if (state.selectedControl !== lastSelectedControl) {
-    lastSelectedControl = state.selectedControl;
-    if (state.selectedControl) ownKnob = null;
-  }
-  const knob = selectedKnob();
-  const sel = knob ? null : state.selectedControl;
-  const link = knob ? feedbackKeyForKnob(knob) : null;
   const root = $("#deckRoot");
   if (!root) return;
+  const sel = state.selectedControl;
+  const selCtl = sel && state.model ? state.model.controls.find((c) => c.id === sel) : null;
+  const link = selCtl && selCtl.kind === "knob" ? feedbackKeyFor(sel) : null;
   let tabStop = null;
-  root.querySelectorAll(".dk-key").forEach((el) => {
-    const cid = el.dataset.cid;
-    el.classList.toggle("is-selected", cid === sel);
-    el.classList.toggle("is-knob-link", cid === link);
-    if (cid === sel) tabStop = el;
+  const keys = [];
+  root.querySelectorAll(".dk-ctl").forEach((n) => {
+    const cid = n.dataset.cid;
+    n.classList.toggle("is-selected", cid === sel);
+    n.classList.toggle("is-knob-link", cid === link);
+    n.classList.toggle("has-error", !!(state.controlErrors && state.controlErrors[cid]));
+    if (n.matches(".dk-key:not(.dk-strip)")) {
+      keys.push(n);
+      if (cid === sel) tabStop = n;
+    }
+    if (n.matches("button")) n.setAttribute("aria-pressed", String(cid === sel));
   });
-  const keys = Array.from(root.querySelectorAll(".dk-key"));
-  if (!tabStop || !root.contains(tabStop)) tabStop = keys.find((k) => k === document.activeElement) || keys[0];
-  keys.forEach((k) => k.setAttribute("tabindex", k === tabStop ? "0" : "-1"));
-  root.querySelectorAll(".dk-knob").forEach((el) => el.setAttribute("aria-pressed", String(el.dataset.knob === knob)));
-  root.querySelectorAll(".dk-round[data-page]").forEach((el) => {
-    const p = el.dataset.page;
-    if (p !== "") el.setAttribute("aria-pressed", String(Number(p) === state.pageIndex));
-    else el.setAttribute("aria-pressed", String(el.dataset.cid === sel));
-  });
+  if (!tabStop) tabStop = keys.find((k) => k === document.activeElement) || keys[0];
+  keys.forEach((k) => (k.tabIndex = k === tabStop ? 0 : -1));
+  root.querySelectorAll(".dk-strip").forEach((s) => (s.tabIndex = 0));
 }
 
 /* ---- actions --------------------------------------------------------------------------------- */
 
 let noteTimer = null;
 function note(msg) {
-  const el = $("#deckNote");
-  if (!el) return;
-  el.textContent = msg;
+  const n = $("#deckNote");
+  if (!n) return;
+  n.textContent = msg;
   clearTimeout(noteTimer);
   noteTimer = setTimeout(() => {
-    el.textContent = "";
+    n.textContent = "";
   }, 2500);
 }
 
-function focusKey(cid) {
-  const el = document.querySelector(`#deckRoot .dk-key[data-cid="${CSS.escape(cid)}"]`);
-  if (el) el.focus();
+function focusControl(cid) {
+  const n = document.querySelector(`#deckRoot .dk-ctl[data-cid="${CSS.escape(cid)}"]`);
+  if (n) n.focus();
 }
 
-function selectKey(cid) {
-  ownKnob = null;
+function selectControl(cid) {
   emit("control:open", cid);
   paintSelection();
 }
 
-function swapButtonEntries(cidA, cidB) {
-  if (!cidA || !cidB || cidA === cidB) return;
+/** Swap the page bindings of two keys (what the page shows; global bindings stay where they are). */
+function swapKeys(a, b) {
+  if (!a || !b || a === b) return;
   snapshotBeforeAction();
-  const entryA = getButtonEntry(cidA);
-  const entryB = getButtonEntry(cidB);
-  setButtonEntry(cidA, entryB);
-  setButtonEntry(cidB, entryA);
+  const ea = pageEntry(a);
+  const eb = pageEntry(b);
+  setEntry(a, eb, "page");
+  setEntry(b, ea, "page");
   renderDeck();
   scheduleAutosave();
-  if (state.selectedControl === cidA || state.selectedControl === cidB) {
-    emit("control:open", state.selectedControl);
-  }
+  if (state.selectedControl === a || state.selectedControl === b) emit("control:open", state.selectedControl);
+}
+
+/** Keys after `cid` (wrapping), row by row. */
+function keysFrom(cid) {
+  const ids = keyIds();
+  const i = Math.max(0, ids.indexOf(cid));
+  return [...ids.slice(i), ...ids.slice(0, i)];
 }
 
 function duplicateKey(cid) {
-  const e = getButtonEntry(cid);
-  if (!isTouch(cid) || !isFilled(e)) return;
-  const ids = touchIds();
-  const start = ids.indexOf(cid);
-  let target = null;
-  for (let step = 1; step < ids.length; step += 1) {
-    const c = ids[(start + step) % ids.length];
-    if (!isFilled(getButtonEntry(c))) {
-      target = c;
-      break;
-    }
-  }
+  const e = displayEntry(cid);
+  if (!keyCoord(cid) || !isFilled(e)) return;
+  const target = keysFrom(cid)
+    .slice(1)
+    .find((c) => !isFilled(displayEntry(c)));
   if (!target) {
     note(t("deck.no_free_key"));
     return;
   }
   snapshotBeforeAction();
-  setButtonEntry(target, deepCloneJson(e));
+  setEntry(target, deepCloneJson(e), "page");
   renderDeck();
   scheduleAutosave();
-  selectKey(target);
-  focusKey(target);
-  note(t("deck.duplicated", { number: ids.indexOf(target) + 1 }));
+  selectControl(target);
+  focusControl(target);
+  note(t("deck.duplicated", { number: keyNumber(target) }));
 }
 
 function isFileDrag(ev) {
@@ -473,24 +487,21 @@ async function dropSoundFiles(cid, files) {
     note(t("sound.picker.not_audio"));
     return;
   }
-  const ids = touchIds();
-  const free = [cid, ...ids.slice(ids.indexOf(cid) + 1), ...ids.slice(0, ids.indexOf(cid))].filter(
-    (c, i) => i === 0 || !isFilled(getButtonEntry(c)),
-  );
+  const free = keysFrom(cid).filter((c, i) => i === 0 || !isFilled(displayEntry(c)));
   try {
     let made = 0;
     for (const file of audio.slice(0, free.length)) {
       const rel = await uploadSoundFile(file);
       const target = free[made];
-      if (isFilled(getButtonEntry(target))) continue;
+      if (isFilled(displayEntry(target))) continue;
       snapshotBeforeAction();
-      setButtonEntry(target, { action: { type: "sound.play", file: rel }, text: cleanSoundName(file.name) });
+      setEntry(target, { action: { type: "sound.play", file: rel }, text: cleanSoundName(file.name) }, "page");
       made += 1;
       renderDeck();
       scheduleAutosave();
     }
     if (made) {
-      selectKey(free[0]);
+      selectControl(free[0]);
       note(t("sound.deck.created", { count: made }));
     }
   } catch (e) {
@@ -499,36 +510,28 @@ async function dropSoundFiles(cid, files) {
 }
 
 function clearKey(cid) {
-  if (!isTouch(cid) || !isFilled(getButtonEntry(cid))) return;
+  if (!keyCoord(cid) || !pageEntry(cid)) return;
   snapshotBeforeAction();
-  setButtonEntry(cid, null);
+  setEntry(cid, null, "page");
   renderDeck();
   scheduleAutosave();
-  selectKey(cid);
-  focusKey(cid);
+  selectControl(cid);
+  focusControl(cid);
 }
 
 function moveSelection(cid, key) {
-  const ids = touchIds();
-  const i = ids.indexOf(cid);
-  if (i < 0) return;
-  const cols = touchCols();
-  const rows = ids.length / cols;
-  let r = Math.floor(i / cols);
-  let c = i % cols;
-  if (key === "ArrowLeft") c = Math.max(0, c - 1);
-  else if (key === "ArrowRight") c = Math.min(cols - 1, c + 1);
-  else if (key === "ArrowUp") r = Math.max(0, r - 1);
-  else r = Math.min(rows - 1, r + 1);
-  const next = ids[r * cols + c];
-  if (next === cid) return;
-  selectKey(next);
-  focusKey(next);
+  const at = keyCoord(cid);
+  if (!at) return;
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[key];
+  const next = `key_${at[0] + d[0]}_${at[1] + d[1]}`;
+  if (!document.querySelector(`#deckRoot .dk-key[data-cid="${next}"]`)) return;
+  selectControl(next);
+  focusControl(next);
 }
 
 function switchToPage(i) {
   const sel = $("#pageSelect");
-  if (!sel || i === state.pageIndex) return;
+  if (!sel || i === state.pageIndex || i >= (state.cfg.pages || []).length) return;
   sel.value = String(i);
   sel.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -536,19 +539,19 @@ function switchToPage(i) {
 /** cid currently being dragged, or null when no drag is in progress. */
 let draggingCid = null;
 
-function bindKey(el) {
-  const cid = el.dataset.cid;
-  el.addEventListener("click", (ev) => {
+function bindKey(node) {
+  const cid = node.dataset.cid;
+  node.addEventListener("click", (ev) => {
     if (draggingCid) return;
     if (ev.target.closest(".dk-dup")) return;
-    selectKey(cid);
+    selectControl(cid);
   });
-  el.addEventListener("keydown", (ev) => {
-    if (ev.target !== el) return;
+  node.addEventListener("keydown", (ev) => {
+    if (ev.target !== node) return;
     if (ev.key === "Enter" || ev.key === " ") {
       ev.preventDefault();
-      selectKey(cid);
-    } else if (ev.key.startsWith("Arrow") && isTouch(cid)) {
+      selectControl(cid);
+    } else if (ev.key.startsWith("Arrow") && keyCoord(cid)) {
       ev.preventDefault();
       moveSelection(cid, ev.key);
     } else if (ev.key === "Delete" || ev.key === "Backspace") {
@@ -559,79 +562,62 @@ function bindKey(el) {
       duplicateKey(cid);
     }
   });
-  const dup = el.querySelector(".dk-dup");
+  const dup = node.querySelector(".dk-dup");
   if (dup) {
     dup.addEventListener("click", (ev) => {
       ev.stopPropagation();
       duplicateKey(cid);
     });
   }
-  if (!isTouch(cid)) return;
-  el.addEventListener("dragstart", (ev) => {
+  if (!keyCoord(cid)) return;
+  node.addEventListener("dragstart", (ev) => {
     draggingCid = cid;
     ev.dataTransfer.effectAllowed = "move";
     ev.dataTransfer.setData("text/plain", cid);
-    el.classList.add("dragging");
+    node.classList.add("dragging");
   });
-  el.addEventListener("dragend", () => {
+  node.addEventListener("dragend", () => {
     draggingCid = null;
-    el.classList.remove("dragging");
-    document.querySelectorAll(".dk-key.drag-over").forEach((c) => c.classList.remove("drag-over"));
+    node.classList.remove("dragging");
+    document.querySelectorAll("#deckRoot .drag-over").forEach((c) => c.classList.remove("drag-over"));
   });
-  el.addEventListener("dragover", (ev) => {
-    if (!draggingCid || cid === draggingCid) return;
-    ev.preventDefault();
-    ev.dataTransfer.dropEffect = "move";
-    el.classList.add("drag-over");
+  node.addEventListener("dragover", (ev) => {
+    if (draggingCid) {
+      if (cid === draggingCid) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "move";
+      node.classList.add("drag-over");
+    } else if (isFileDrag(ev) && !isFilled(displayEntry(cid))) {
+      // Audio files dropped from the desktop onto an empty key create sound keys (see dropSoundFiles).
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = "copy";
+      node.classList.add("drag-over");
+    }
   });
-  el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
-  // Audio files dropped from the desktop onto an empty key create sound keys (see dropSoundFiles).
-  el.addEventListener("dragover", (ev) => {
-    if (draggingCid || !isFileDrag(ev) || isFilled(getButtonEntry(cid))) return;
-    ev.preventDefault();
-    ev.dataTransfer.dropEffect = "copy";
-    el.classList.add("drag-over");
-  });
-  el.addEventListener("drop", (ev) => {
-    if (draggingCid || !isFileDrag(ev)) return;
-    ev.preventDefault();
-    el.classList.remove("drag-over");
-    if (!isFilled(getButtonEntry(cid))) void dropSoundFiles(cid, Array.from(ev.dataTransfer.files));
-  });
-  el.addEventListener("drop", (ev) => {
-    el.classList.remove("drag-over");
-    if (!draggingCid || cid === draggingCid) return;
-    ev.preventDefault();
-    const source = draggingCid;
-    draggingCid = null;
-    swapButtonEntries(source, cid);
+  node.addEventListener("dragleave", () => node.classList.remove("drag-over"));
+  node.addEventListener("drop", (ev) => {
+    node.classList.remove("drag-over");
+    if (draggingCid) {
+      if (cid === draggingCid) return;
+      ev.preventDefault();
+      const source = draggingCid;
+      draggingCid = null;
+      swapKeys(source, cid);
+    } else if (isFileDrag(ev)) {
+      ev.preventDefault();
+      if (!isFilled(displayEntry(cid))) void dropSoundFiles(cid, Array.from(ev.dataTransfer.files));
+    }
   });
 }
 
-function bindRoot(root) {
-  root.querySelectorAll(".dk-key").forEach(bindKey);
-  root.querySelectorAll(".dk-round").forEach((el) => {
-    const cid = el.dataset.cid;
-    el.addEventListener("click", () => {
-      const p = el.dataset.page;
-      if (p !== "" && p != null) {
-        switchToPage(Number(p));
-        paintSelection();
-      } else {
-        selectKey(cid);
-      }
-    });
-    // On Live S a click changes page; double-click reaches the button's own settings (LED colour).
-    el.addEventListener("dblclick", () => {
-      if (el.dataset.page !== "") selectKey(cid);
-    });
-  });
-  root.querySelectorAll(".dk-knob").forEach((el) => {
-    el.addEventListener("click", () => {
-      const knobId = el.dataset.knob;
-      ownKnob = knobId;
-      emit("knob:open", { knobId });
-      paintSelection();
+function bindStage(stage) {
+  stage.querySelectorAll(".dk-key").forEach(bindKey);
+  stage.querySelectorAll("button.dk-ctl").forEach((n) => {
+    n.addEventListener("click", () => {
+      const cid = n.dataset.cid;
+      // A button that opens a page shows that page (as on the device) and opens its settings.
+      if (n.dataset.page) switchToPage(Number(n.dataset.page));
+      selectControl(cid);
     });
   });
 }
@@ -641,25 +627,24 @@ function bindRoot(root) {
 const flashes = new Map();
 
 function drawFlash(cid) {
-  const el = document.querySelector(`#deckRoot .dk-key[data-cid="${CSS.escape(cid)}"]`);
+  const face = document.querySelector(`#deckRoot .dk-key[data-cid="${CSS.escape(cid)}"] .dk-face`);
   const f = flashes.get(cid);
-  if (!el) return;
-  let ov = el.querySelector(".dk-flash");
+  if (!face) return;
+  let ov = face.querySelector(".dk-flash");
   if (!f) {
     if (ov) ov.remove();
     return;
   }
   if (!ov) {
-    ov = document.createElement("div");
-    ov.className = "dk-flash";
+    ov = mk("div", "dk-flash");
     ov.setAttribute("aria-hidden", "true");
-    el.appendChild(ov);
+    face.appendChild(ov);
   }
   ov.textContent = f.text;
 }
 
 export function flashKnob(knobId, text) {
-  const cid = feedbackKeyForKnob(knobId);
+  const cid = feedbackKeyFor(knobId);
   if (!cid) return;
   const prev = flashes.get(cid);
   if (prev) clearTimeout(prev.timer);
@@ -673,31 +658,83 @@ export function flashKnob(knobId, text) {
 
 /* ---- render ---------------------------------------------------------------------------------- */
 
+let stageModel = null;
+
+/** Size the stage to the deck's width (and keep captions only where they are readable). */
+function fitStage() {
+  const root = $("#deckRoot");
+  const stage = root && root.querySelector(".dk-stage");
+  if (!stage || !stageModel) return;
+  const avail = root.clientWidth || 600;
+  const u = fitUnit(stageModel, avail, Infinity, { min: MIN_UNIT, max: MAX_UNIT });
+  stage.style.setProperty("--u", `${u.toFixed(2)}px`);
+  stage.classList.toggle("is-compact", u < CAPTION_MIN_UNIT);
+}
+
+function footer() {
+  const foot = mk("div", "dk-foot");
+  const hint = mk("p", "dk-hint", t("deck.hint"));
+  const chip = mk("button", "dk-model");
+  chip.type = "button";
+  const connected = state.deviceInfo && state.deviceInfo.source === "device";
+  chip.append(mk("i", connected ? "is-on" : ""), mk("span", "", state.model.name));
+  chip.title = connected ? t("deck.model.connected") : t("deck.model.change");
+  chip.addEventListener("click", () => goToService("device"));
+  foot.append(hint, chip);
+  return foot;
+}
+
 export function renderDeck() {
   ensurePages();
   ensureDevice();
-  $("#pageName").textContent = currentPage().name || t("pages.default_name", { number: state.pageIndex + 1 });
-  const pn = $("#pageNameInput");
-  if (pn) pn.value = currentPage().name || "";
-
   const root = $("#deckRoot");
   if (!root) return;
-  root.innerHTML = `${layoutMode() === "live" ? liveHtml() : liveSHtml()}
-    <p class="dk-hint">${escapeHtml(t("deck.hint"))}</p>
-    <p class="dk-note" id="deckNote" role="status" aria-live="polite"></p>`;
-  bindRoot(root);
-  root.querySelectorAll(".dk-key").forEach(loadKey);
+  const model = state.model;
+  if (!model) {
+    root.replaceChildren(mk("p", "dk-hint", t("deck.loading")));
+    return;
+  }
+  stageModel = model;
+  const stage = mk("div", "dk-stage");
+  stage.setAttribute("role", "group");
+  stage.setAttribute("aria-label", t("deck.aria", { model: model.name, page: pageName(state.pageIndex) }));
+  stage.style.setProperty("--lw", model.layout.width);
+  stage.style.setProperty("--lh", model.layout.height);
+  stage.style.setProperty("--pad", PAD);
+  const bedRect = keyBed(model);
+  if (bedRect) {
+    const bed = mk("div", "dk-bed");
+    placeAt(bed, bedRect);
+    stage.append(bed);
+  }
+  for (const ctl of visualOrder(model.controls)) {
+    const node = controlNode(ctl);
+    if (!node) continue;
+    placeAt(node, ctl.position);
+    node.dataset.kind = ctl.kind;
+    stage.append(node);
+  }
+  const note = mk("p", "dk-note");
+  note.id = "deckNote";
+  note.setAttribute("role", "status");
+  note.setAttribute("aria-live", "polite");
+  const wrap = mk("div", "dk-stage-wrap");
+  wrap.append(stage);
+  root.replaceChildren(wrap, footer(), note);
+  fitStage();
+  bindStage(stage);
+  stage.querySelectorAll(".dk-key").forEach(loadKey);
   for (const cid of flashes.keys()) drawFlash(cid);
   paintSelection();
 }
 
 /** Redraw only the keys whose look depends on a service connection (status poll: no flicker). */
 function refreshLiveKeys() {
-  document.querySelectorAll("#deckRoot .dk-key").forEach((el) => {
-    const e = getButtonEntry(el.dataset.cid);
+  document.querySelectorAll("#deckRoot .dk-key").forEach((n) => {
+    const e = displayEntry(n.dataset.cid);
     if (!isFilled(e)) return;
-    const { hash } = previewRequest(el.dataset.cid, e);
-    if (hash !== el.dataset.hash) loadKey(el);
+    const { hash } = previewRequest(n.dataset.cid, e);
+    if (hash !== n.dataset.hash) loadKey(n);
   });
 }
 
@@ -708,6 +745,7 @@ on("status:updated", (st) => {
   conn.obs = obs;
   conn.ha = ha;
   if (changed) refreshLiveKeys();
+  paintSelection();
 });
 on("knob:flash", (p) => {
   if (p && p.knobId) flashKnob(p.knobId, p.text);
@@ -717,8 +755,18 @@ document.addEventListener("i18n:change", () => {
 });
 window.__flashKnob = flashKnob;
 
-// Selection is owned by the editors (they run after "control:open" and sometimes reset it after a
-// render), so the deck follows state with a cheap diff instead of trusting call order.
+const ro = typeof ResizeObserver === "function" ? new ResizeObserver(() => fitStage()) : null;
+document.addEventListener("DOMContentLoaded", () => {
+  const root = $("#deckRoot");
+  if (root && ro) ro.observe(root);
+});
+window.addEventListener("resize", fitStage);
+
+// Selection is owned by the inspector (it may reset it after a render), so the deck follows state
+// with a cheap diff instead of trusting call order.
+let paintedSelection;
 setInterval(() => {
-  if (!document.hidden) paintSelection();
+  if (document.hidden || paintedSelection === state.selectedControl) return;
+  paintedSelection = state.selectedControl;
+  paintSelection();
 }, 150);

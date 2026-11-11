@@ -207,14 +207,12 @@
               <h3 data-i18n="svc.general.title">General</h3>
             </div>
             <div class="svc-rows">
-              <label class="svc-row">
-                <span class="svc-row-label" data-i18n="svc.general.model">Hardware</span>
-                <select id="deviceModel">
+              <div class="svc-row">
+                <span class="svc-row-label"><label for="deviceModel" data-i18n="svc.general.model">Hardware</label> <span class="hint svc-row-hint" id="deviceModelHint" role="status"></span></span>
+                <select id="deviceModel" aria-describedby="deviceModelHint">
                   <option value="auto" data-i18n="svc.general.model_auto">Detect automatically</option>
-                  <option value="live_s">Loupedeck Live S</option>
-                  <option value="live" data-i18n="svc.general.model_live">Loupedeck Live (original)</option>
                 </select>
-              </label>
+              </div>
               <label class="svc-row">
                 <span class="svc-row-label" data-i18n="svc.general.autostart">Launch at startup</span>
                 <span class="toggle"><input type="checkbox" id="autostartToggle" /><span></span></span>
@@ -258,13 +256,10 @@
         <select id="pageSelect" hidden aria-hidden="true" tabindex="-1"></select>
       </div>
       <main class="buttons-layout">
-        <section id="mount-deck" class="deck-wrap deck-shell">
-          <div class="deck-page-bar">
-            <span class="deck-page-label" data-i18n="deck.editing">Editing</span>
-            <p class="deck-title" id="pageName">Page</p>
-          </div>
-          <div id="onboardingMount" class="ob-mount" hidden></div>
+        <section id="mount-deck" class="deck-shell" data-i18n-attr="aria-label:deck.region">
           <div id="deckRoot"></div>
+          <!-- First launch: the welcome card replaces the deck; afterwards "Next steps" sits under it. -->
+          <div id="onboardingMount" class="ob-mount" hidden></div>
         </section>
 
         <aside id="mount-inspector" class="insp-host" data-i18n-attr="aria-label:inspector.region">

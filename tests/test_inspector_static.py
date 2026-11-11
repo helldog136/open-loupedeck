@@ -23,13 +23,13 @@ MODULES = [
     "key-view.js",
     "appearance.js",
     "advanced.js",
-    "page-button-view.js",
+    "light.js",
+    "scope.js",
     "entry.js",
     "edit.js",
     "controls.js",
     "dom.js",
     "preview.js",
-    "panel.js",
     "clipboard.js",
 ]
 T_KEY = re.compile(r"""\bt\(\s*["'`](inspector\.[a-z0-9_.]+)["'`]""")
@@ -53,6 +53,8 @@ def test_inspector_modules_and_css_are_served(client: TestClient) -> None:
 def test_old_editor_modules_are_gone() -> None:
     assert not (INSPECTOR / "editor.js").exists()
     assert not (INSPECTOR / "look-fields.js").exists()
+    # Live S round buttons are ordinary buttons now (action + light, from the device model).
+    assert not (INSPECTOR / "page-button-view.js").exists()
 
 
 def test_index_mounts_the_inspector(client: TestClient) -> None:
