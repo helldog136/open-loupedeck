@@ -84,7 +84,7 @@ Then `run_actions` executes the list (OBS, Home Assistant, HTTP, sound, …) in 
 | `obs` | OBS WebSocket host, port, password. |
 | `ha` | Home Assistant base URL + long-lived access token. |
 | `device` | Serial port path, baud rate, hardware model. |
-| `config_version` | Schema version (2). A config without it is migrated on load (backup: `open-loupedeck-backups/<name>.pre-v2`). |
+| `config_version` | Schema version (2). A config without it is migrated on load (backup: `open-loupedeck-backups/config.yaml.pre-v2`). |
 | `global` | Bindings active on every page (control id -> binding), unless the page overrides them. |
 | `pages` | List of pages, each with a `controls` map (control id -> binding) overriding `global`. |
 | `knob_page_feedback` | `duration_sec` (0–2 s) of the feedback text drawn next to a knob after a turn / push. |
@@ -181,10 +181,46 @@ pages:
 A legacy top-level `knob_pages` is migrated on load: its first knob page becomes the knob's role on every deck page
 without one, and the original is kept under `legacy_knob_pages`.
 
+### Look of a binding (keys and buttons)
+
+A key binding holds the action and, optionally, its look (`text`, `label`, `icon`, `image`,
+`background`, `text_color`, gradients, animations, `mode`: `text` / `icon` / `both`). A look field that
+is absent follows the action's default look (and the UI language); a field you set is kept as typed.
+Buttons with an LED take `button_color` (`#rrggbb`); without it the model's default LED colour is
+shown. Live keys (OBS scene, clock, sensors...) have an online and an offline look
+(`offline_fallback`: `dash`, `nothing` or `last`).
+
+### `brightness` and `brightness_night`
+
+```yaml
+brightness: 80                 # 0-100, screen brightness of the device
+brightness_night:
+  enabled: false
+  from: "22:00"                # local time; the window may cross midnight
+  to: "07:00"
+  level: 20                    # brightness used inside the window
+```
+
+Applied by every device that has a screen with adjustable brightness (Loupedeck, Stream Deck except the
+Pedal); changing them takes effect at once.
+
+### `onboarding_done`
+
+`false` until the first-launch welcome card (starter packs) has been answered or dismissed; the UI
+sets it. Set it to `true` to never show the card.
+
+### `device.model` values
+
+`auto`, `live_s`, `live`, the Stream Deck names above, and the virtual devices `virtual` (15 keys),
+`virtual_mega`, `virtual_mini` (see [virtual-device.md](virtual-device.md)). The model decides which
+control ids exist and the shape of the editor's deck; the connected device wins when `model` is `auto`.
+
 ### Legacy ids (configs without `config_version`)
 
-Older configs used `pages[].buttons` / `pages[].knobs` / `global_buttons` and Loupedeck ids. They
-are converted once on load (after a backup copy): `touch_N` -> `key_<N % cols>_<N // cols>` on the
+Older configs (v1) used `pages[].buttons` / `pages[].knobs` / `global_buttons` and Loupedeck ids.
+They are converted automatically once on load, after an exact copy of the old file is saved as
+`open-loupedeck-backups/config.yaml.pre-v2` (copy it back over `config.yaml` to return to the old format,
+for instance to go back to 0.2.x). The conversion: `touch_N` -> `key_<N % cols>_<N // cols>` on the
 grid of `device.model` (`auto` = Live S, 5 columns), `knobTL`..`knobBR` -> `knob_0`..`knob_5`,
 `btn_circle` -> `button_0`, `btn_N` -> `button_N`, `strip_left` / `strip_right` -> `strip_0` /
 `strip_1`. Entries the old runtime ignored keep their old id (inactive, never deleted).
