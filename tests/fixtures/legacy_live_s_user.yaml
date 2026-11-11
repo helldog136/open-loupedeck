@@ -1,0 +1,61 @@
+# Legacy (pre config_version 2) Loupedeck Live S config, shaped like the ones the web UI wrote:
+# round-button LED colours in global_buttons, touch keys + knob roles per page, plus the odd
+# hand-edited leftovers the migration must keep (inactive) rather than drop.
+language: fr
+onboarding_done: true
+brightness: 70
+brightness_night: {enabled: true, from: "22:00", to: "07:00", level: 15}
+logging: {dir: "", level: INFO, file: true, console: true}
+obs: {host: 127.0.0.1, port: 4455, password: secret}
+ha: {base_url: "http://homeassistant.local:8123", token: abc}
+device: {path: "", baudrate: null, model: auto}
+plugin_modules: []
+knob_page_feedback: {duration_sec: 1.5}
+spotify: {client_id: abc}
+twitch: {}
+global_buttons:
+  btn_0: {button_color: " #3b6bff "}          # early alias of btn_circle
+  btn_1:
+    button_color: "#ff8a2b"
+    action: {type: agent.next_page}            # never ran: the Live S page buttons switch pages
+  btn_2: {button_color: "#e040c8", actions: []}
+  touch_3: {text: "ghost"}                     # touch keys never read global_buttons
+  knobTL_left: {action: {type: sound.volume_delta, delta: -1}}  # knobs never read global_buttons
+  left: {text: "L"}                            # no strip on a Live S
+  foo: {text: "unknown"}
+pages:
+  - id: 0
+    name: Stream
+    buttons:
+      touch_0: {text: Live, background: "#c2562a", action: {type: obs.toggle_stream}, press_animation: shrink}
+      touch_1: {action: {type: obs.set_scene, scene: Game}, background: "#1f6fe0"}
+      touch_5: {action: {type: obs.toggle_mute, input_name: Mic/Aux}}
+      touch_10: {action: {type: display.live_message, template: "Page {page_number}/{page_count}"}}
+      touch_14: {action: {type: display.clock, time_format: "%H:%M", date_format: "%a %d %b"}}
+      touch_15: {text: "beyond the grid"}
+      btn_2: {button_color: "#000000"}         # page-level page button: never used
+    knobs:
+      knobTL: {rotate: {duo: system_volume, params: {step: 5}}, press: {type: sound.mute_toggle}}
+      knobCL: {rotate: {left: {type: agent.prev_page}, right: [{type: agent.next_page}]}}
+  - id: 1
+    name: Music
+    buttons:
+      touch_7: {action: {type: spotify.previous}}
+      touch_8: {action: {type: spotify.play_pause}}
+      touch_9: {action: {type: spotify.next}}
+    knobs:
+      knobTL: {rotate: {duo: spotify_volume, params: {step: 5}}}
+  - id: 2
+    name: Home
+    buttons:
+      touch_4: {action: {type: ha.toggle, entity_id: light.office}, text: Office}
+  - id: 3
+    name: Empty
+    buttons: {}
+  - id: 4
+    name: Extra
+    buttons:
+      touch_12: {action: {type: sound.play, file: library/sounds/applause.wav}}
+bindings:
+  - match: {type: button, id: "1", edge: down}
+    actions: [{type: http.request, method: GET, url: "https://example.com/hook"}]

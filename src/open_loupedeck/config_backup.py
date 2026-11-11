@@ -98,3 +98,25 @@ def wipe_backups(config_path: Path, max_keep: int = 3) -> dict[str, Any]:
             p.unlink()
             removed.append(str(p))
     return {"ok": True, "removed": removed, "count": len(removed)}
+
+
+def create_migration_backup(config_path: Path, to_version: int) -> Path:
+    """Copy the config file before a schema migration, next to the rotating backups.
+
+    Named ``<config>.pre-v<N>`` (then ``.pre-v<N>.1``, ``.2``... if it already exists): it is never
+    rotated nor overwritten, so the file as it was before the upgrade can always be restored by
+    hand. Returns the path written.
+    """
+
+    path = config_path.resolve()
+    if not path.is_file():
+        raise FileNotFoundError(str(path))
+    d = backup_dir_for(path)
+    d.mkdir(parents=True, exist_ok=True)
+    target = d / f"{path.name}.pre-v{int(to_version)}"
+    n = 0
+    while target.exists():
+        n += 1
+        target = d / f"{path.name}.pre-v{int(to_version)}.{n}"
+    target.write_bytes(path.read_bytes())
+    return target
